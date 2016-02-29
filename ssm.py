@@ -72,7 +72,7 @@ class UNGM(StateSpaceModel):
     Dx = 1  # state dimension
     Dz = 1  # measurement dimension
 
-    def __init__(self, q_cov, r_cov, x0_mean=np.zeros((1,)), x0_cov=np.eye(1), **kwargs):
+    def __init__(self, x0_mean=np.zeros((1,)), x0_cov=np.eye(1), q_cov=10.0, r_cov=1.0, **kwargs):
         """
         Inits the UNGM object where state covariance (q_cov) and measurement covariance (r_cov) must be supplied. The
         initial state mean and covariance, if not supplied, will default to $x_0 ~ N(0, 1)$.
@@ -113,7 +113,7 @@ def main():
         # 'q_cov': np.atleast_2d(10),
         # 'r_cov': np.atleast_2d(1)
     }
-    m = UNGM(.1, .1)
+    m = UNGM(q_cov=.1, r_cov=.1)
     X, Z = m.simulate(100, 50)
     import matplotlib.pyplot as plt
     plt.plot(X[0, ...], color='b', alpha=0.15)
