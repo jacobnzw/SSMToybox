@@ -4,9 +4,12 @@ import numpy as np
 
 class StateSpaceModel(object):
 
-    Dx = None  # state dimension
-    Dz = None  # measurement dimension
-
+    xD = None  # state dimension
+    zD = None  # measurement dimension
+    qD = None  # state noise dimension
+    rD = None  # measurement noise dimension
+    _q_additive = None  # True = state noise is additive, False = non-additive
+    _r_additive = None
     # lists the keyword arguments currently required by the StateSpaceModel class
     _required_kwargs_ = 'x0_mean', 'x0_cov', 'q_cov', 'r_cov'
 
@@ -23,14 +26,7 @@ class StateSpaceModel(object):
         self.pars[key] = value
 
     def dyn_fcn(self, x, q, *args):
-        """
-        General non-linear system dynamics, where the state noise can be non-additive. Additional system parameters are
-        optional.
-        :param x: system state
-        :param q: state noise
-        :param args: parameters of the system dynamics
-        :return: system state at the next time step
-        """
+        # system dynamics
         raise NotImplementedError
 
     def meas_fcn(self, x, r, *args):
@@ -49,10 +45,10 @@ class StateSpaceModel(object):
         :return: arrays with simulated state trajectories and measurements
         """
         x0_mean, x0_cov, q_cov, r_cov = self.get_pars('x0_mean', 'x0_cov', 'q_cov', 'r_cov')
-        x = np.empty((self.Dx, steps, mc_sims))
-        z = np.empty((self.Dz, steps, mc_sims))
-        q = np.random.multivariate_normal(np.zeros(self.Dx), q_cov, size=(mc_sims, steps)).T
-        r = np.random.multivariate_normal(np.zeros(self.Dz), r_cov, size=(mc_sims, steps)).T
+        x = np.empty((self.xD, steps, mc_sims))
+        z = np.empty((self.zD, steps, mc_sims))
+        q = np.random.multivariate_normal(np.zeros(self.xD), q_cov, size=(mc_sims, steps)).T
+        r = np.random.multivariate_normal(np.zeros(self.zD), r_cov, size=(mc_sims, steps)).T
         x0 = np.random.multivariate_normal(x0_mean, x0_cov, size=mc_sims).T  # (D, mc_sims)
         x[:, 0, :] = x0  # store initial states at k=0
         for imc in xrange(mc_sims):
@@ -69,8 +65,12 @@ class UNGM(StateSpaceModel):
     """
 
     # CLASS VARIABLES are shared by all instances of this class
-    Dx = 1  # state dimension
-    Dz = 1  # measurement dimension
+    xD = 1  # state dimension
+    zD = 1  # measurement dimension
+    qD = 1
+    rD = 1
+    _q_additive = True
+    _r_additive = True
 
     def __init__(self, x0_mean=np.zeros((1,)), x0_cov=np.eye(1), q_cov=10.0, r_cov=1.0, **kwargs):
         """
@@ -90,13 +90,6 @@ class UNGM(StateSpaceModel):
         self.set_pars('r_cov', np.atleast_2d(r_cov))
 
     def dyn_fcn(self, x, q, *pars):
-        """
-        System dynamics
-        :param x: state at time k
-        :param q: noise at time k
-        :param pars: pars[0] = k (time)
-        :return:
-        """
         return np.asarray([0.5*x[0] + 25*(x[0] / (1 + x[0]**2)) + 8*np.cos(1.2*pars[0])]) + q
 
     def meas_fcn(self, x, r, *pars):

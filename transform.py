@@ -34,13 +34,11 @@ class Unscented(Transform):
         wc[0] = wm[0] + (1 - alpha**2 + beta)
         return wm, wc
 
-    def apply(self, fcn, mean, cov, *args):
+    def apply(self, fcn, mean, cov, *args):  # supply the augmented mean and cov in case noise is non-additive
         # form sigma-points from unit sigma-points
         x = mean + np.linalg.cholesky(cov).dot(self.unit_sp)
         # push sigma-points through non-linearity
-        # TODO: solve the non-additive noise case (4th arg shouldn't be 0), maybe decorator?
-        # if additive, noise is not sampled (sigmas), if additive
-        fx = np.apply_along_axis(fcn, 0, x, 0, *args)
+        fx = np.apply_along_axis(fcn, 0, x, *args)
         # output mean
         mean_f = fx.dot(self.wm)
         # output covariance
