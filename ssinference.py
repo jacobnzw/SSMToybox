@@ -1,16 +1,22 @@
 import numpy as np
-from scipy.linalg import cho_factor, cho_solve
-from transform import Unscented
+from scipy.linalg import cho_factor, cho_solve, block_diag
+from transform import Unscented, Transform
+from ssm import StateSpaceModel
 
 
 class StateSpaceInference(object):
 
-    def __init__(self, trans, sys):
-        self.trans = trans  # transformation decides which filter will be used
-        self.sys = sys  # dynamical system whose state is to be estimated
+    def __init__(self, transf_dyn, transf_meas, sys):
+        # separate moment transforms for system dynamics and measurement model
+        assert isinstance(transf_dyn, Transform) and isinstance(transf_meas, Transform)
+        self.transf_dyn = transf_dyn
+        self.transf_meas = transf_meas
+        # dynamical system whose state is to be estimated
+        assert isinstance(sys, StateSpaceModel)
+        self.sys = sys
         # set initial condition mean and covariance, and noise covariances
-        self.x_mean_filt, self.x_cov_filt, self.q_cov, self.r_cov = sys.get_pars(
-                'x0_mean', 'x0_cov', 'q_cov', 'r_cov'
+        self.x_mean_filt, self.x_cov_filt, self.q_mean, self.q_cov, self.r_mean, self.r_cov = sys.get_pars(
+                'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov'
         )
         self.flags = {'filtered': False, 'smoothed': False}
         self.x_mean_pred, self.x_cov_pred, = None, None
@@ -64,16 +70,19 @@ class StateSpaceInference(object):
         return self.sm_mean, self.sm_cov
 
     def _time_update(self, time):
-        # calculate predictive moments of the system state by applying moment transformation
-        self.x_mean_pred, self.x_cov_pred, self.xx_cov = self.trans.apply(
-                self.sys.dyn_fcn, self.x_mean_filt, self.x_cov_filt, self.sys.par_fcn(time)
+        # if noise is not additive, create augmented state mean and covariance
+        mean = self.x_mean_filt if self.sys.q_additive else np.vstack((self.x_mean_filt, self.q_mean))
+        cov = self.x_cov_filt if self.sys.q_additive else block_diag(self.x_cov_filt, self.q_cov)
+        self.x_mean_pred, self.x_cov_pred, self.xx_cov = self.transf_dyn.apply(
+                self.sys.dyn_eval, mean, cov, self.sys.par_fcn(time)
         )
-        self.mean_z_pred, self.z_cov_pred, self.xz_cov = self.trans.apply(
-                self.sys.meas_fcn, self.x_mean_pred, self.x_cov_pred, self.sys.par_fcn(time)
+        mean = self.x_mean_pred if self.sys.r_additive else np.vstack((self.x_mean_pred, self.r_mean))
+        cov = self.x_cov_pred if self.sys.r_additive else block_diag(self.x_cov_pred, self.r_cov)
+        self.mean_z_pred, self.z_cov_pred, self.xz_cov = self.transf_meas.apply(
+                self.sys.meas_eval, mean, cov, self.sys.par_fcn(time)
         )
-        # TODO: following holds only in additive noise case, rethink how to handle this in general
-        self.x_cov_pred += self.q_cov
-        self.z_cov_pred += self.r_cov
+        if self.sys.q_additive: self.x_cov_pred += self.q_cov
+        if self.sys.r_additive: self.z_cov_pred += self.r_cov
 
     def _measurement_update(self, y):
         gain = cho_solve(cho_factor(self.z_cov_pred), self.xz_cov)
@@ -86,14 +95,18 @@ class StateSpaceInference(object):
         self.x_cov_smooth = self.x_cov_filt + gain.dot(self.x_cov_smooth - self.x_cov_pred).dot(gain.T)
 
 
-class UKFS(StateSpaceInference):
+class UnscentedKalman(StateSpaceInference):
     """
     Unscented Kalman filter and smoother.
     """
 
-    def __init__(self, sys):
-        t = Unscented(sys.Dx, kappa=0)  # UKFS has-a Unscented transform
-        super(UKFS, self).__init__(t, sys)
+    def __init__(self, sys, kap=0, al=1.0, bet=2.0):
+        assert isinstance(sys, StateSpaceModel)
+        nq = sys.xD if sys.q_additive else sys.xD + sys.qD
+        nr = sys.xD if sys.r_additive else sys.xD + sys.rD
+        tf = Unscented(nq, kappa=kap, alpha=al, beta=bet)  # UnscentedKalman has-a Unscented transform
+        th = Unscented(nr, kappa=kap, alpha=al, beta=bet)
+        super(UnscentedKalman, self).__init__(tf, th, sys)
 
 
 def main():
@@ -107,7 +120,7 @@ def main():
     # plt.plot(X[0, ...], color='b', alpha=0.15)
     # plt.plot(Z[0, ...], color='k', alpha=0.25, ls='None', marker='.')
 
-    infer = UKFS(system)
+    infer = UnscentedKalman(system)
     mean_f, cov_f = infer.forward_pass(Z[..., 0])
     mean_s, cov_s = infer.backward_pass()
 
