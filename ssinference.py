@@ -70,17 +70,22 @@ class StateSpaceInference(object):
         return self.sm_mean, self.sm_cov
 
     def _time_update(self, time):
-        # if noise is not additive, create augmented state mean and covariance
+        # in non-additive case, augment mean and covariance
         mean = self.x_mean_filt if self.sys.q_additive else np.vstack((self.x_mean_filt, self.q_mean))
         cov = self.x_cov_filt if self.sys.q_additive else block_diag(self.x_cov_filt, self.q_cov)
         self.x_mean_pred, self.x_cov_pred, self.xx_cov = self.transf_dyn.apply(
                 self.sys.dyn_eval, mean, cov, self.sys.par_fcn(time)
         )
+        # in non-additive case, augment mean and covariance
         mean = self.x_mean_pred if self.sys.r_additive else np.vstack((self.x_mean_pred, self.r_mean))
         cov = self.x_cov_pred if self.sys.r_additive else block_diag(self.x_cov_pred, self.r_cov)
         self.mean_z_pred, self.z_cov_pred, self.xz_cov = self.transf_meas.apply(
                 self.sys.meas_eval, mean, cov, self.sys.par_fcn(time)
         )
+        # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)
+        self.xz_cov = self.xz_cov[:, :self.sys.xD]
+        self.xx_cov = self.xx_cov[:, :self.sys.xD]
+        # in additive case, noise covariances need to be added
         if self.sys.q_additive: self.x_cov_pred += self.q_cov
         if self.sys.r_additive: self.z_cov_pred += self.r_cov
 
@@ -110,33 +115,39 @@ class UnscentedKalman(StateSpaceInference):
 
 
 def main():
-    from ssm import UNGM
-    system = UNGM(q_cov=10, r_cov=.1)
-    time_steps = 50
+    from ssm import UNGM, UNGMnonadd
+    system = UNGM(q_cov=10, r_cov=1)
+    time_steps = 100
     X, Z = system.simulate(time_steps, 1)  # get some data from the system
     # plot trajectory with measurements
     import matplotlib.pyplot as plt
     # plt.figure()
     # plt.plot(X[0, ...], color='b', alpha=0.15)
     # plt.plot(Z[0, ...], color='k', alpha=0.25, ls='None', marker='.')
-
+    print "q_additive: {}, r_additive: {}".format(system.q_additive, system.r_additive)
     infer = UnscentedKalman(system)
     mean_f, cov_f = infer.forward_pass(Z[..., 0])
     mean_s, cov_s = infer.backward_pass()
 
+    rmse_filter = np.sqrt(((X[..., 0] - mean_f)**2).mean(axis=1))
+    rmse_smoother = np.sqrt(((X[..., 0] - mean_s)**2).mean(axis=1))
+    print "Filter RMSE: {:.4f}".format(np.asscalar(rmse_filter))
+    print "Smoother RMSE: {:.4f}".format(np.asscalar(rmse_smoother))
+
     plt.figure()
-    plt.plot(X[0, :, 0], color='r', ls='--')
+    plt.plot(X[0, :, 0], color='r', ls='--', label='true state')
     plt.plot(Z[0, :, 0], color='k', ls='None', marker='o')
-    plt.plot(mean_f[0, ...], color='b')
+    plt.plot(mean_f[0, ...], color='b', label='filtered estimate')
     plt.fill_between(range(0, time_steps),
                      mean_f[0, ...] - 2*np.sqrt(cov_f[0, 0, :]),
                      mean_f[0, ...] + 2*np.sqrt(cov_f[0, 0, :]),
                      color='b', alpha=0.15)
-    plt.plot(mean_s[0, ...], color='g')
+    plt.plot(mean_s[0, ...], color='g', label='smoothed estimate')
     plt.fill_between(range(0, time_steps),
                      mean_s[0, ...] - 2*np.sqrt(cov_s[0, 0, :]),
                      mean_s[0, ...] + 2*np.sqrt(cov_s[0, 0, :]),
                      color='g', alpha=0.25)
+    plt.legend()
 
 if __name__ == '__main__':
     main()
