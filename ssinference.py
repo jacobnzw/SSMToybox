@@ -105,7 +105,7 @@ class UnscentedKalman(StateSpaceInference):
     Unscented Kalman filter and smoother.
     """
 
-    def __init__(self, sys, kap=0, al=1.0, bet=2.0):
+    def __init__(self, sys, kap=None, al=1.0, bet=2.0):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
@@ -125,7 +125,7 @@ def main():
     # plt.plot(X[0, ...], color='b', alpha=0.15)
     # plt.plot(Z[0, ...], color='k', alpha=0.25, ls='None', marker='.')
     print "q_additive: {}, r_additive: {}".format(system.q_additive, system.r_additive)
-    infer = UnscentedKalman(system)
+    infer = UnscentedKalman(system, kap=0.0)
     mean_f, cov_f = infer.forward_pass(Z[..., 0])
     mean_s, cov_s = infer.backward_pass()
 

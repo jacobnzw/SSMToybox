@@ -28,6 +28,8 @@ class StateSpaceModel(object):
         # describes how parameter value depends on time (for time varying systems)
         raise NotImplementedError
 
+    # TODO: implment Jacobians for ExtendedKalman,
+    # TODO: could approximate Jacobians with differences
     def dyn_eval(self, xq, *args):
         if self.q_additive:
             assert len(xq) == self.xD
