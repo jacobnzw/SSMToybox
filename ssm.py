@@ -11,7 +11,7 @@ class StateSpaceModel(object):
     q_additive = None  # True = state noise is additive, False = non-additive
     r_additive = None
     # lists the keyword arguments currently required by the StateSpaceModel class
-    _required_kwargs_ = 'x0_mean', 'x0_cov', 'q_mena', 'q_cov', 'r_mean', 'r_cov'
+    _required_kwargs_ = 'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov'
 
     def __init__(self, **kwargs):
         self.pars = kwargs
@@ -51,11 +51,13 @@ class StateSpaceModel(object):
         :param mc_sims: number of trajectories to simulate (the initial state is drawn randomly)
         :return: arrays with simulated state trajectories and measurements
         """
-        x0_mean, x0_cov, q_cov, r_cov = self.get_pars('x0_mean', 'x0_cov', 'q_cov', 'r_cov')
+        x0_mean, x0_cov, q_mean, q_cov, r_mean, r_cov = self.get_pars(
+                'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov'
+        )
         x = np.empty((self.xD, steps, mc_sims))
         z = np.empty((self.zD, steps, mc_sims))
-        q = np.random.multivariate_normal(np.zeros(self.xD), q_cov, size=(mc_sims, steps)).T
-        r = np.random.multivariate_normal(np.zeros(self.zD), r_cov, size=(mc_sims, steps)).T
+        q = np.random.multivariate_normal(q_mean, q_cov, size=(mc_sims, steps)).T
+        r = np.random.multivariate_normal(r_mean, r_cov, size=(mc_sims, steps)).T
         x0 = np.random.multivariate_normal(x0_mean, x0_cov, size=mc_sims).T  # (D, mc_sims)
         x[:, 0, :] = x0  # store initial states at k=0
         for imc in xrange(mc_sims):
