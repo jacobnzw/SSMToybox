@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.linalg import cho_factor, cho_solve, block_diag
 from transform import *
-from ssm import StateSpaceModel
+from ssmodel import StateSpaceModel
 
 
 class StateSpaceInference(object):
@@ -143,7 +143,7 @@ class UnscentedKalman(StateSpaceInference):
 
 
 def main():
-    from ssm import UNGM, UNGMnonadd
+    from ssmodel import UNGM, UNGMnonadd
     system = UNGM(q_cov=10, r_cov=1)
     time_steps = 100
     X, Z = system.simulate(time_steps, 1)  # get some data from the system

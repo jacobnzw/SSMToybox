@@ -11,7 +11,7 @@ class Transform(object):
         raise NotImplementedError
 
 # TODO: implement GPQ+, GPQ+D, GPQ+TD, TPQ+ transforms (adopt from BQ repo)
-# TODO: Taylor based transform (EKF); *_eval()'s will need to return Jacobians
+# TODO: *_eval()'s will need to return Jacobians
 # Statistically linearized is pain to use (needs expectations of nonlinearities)
 
 
