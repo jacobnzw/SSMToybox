@@ -1,5 +1,4 @@
 import unittest
-from ssmodel import UNGM
 
 
 class TestUNGM(unittest.TestCase):

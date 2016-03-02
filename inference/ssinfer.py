@@ -1,14 +1,15 @@
 import numpy as np
 from scipy.linalg import cho_factor, cho_solve, block_diag
-from transform import *
-from ssmodel import StateSpaceModel
+
+from models.ssmodel import StateSpaceModel
+from transforms.transform import MomentTransform
 
 
 class StateSpaceInference(object):
 
     def __init__(self, transf_dyn, transf_meas, sys):
         # separate moment transforms for system dynamics and measurement model
-        assert isinstance(transf_dyn, Transform) and isinstance(transf_meas, Transform)
+        assert isinstance(transf_dyn, MomentTransform) and isinstance(transf_meas, MomentTransform)
         self.transf_dyn = transf_dyn
         self.transf_meas = transf_meas
         # dynamical system whose state is to be estimated
@@ -99,86 +100,3 @@ class StateSpaceInference(object):
         self.x_mean_smooth = self.x_mean_filt + gain.dot(self.x_mean_smooth - self.x_mean_pred)
         self.x_cov_smooth = self.x_cov_filt + gain.dot(self.x_cov_smooth - self.x_cov_pred).dot(gain.T)
 
-
-class GaussHermiteKalman(StateSpaceInference):
-    """
-    Unscented Kalman filter and smoother.
-    """
-
-    def __init__(self, sys, deg=3):
-        assert isinstance(sys, StateSpaceModel)
-        nq = sys.xD if sys.q_additive else sys.xD + sys.qD
-        nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        tf = GaussHermite(nq, degree=deg)  # UnscentedKalman has-a Unscented transform
-        th = GaussHermite(nr, degree=deg)
-        super(GaussHermiteKalman, self).__init__(tf, th, sys)
-
-
-class CubatureKalman(StateSpaceInference):
-    """
-    Cubature Kalman filter and smoother.
-    """
-
-    def __init__(self, sys):
-        assert isinstance(sys, StateSpaceModel)
-        nq = sys.xD if sys.q_additive else sys.xD + sys.qD
-        nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        tf = SphericalRadial(nq)
-        th = SphericalRadial(nr)
-        super(CubatureKalman, self).__init__(tf, th, sys)
-
-
-class UnscentedKalman(StateSpaceInference):
-    """
-    Unscented Kalman filter and smoother.
-    """
-
-    def __init__(self, sys, kap=None, al=1.0, bet=2.0):
-        assert isinstance(sys, StateSpaceModel)
-        nq = sys.xD if sys.q_additive else sys.xD + sys.qD
-        nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        tf = Unscented(nq, kappa=kap, alpha=al, beta=bet)  # UnscentedKalman has-a Unscented transform
-        th = Unscented(nr, kappa=kap, alpha=al, beta=bet)
-        super(UnscentedKalman, self).__init__(tf, th, sys)
-
-
-def main():
-    from ssmodel import UNGM, UNGMnonadd
-    system = UNGM(q_cov=10, r_cov=1)
-    time_steps = 100
-    X, Z = system.simulate(time_steps, 1)  # get some data from the system
-    # plot trajectory with measurements
-    import matplotlib.pyplot as plt
-    # plt.figure()
-    # plt.plot(X[0, ...], color='b', alpha=0.15)
-    # plt.plot(Z[0, ...], color='k', alpha=0.25, ls='None', marker='.')
-    print "q_additive: {}, r_additive: {}".format(system.q_additive, system.r_additive)
-    # filt = UnscentedKalman(system, kap=0.0)
-    # filt = GaussHermiteKalman(system, deg=15)
-    filt = CubatureKalman(system)
-
-    mean_f, cov_f = filt.forward_pass(Z[..., 0])
-    mean_s, cov_s = filt.backward_pass()
-
-    rmse_filter = np.sqrt(((X[..., 0] - mean_f)**2).mean(axis=1))
-    rmse_smoother = np.sqrt(((X[..., 0] - mean_s)**2).mean(axis=1))
-    print "Filter RMSE: {:.4f}".format(np.asscalar(rmse_filter))
-    print "Smoother RMSE: {:.4f}".format(np.asscalar(rmse_smoother))
-
-    plt.figure()
-    plt.plot(X[0, :, 0], color='r', ls='--', label='true state')
-    plt.plot(Z[0, :, 0], color='k', ls='None', marker='o')
-    plt.plot(mean_f[0, ...], color='b', label='filtered estimate')
-    plt.fill_between(range(0, time_steps),
-                     mean_f[0, ...] - 2*np.sqrt(cov_f[0, 0, :]),
-                     mean_f[0, ...] + 2*np.sqrt(cov_f[0, 0, :]),
-                     color='b', alpha=0.15)
-    plt.plot(mean_s[0, ...], color='g', label='smoothed estimate')
-    plt.fill_between(range(0, time_steps),
-                     mean_s[0, ...] - 2*np.sqrt(cov_s[0, 0, :]),
-                     mean_s[0, ...] + 2*np.sqrt(cov_s[0, 0, :]),
-                     color='g', alpha=0.25)
-    plt.legend()
-
-if __name__ == '__main__':
-    main()
