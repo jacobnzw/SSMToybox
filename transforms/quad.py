@@ -6,7 +6,8 @@ from sklearn.utils.extmath import cartesian
 from transforms.transform import MomentTransform
 
 
-# TODO: add higher-order fully symmetric rules from McNamee, Stenger
+# TODO: add higher-order fully symmetric rules from [McNamee, Stenger]
+# TODO: MCquad for Gaussian Monte Carlo filter [Djuric]
 
 
 class SphericalRadial(MomentTransform):

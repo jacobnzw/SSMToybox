@@ -2,18 +2,25 @@ from transform import MomentTransform
 
 
 class GaussianProcess(MomentTransform):
-    def __init__(self):
-        # call some unit sigma-point method
-        self.unit_sp = 0
+    # GPQ can work with any sigmas so it's probably better to pass in the unit sigmas
+    # as an argument instead of creating them in init
+    # BQ does not prescribe any sigma-point schemes (apart from minimium variance point sets)
+    def __init__(self, unit_sp):
+        self.unit_sp = unit_sp
         # set kernel hyper-parameters (manually or some principled method)
         self.hypers = 0  # log-hypers or hypers
         # weights (the most costly part)
-        self.weights = 0
+        self.weights = self.weights()
 
     def apply(self, f, mean, cov, *args):
         pass
 
-    def weights(self):
+    @staticmethod
+    def weights(unit_sp, hypers):
+        pass
+
+    def _min_int_var_sigmas(self):
+        # minimum variance point set
         pass
 
     def _min_int_var_hypers(self):
