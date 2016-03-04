@@ -2,21 +2,26 @@ import numpy as np
 
 from inference.ssinfer import StateSpaceInference
 from models.ssmodel import StateSpaceModel
-from transforms.quad import GaussHermite
+from transforms.bayesquad import GPQuad
+from transforms.quad import Unscented
 
 
-class GaussHermiteKalman(StateSpaceInference):
+class GPQuadKalman(StateSpaceInference):
     """
-    Gauss-Hermite Kalman filter and smoother.
+    GP quadrature filter and smoother.
     """
 
-    def __init__(self, sys, deg=3):
+    def __init__(self, sys):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        tf = GaussHermite(nq, degree=deg)
-        th = GaussHermite(nr, degree=deg)
-        super(GaussHermiteKalman, self).__init__(tf, th, sys)
+        unit_sp_f = Unscented.unit_sigma_points(nq, np.sqrt(nq + 1))
+        unit_sp_h = Unscented.unit_sigma_points(nr, np.sqrt(nr + 1))
+        hypers_f = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones((nq, 1)), 'noise_var': 1e-8}
+        hypers_h = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones((nr, 1)), 'noise_var': 1e-8}
+        tf = GPQuad(unit_sp_f, hypers_f)
+        th = GPQuad(unit_sp_h, hypers_h)
+        super(GPQuadKalman, self).__init__(tf, th, sys)
 
 
 def main():
@@ -27,7 +32,7 @@ def main():
     time_steps = 100
     x, z = system.simulate(time_steps, 1)  # get some data from the system
 
-    filt = GaussHermiteKalman(system, deg=15)
+    filt = GPQuadKalman(system)
     mean_f, cov_f = filt.forward_pass(z[..., 0])
     mean_s, cov_s = filt.backward_pass()
 

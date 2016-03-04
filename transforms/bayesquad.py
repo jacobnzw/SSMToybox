@@ -1,11 +1,12 @@
 import numpy as np
-from numpy.linalg import det, inv, diag
+from numpy import newaxis as na
+from numpy.linalg import det, inv
 from scipy.linalg import cho_factor, cho_solve
 
 from transform import MomentTransform
 
 
-class GaussianProcess(MomentTransform):
+class GPQuad(MomentTransform):
     # GPQ can work with any sigmas so it's probably better to pass in the unit sigmas
     # as an argument instead of creating them in init
     # BQ does not prescribe any sigma-point schemes (apart from minimium variance point sets)
@@ -14,7 +15,7 @@ class GaussianProcess(MomentTransform):
         # set kernel hyper-parameters (manually or some principled method)
         self.hypers = self._min_var_hypers() if hypers is None else hypers
         # BQ weights given the unit sigma-points and the kernel hyper-parameters
-        self.wm, self.Wc, self.Wcc = self.weights(self.unit_sp, self.hypers)
+        self.wm, self.Wc, self.Wcc = self.weights_rbf()
 
     def apply(self, f, mean, cov, *args):
         # form sigma-points from unit sigma-points
@@ -31,32 +32,32 @@ class GaussianProcess(MomentTransform):
         cov_fx = self.D.dot(dx).dot(self.Wcc).dot(dx.T)
         return mean_f, cov_f, cov_fx
 
-    def weights_rbf(self, unit_sp, s_var, el, jitter=1e-8):
+    def weights_rbf(self):
         # BQ weights for RBF kernel with given hypers, computations adopted from the GP-ADF code [Deisenroth] with
         # the following assumptions:
         #   (A1) the uncertain input is zero-mean with unit covariance
         #   (A2) one set of hyper-parameters is used for all output dimensions (one GP models all outputs)
-        D, N = unit_sp.shape
+        d, n = self.unit_sp.shape
         # GP kernel hyper-parameters
-        # alpha, el, jitter = hypers['sig_var'], hypers['lengthscale'], hypers['noise_var']
-        assert len(el) == D
+        alpha, el, jitter = self.hypers['sig_var'], self.hypers['lengthscale'], self.hypers['noise_var']
+        assert len(el) == d
         # pre-allocation for convenience
-        eye_input, eye_sigmas = np.eye(D), np.eye(N)
-        iLam1 = np.diag(el ** -1)  # sqrt(Lambda^-1)
-        iLam2 = np.diag(el ** -2)
+        eye_d, eye_n = np.eye(d), np.eye(n)
+        iLam1 = np.atleast_2d(np.diag(el ** -1))  # sqrt(Lambda^-1)
+        iLam2 = np.atleast_2d(np.diag(el ** -2))
 
-        inp = unit_sp.dot(iLam1)  # sigmas / el[:, na] (x - m)^T*sqrt(Lambda^-1) # (numSP, xdim)
-        K = np.exp(2 * np.log(s_var) - 0.5 * maha(inp.T, inp.T))
-        iK = cho_solve(cho_factor(K + jitter * eye_sigmas), eye_sigmas)
-        B = iLam2 + eye_input  # (D, D)
+        inp = self.unit_sp.T.dot(iLam1)  # sigmas / el[:, na] (x - m)^T*sqrt(Lambda^-1) # (numSP, xdim)
+        K = np.exp(2 * np.log(alpha) - 0.5 * self._maha(inp, inp))
+        iK = cho_solve(cho_factor(K + jitter * eye_n), eye_n)
+        B = iLam2 + eye_d  # (D, D)
         c = alpha ** 2 / np.sqrt(det(B))
         t = inp.dot(inv(B))  # inn*(P + Lambda)^-1
         l = np.exp(-0.5 * np.sum(inp * t, 1))  # (N, 1)
         zet = 2 * np.log(alpha) - 0.5 * np.sum(inp * inp, 1)
         inp = inp.dot(iLam1)
-        R = 2 * iLam2 + eye_input
+        R = 2 * iLam2 + eye_d
         t = 1 / np.sqrt(det(R))
-        L = np.exp((zet[:, na] + zet[:, na].T) + maha(inp.T, -inp.T, V=0.5 * inv(R)))
+        L = np.exp((zet[:, na] + zet[:, na].T) + self._maha(inp, -inp, V=0.5 * inv(R)))
         q = c * l  # evaluations of the kernel mean map (from the viewpoint of RHKS methods)
         # mean weights
         wm_f = q.dot(iK)
@@ -64,12 +65,12 @@ class GaussianProcess(MomentTransform):
         # covariance weights
         wc_f = iKQ.dot(iK)
         # cross-covariance "weights"
-        wc_fx = diag(q).dot(iK)
+        wc_fx = np.diag(q).dot(iK)
         # used for self.D.dot(x - mean).dot(wc_fx).dot(fx)
-        self.D = inv(eye_input + diag(el ** 2))  # S(S+Lam)^-1; for S=I, (I+Lam)^-1
+        self.D = inv(eye_d + np.diag(el ** 2))  # S(S+Lam)^-1; for S=I, (I+Lam)^-1
         # model variance; to be added to the covariance
         # this diagonal form assumes independent GP outputs (cov(f^a, f^b) = 0 for all a, b: a neq b)
-        self.model_var = diag((s_var ** 2 - np.trace(iKQ)) * ones((D, 1)))
+        self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
         return wm_f, wc_f, wc_fx
 
     def _min_var_sigmas(self):
@@ -90,3 +91,20 @@ class GaussianProcess(MomentTransform):
     def _min_intvar_logmarglik_hypers(self):
         # finds hypers by minimizing the sum of log-marginal likelihood and the integral variance objectives
         pass
+
+    @staticmethod
+    def _maha(x, y, V=None):
+        """
+        Pair-wise Mahalanobis distance of rows of x and y with given weight matrix V.
+        :param x: (n, d) matrix of row vectors
+        :param y: (n, d) matrix of row vectors
+        :param V: weight matrix (d, d), if V=None, V=eye(d) is used
+        :return:
+        """
+        if V is None:
+            V = np.eye(x.shape[1])
+        x2V = np.sum(x.dot(V) * x, 1)
+        y2V = np.sum(y.dot(V) * y, 1)
+        MD = (x2V[:, na] + y2V[:, na].T) - 2 * x.dot(V).dot(y.T)
+
+        return MD
