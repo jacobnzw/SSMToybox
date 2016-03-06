@@ -56,8 +56,8 @@ class StateSpaceModel(object):
         x0_mean, x0_cov, q_mean, q_cov, r_mean, r_cov = self.get_pars(
                 'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov'
         )
-        x = np.empty((self.xD, steps, mc_sims))
-        z = np.empty((self.zD, steps, mc_sims))
+        x = np.zeros((self.xD, steps, mc_sims))
+        z = np.zeros((self.zD, steps, mc_sims))
         q = np.random.multivariate_normal(q_mean, q_cov, size=(mc_sims, steps)).T
         r = np.random.multivariate_normal(r_mean, r_cov, size=(mc_sims, steps)).T
         x0 = np.random.multivariate_normal(x0_mean, x0_cov, size=mc_sims).T  # (D, mc_sims)

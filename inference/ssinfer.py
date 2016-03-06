@@ -41,8 +41,8 @@ class StateSpaceInference(object):
         self.pr_mean = self.fi_mean.copy()
         self.pr_cov = self.fi_cov.copy()
         self.pr_xx_cov = self.fi_cov.copy()
-        for k in xrange(self.N):  # iterate over columns of data
-            self._time_update(k)
+        for k in xrange(1, self.N):  # iterate over columns of data
+            self._time_update(k - 1)
             self.pr_mean[..., k] = self.x_mean_pred
             self.pr_cov[..., k] = self.x_cov_pred
             self.pr_xx_cov[..., k] = self.xx_cov
@@ -74,25 +74,27 @@ class StateSpaceInference(object):
         # in non-additive case, augment mean and covariance
         mean = self.x_mean_filt if self.sys.q_additive else np.vstack((self.x_mean_filt, self.q_mean))
         cov = self.x_cov_filt if self.sys.q_additive else block_diag(self.x_cov_filt, self.q_cov)
+        # apply moment transform to compute predicted state mean, covariance
         self.x_mean_pred, self.x_cov_pred, self.xx_cov = self.transf_dyn.apply(
                 self.sys.dyn_eval, mean, cov, self.sys.par_fcn(time)
         )
+        if self.sys.q_additive: self.x_cov_pred += self.q_cov
         # in non-additive case, augment mean and covariance
         mean = self.x_mean_pred if self.sys.r_additive else np.vstack((self.x_mean_pred, self.r_mean))
         cov = self.x_cov_pred if self.sys.r_additive else block_diag(self.x_cov_pred, self.r_cov)
-        self.mean_z_pred, self.z_cov_pred, self.xz_cov = self.transf_meas.apply(
+        # apply moment transform to compute measurement mean, covariance
+        self.z_mean_pred, self.z_cov_pred, self.xz_cov = self.transf_meas.apply(
                 self.sys.meas_eval, mean, cov, self.sys.par_fcn(time)
         )
+        # in additive case, noise covariances need to be added
+        if self.sys.r_additive: self.z_cov_pred += self.r_cov
         # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)
         self.xz_cov = self.xz_cov[:, :self.sys.xD]
         self.xx_cov = self.xx_cov[:, :self.sys.xD]
-        # in additive case, noise covariances need to be added
-        if self.sys.q_additive: self.x_cov_pred += self.q_cov
-        if self.sys.r_additive: self.z_cov_pred += self.r_cov
 
     def _measurement_update(self, y):
         gain = cho_solve(cho_factor(self.z_cov_pred), self.xz_cov)
-        self.x_mean_filt = self.x_mean_pred + gain.dot(y - self.mean_z_pred)
+        self.x_mean_filt = self.x_mean_pred + gain.dot(y - self.z_mean_pred)
         self.x_cov_filt = self.x_cov_pred - gain.dot(self.z_cov_pred).dot(gain.T)
 
     def _smoothing_update(self):

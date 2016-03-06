@@ -15,13 +15,13 @@ class GPQuadKalman(StateSpaceInference):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        unit_sp_f = Unscented.unit_sigma_points(nq, np.sqrt(nq + 1))
-        unit_sp_h = Unscented.unit_sigma_points(nr, np.sqrt(nr + 1))
+        unit_sp_f = Unscented.unit_sigma_points(nq, np.sqrt(nq + 0))
+        unit_sp_h = Unscented.unit_sigma_points(nr, np.sqrt(nr + 0))
         hypers_f = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones((nq, 1)), 'noise_var': 1e-8}
         hypers_h = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones((nr, 1)), 'noise_var': 1e-8}
-        tf = GPQuad(unit_sp_f, hypers_f)
-        th = GPQuad(unit_sp_h, hypers_h)
-        super(GPQuadKalman, self).__init__(tf, th, sys)
+        self.tf = GPQuad(unit_sp_f, hypers_f)
+        self.th = GPQuad(unit_sp_h, hypers_h)
+        super(GPQuadKalman, self).__init__(self.tf, self.th, sys)
 
 
 def main():
@@ -43,17 +43,18 @@ def main():
 
     import matplotlib.pyplot as plt
     plt.figure()
+    time = range(1, time_steps)
     plt.plot(x[0, :, 0], color='r', ls='--', label='true state')
     plt.plot(z[0, :, 0], color='k', ls='None', marker='o')
     plt.plot(mean_f[0, ...], color='b', label='filtered estimate')
-    plt.fill_between(range(0, time_steps),
-                     mean_f[0, ...] - 2 * np.sqrt(cov_f[0, 0, :]),
-                     mean_f[0, ...] + 2 * np.sqrt(cov_f[0, 0, :]),
+    plt.fill_between(time,
+                     mean_f[0, 1:] - 2 * np.sqrt(cov_f[0, 0, 1:]),
+                     mean_f[0, 1:] + 2 * np.sqrt(cov_f[0, 0, 1:]),
                      color='b', alpha=0.15)
     plt.plot(mean_s[0, ...], color='g', label='smoothed estimate')
-    plt.fill_between(range(0, time_steps),
-                     mean_s[0, ...] - 2 * np.sqrt(cov_s[0, 0, :]),
-                     mean_s[0, ...] + 2 * np.sqrt(cov_s[0, 0, :]),
+    plt.fill_between(time,
+                     mean_s[0, 1:] - 2 * np.sqrt(cov_s[0, 0, 1:]),
+                     mean_s[0, 1:] + 2 * np.sqrt(cov_s[0, 0, 1:]),
                      color='g', alpha=0.25)
     plt.legend()
 

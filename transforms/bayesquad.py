@@ -1,6 +1,6 @@
 import numpy as np
 from numpy import newaxis as na
-from numpy.linalg import det, inv
+from numpy.linalg import det, inv, cholesky
 from scipy.linalg import cho_factor, cho_solve
 
 from transform import MomentTransform
@@ -19,7 +19,7 @@ class GPQuad(MomentTransform):
 
     def apply(self, f, mean, cov, *args):
         # form sigma-points from unit sigma-points
-        x = mean + np.linalg.cholesky(cov).dot(self.unit_sp)
+        x = mean + cholesky(cov).dot(self.unit_sp)
         # push sigma-points through non-linearity
         fx = np.apply_along_axis(f, 0, x, *args)
         # output mean
@@ -29,7 +29,7 @@ class GPQuad(MomentTransform):
         cov_f += self.model_var
         # input-output covariance
         dx = x - mean
-        cov_fx = self.D.dot(dx).dot(self.Wcc).dot(dx.T)
+        cov_fx = self.D.dot(dx).dot(self.Wcc).dot(fx.T)
         return mean_f, cov_f, cov_fx
 
     def weights_rbf(self):
