@@ -26,10 +26,10 @@ class GPQuadKalman(StateSpaceInference):
 
 def main():
     from models.ungm import UNGM
-    system = UNGM(q_cov=10, r_cov=1)
+    system = UNGM(q_cov=10.0, r_cov=1.0)
     print "q_additive: {}, r_additive: {}".format(system.q_additive, system.r_additive)
 
-    time_steps, mc = 500, 50
+    time_steps, mc = 100, 50
     x, z = system.simulate(time_steps, mc_sims=mc)  # get some data from the system
 
     filt = GPQuadKalman(system)
@@ -41,7 +41,7 @@ def main():
         rmse_filter[imc] = np.sqrt(np.mean((x[:, 1:, imc] - mean_f[:, 1:]) ** 2, axis=1))
         rmse_smoother[imc] = np.sqrt(np.mean((x[:, 1:, imc] - mean_s[:, 1:]) ** 2, axis=1))
         filt.reset()
-    # FIXME: results are not even close to the BHKF on the same example!
+
     print "Filter RMSE: {:.4f}".format(np.asscalar(rmse_filter.mean()))
     print "Smoother RMSE: {:.4f}".format(np.asscalar(rmse_smoother.mean()))
 

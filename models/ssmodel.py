@@ -64,7 +64,7 @@ class StateSpaceModel(object):
         x[:, 0, :] = x0  # store initial states at k=0
         for imc in xrange(mc_sims):
             for k in xrange(1, steps):
-                theta = self.par_fcn(k)
+                theta = self.par_fcn(k - 1)
                 x[:, k, imc] = self.dyn_fcn(x[:, k-1, imc], q[:, k-1, imc], theta)
                 z[:, k, imc] = self.meas_fcn(x[:, k, imc], r[:, k, imc], theta)
         return x, z
