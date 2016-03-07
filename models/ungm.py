@@ -1,5 +1,7 @@
+import matplotlib.pyplot as plt
 import numpy as np
 
+from inference.ssinfer import StateSpaceInference
 from models.ssmodel import StateSpaceModel
 
 
@@ -93,7 +95,6 @@ def ungm_demo():
     mc_simulations = 50
     ssm = UNGM(q_cov=10, r_cov=.1)
     x, z = ssm.simulate(steps, mc_sims=mc_simulations)
-    import matplotlib.pyplot as plt
     plt.plot(x[0, ...], color='b', alpha=0.15, label='state trajectory')
     plt.plot(z[0, ...], color='k', alpha=0.25, ls='None', marker='.', label='measurements')
 
@@ -103,9 +104,48 @@ def ungm_nonadd_demo():
     mc_simulations = 50
     ssm = UNGMnonadd(q_cov=10, r_cov=.1)
     x, z = ssm.simulate(steps, mc_sims=mc_simulations)
-    import matplotlib.pyplot as plt
     plt.plot(x[0, ...], color='b', alpha=0.15, label='state trajectory')
     plt.plot(z[0, ...], color='k', alpha=0.25, ls='None', marker='.', label='measurements')
+
+
+def ungm_filter_demo(filt_class, **kwargs):
+    assert issubclass(filt_class, StateSpaceInference)
+    system = UNGM(q_cov=10, r_cov=1)
+    # create filter object, pass in additional kwargs
+    filt = filt_class(system, **kwargs)
+    # simulate dynamic system for given number of steps and mc simulations
+    time_steps, mc = 500, 100
+    x, z = system.simulate(time_steps, mc_sims=mc)
+    print "Running {} filter/smoother ({} time steps, {} MC simulations) ...".format(filt_class.__name__,
+                                                                                     time_steps, mc)
+    rmse_filter = np.zeros(mc)
+    rmse_smoother = np.zeros(mc)
+    for imc in range(mc):
+        mean_f, cov_f = filt.forward_pass(z[..., imc])
+        mean_s, cov_s = filt.backward_pass()
+        rmse_filter[imc] = np.sqrt(np.mean((x[..., imc] - mean_f) ** 2, axis=1))
+        rmse_smoother[imc] = np.sqrt(np.mean((x[..., imc] - mean_s) ** 2, axis=1))
+        filt.reset()
+    # print average filter/smoother RMSE
+    print "Filter RMSE: {:.4f}".format(np.asscalar(rmse_filter.mean()))
+    print "Smoother RMSE: {:.4f}".format(np.asscalar(rmse_smoother.mean()))
+    # plot one realization of the system trajectory, measurements and filtered/smoothed state estimate
+    plt.figure()
+    time = range(1, time_steps)
+    plt.plot(x[0, :, 0], color='r', ls='--', label='true state')
+    plt.plot(z[0, :, 0], color='k', ls='None', marker='o')
+    plt.plot(mean_f[0, ...], color='b', label='filtered estimate')
+    plt.fill_between(time,
+                     mean_f[0, 1:] - 2 * np.sqrt(cov_f[0, 0, 1:]),
+                     mean_f[0, 1:] + 2 * np.sqrt(cov_f[0, 0, 1:]),
+                     color='b', alpha=0.15)
+    plt.plot(mean_s[0, ...], color='g', label='smoothed estimate')
+    plt.fill_between(time,
+                     mean_s[0, 1:] - 2 * np.sqrt(cov_s[0, 0, 1:]),
+                     mean_s[0, 1:] + 2 * np.sqrt(cov_s[0, 0, 1:]),
+                     color='g', alpha=0.25)
+    plt.legend()
+    plt.show()
 
 
 if __name__ == '__main__':

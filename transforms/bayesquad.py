@@ -221,6 +221,7 @@ class TPQuad(MomentTransform):
         return mean_f, cov_f, cov_fx
 
     def weights_rbf(self):
+        # TODO: hypers as input argument (in case they're estimated online)
         # BQ weights for RBF kernel with given hypers, computations adopted from the GP-ADF code [Deisenroth] with
         # the following assumptions:
         #   (A1) the uncertain input is zero-mean with unit covariance
