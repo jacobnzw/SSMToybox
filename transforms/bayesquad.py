@@ -1,7 +1,10 @@
 import numpy as np
+from GPy.kern import RBF
 from numpy import newaxis as na
 from numpy.linalg import det, inv, cholesky
-from scipy.linalg import cho_factor, cho_solve
+from scipy.linalg import cho_factor, cho_solve, solve
+from scipy.optimize import minimize
+from scipy.stats import multivariate_normal
 
 from transform import MomentTransform
 
@@ -11,11 +14,15 @@ class GPQuad(MomentTransform):
     # as an argument instead of creating them in init
     # BQ does not prescribe any sigma-point schemes (apart from minimium variance point sets)
     def __init__(self, unit_sp, hypers=None):
-        self.unit_sp = unit_sp
+        self.unit_sp = unit_sp  # (d, n)
+        # get number of sigmas (n) and dimension of sigmas (d)
+        self.d, self.n = self.unit_sp.shape
         # set kernel hyper-parameters (manually or some principled method)
         self.hypers = self._min_var_hypers() if hypers is None else hypers
         # BQ weights given the unit sigma-points and the kernel hyper-parameters
         self.wm, self.Wc, self.Wcc = self.weights_rbf()
+        # GPy RBF kernel with given hypers
+        self.kern = RBF(self.d, variance=hypers['sig_var'], lengthscale=hypers['lengthscale'], ARD=True)
 
     def apply(self, f, mean, cov, *args):
         # form sigma-points from unit sigma-points
@@ -73,15 +80,74 @@ class GPQuad(MomentTransform):
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
         return wm_f, wc_f, wc_fx
 
+    def _int_var_rbf(self, X, hyp, jitter=1e-8):
+        """
+        Posterior integral variance of the Gaussian Process quadrature.
+        X - vector (1, 2*xdim**2+xdim)
+        hyp - kernel hyperparameters [s2, el_1, ... el_d]
+        """
+        # reshape X to SP matrix
+        X = np.reshape(X, (self.n, self.d))
+        # set kernel hyper-parameters
+        s2, el = hyp[0], hyp[1:]
+        self.kern.param_array[0] = s2  # variance
+        self.kern.param_array[1:] = el  # lengthscale
+        K = self.kern.K(X)
+        L = np.diag(el ** 2)
+        # posterior variance of the integral
+        ks = s2 * np.sqrt(det(L + np.eye(self.d))) * multivariate_normal(mean=np.zeros(self.d), cov=L).pdf(X)
+        postvar = -ks.dot(solve(K + jitter * np.eye(self.n), ks.T))
+        return postvar
+
+    def _int_var_rbf_hyp(self, hyp, X, jitter=1e-8):
+        """
+        Posterior integral variance as a function of hyper-parameters
+        :param hyp: RBF kernel hyper-parameters [s2, el_1, ..., el_d]
+        :param X: sigma-points
+        :param jitter: numerical jitter (for stabilizing computations)
+        :return: posterior integral variance
+        """
+        # reshape X to SP matrix
+        X = np.reshape(X, (self.n, self.d))
+        # set kernel hyper-parameters
+        s2, el = 1, hyp  # sig_var hyper always set to 1
+        self.kern.param_array[0] = s2  # variance
+        self.kern.param_array[1:] = el  # lengthscale
+        K = self.kern.K(X)
+        L = np.diag(el ** 2)
+        # posterior variance of the integral
+        ks = s2 * np.sqrt(det(L + np.eye(self.d))) * multivariate_normal(mean=np.zeros(self.d), cov=L).pdf(X)
+        postvar = s2 * np.sqrt(det(2 * inv(L) + np.eye(self.d))) ** -1 - ks.dot(
+            solve(K + jitter * np.eye(self.n), ks.T))
+        return postvar
+
     def _min_var_sigmas(self):
-        # minimum variance point set
-        # scipy.optimize Nelder-mead simplex method (no kernel derivatives w.r.t. sigmas needed)
-        pass
+        # solver options
+        op = {'disp': True}
+        # bounds based on input unit Gaussian (-2*std, +2std)
+        bnds = tuple((-2, 2) for i in range(self.n * self.d))
+        hyp = np.hstack((self.hypers['sig_var'], self.hypers['lengthscale']))
+        # unconstrained
+        #        res = minimize(self._gpq_postvar, self.X0, method='Nelder-Mead', options=op)
+        #        res = minimize(self._gpq_postvar, self.X0, method='SLSQP', bounds=bnds, options=op)
+        res = minimize(self._int_var_rbf, self.unit_sp, args=hyp, method='L-BFGS-B', bounds=bnds, options=op)
+        return res.x
 
     def _min_var_hypers(self):
-        # finds hypers that minimize integral variance (these minimize MMD)
-        # scipy.optimize has a lot of solvers available
-        pass
+        """
+        Finds kernel hyper-parameters minimizing the posterior integral variance.
+        :return: optimized kernel hyper-parameters
+        """
+        # solver options
+        op = {'disp': True}
+        hyp = self.hypers['lengthscale']  # np.hstack((self.hypers['sig_var'], self.hypers['lengthscale']))
+        # bounds based on input unit Gaussian (-2*std, +2std)
+        bnds = tuple((1e-3, 1000) for i in range(len(hyp)))
+        # unconstrained
+        #        res = minimize(self._gpq_postvar, self.X0, method='Nelder-Mead', options=op)
+        #        res = minimize(self._gpq_postvar, self.X0, method='SLSQP', bounds=bnds, options=op)
+        res = minimize(self._int_var_rbf_hyp, hyp, args=self.unit_sp, method='L-BFGS-B', bounds=bnds, options=op)
+        return res.x
 
     def _min_logmarglik_hypers(self):
         # finds hypers by maximizing the marginal likelihood (empirical bayes)
@@ -108,3 +174,9 @@ class GPQuad(MomentTransform):
         MD = (x2V[:, na] + y2V[:, na].T) - 2 * x.dot(V).dot(y.T)
 
         return MD
+
+
+class GPQuadAlt(GPQuad):
+    def apply(self, f, mean, cov, *args):
+        # this variant of the GPQuad recomputes weights based on moments (computationally costly)
+        pass

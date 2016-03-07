@@ -14,7 +14,7 @@ class UnscentedKalman(StateSpaceInference):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        tf = Unscented(nq, kappa=kap, alpha=al, beta=bet)  # UnscentedKalman has-a Unscented transform
+        tf = Unscented(nq, kappa=kap, alpha=al, beta=bet)
         th = Unscented(nr, kappa=kap, alpha=al, beta=bet)
         super(UnscentedKalman, self).__init__(tf, th, sys)
 
