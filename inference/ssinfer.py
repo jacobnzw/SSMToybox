@@ -36,8 +36,8 @@ class StateSpaceInference(object):
 
     def forward_pass(self, data):
         self.D, self.N = data.shape
-        self.fi_mean = np.empty((self.D, self.N))
-        self.fi_cov = np.empty((self.D, self.D, self.N))
+        self.fi_mean = np.zeros((self.D, self.N))
+        self.fi_cov = np.zeros((self.D, self.D, self.N))
         self.pr_mean = self.fi_mean.copy()
         self.pr_cov = self.fi_cov.copy()
         self.pr_xx_cov = self.fi_cov.copy()
@@ -69,6 +69,17 @@ class StateSpaceInference(object):
             self.sm_cov[..., k] = self.x_cov_smooth
         self.set_flag('smoothed', True)
         return self.sm_mean, self.sm_cov
+
+    def reset(self):
+        self.x_mean_filt, self.x_cov_filt = self.sys.get_pars('x0_mean', 'x0_cov')
+        self.flags = {'filtered': False, 'smoothed': False}
+        self.x_mean_pred, self.x_cov_pred, = None, None
+        self.x_mean_smooth, self.x_cov_smooth = None, None
+        self.xx_cov, self.xz_cov = None, None
+        self.pr_mean, self.pr_cov, self.pr_xx_cov = None, None, None
+        self.fi_mean, self.fi_cov = None, None
+        self.sm_mean, self.sm_cov = None, None
+        self.D, self.N = None, None
 
     def _time_update(self, time):
         # in non-additive case, augment mean and covariance

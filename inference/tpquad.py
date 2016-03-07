@@ -29,17 +29,21 @@ def main():
     system = UNGM(q_cov=10, r_cov=1)
     print "q_additive: {}, r_additive: {}".format(system.q_additive, system.r_additive)
 
-    time_steps = 100
-    x, z = system.simulate(time_steps, 1)  # get some data from the system
+    time_steps, mc = 100, 50
+    x, z = system.simulate(time_steps, mc_sims=mc)  # get some data from the system
 
     filt = TPQuadKalman(system)
-    mean_f, cov_f = filt.forward_pass(z[..., 0])
-    mean_s, cov_s = filt.backward_pass()
+    rmse_filter = np.zeros(mc)
+    rmse_smoother = np.zeros(mc)
+    for imc in range(mc):
+        mean_f, cov_f = filt.forward_pass(z[..., imc])
+        mean_s, cov_s = filt.backward_pass()
+        rmse_filter[imc] = np.sqrt(np.mean((x[..., imc] - mean_f) ** 2, axis=1))
+        rmse_smoother[imc] = np.sqrt(np.mean((x[..., imc] - mean_s) ** 2, axis=1))
+        filt.reset()
 
-    rmse_filter = np.sqrt(((x[..., 0] - mean_f) ** 2).mean(axis=1))
-    rmse_smoother = np.sqrt(((x[..., 0] - mean_s) ** 2).mean(axis=1))
-    print "Filter RMSE: {:.4f}".format(np.asscalar(rmse_filter))
-    print "Smoother RMSE: {:.4f}".format(np.asscalar(rmse_smoother))
+    print "Filter RMSE: {:.4f}".format(np.asscalar(rmse_filter.mean()))
+    print "Smoother RMSE: {:.4f}".format(np.asscalar(rmse_smoother.mean()))
 
     import matplotlib.pyplot as plt
     plt.figure()
