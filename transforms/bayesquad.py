@@ -80,6 +80,14 @@ class GPQuad(MomentTransform):
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
         return wm_f, wc_f, wc_fx
 
+    def plot_gp_model(self, f, unit_sp, *args):
+        fx = np.apply_along_axis(f, 0, unit_sp, *args)
+        # TODO: plotting w/o GPy's routines
+        # TODO: which output dimension to plot, what about n-D inputs?
+        from GPy.models import GPRegression
+        m = GPRegression(unit_sp.T, fx.T, kernel=self.kern, noise_var=self.hypers['noise_var'])
+        m.plot()
+
     def _int_var_rbf(self, X, hyp, jitter=1e-8):
         """
         Posterior integral variance of the Gaussian Process quadrature.
