@@ -28,16 +28,16 @@ class SphericalRadial(MomentTransform):
 
     def apply(self, f, mean, cov, *args):
         # form sigma-points from unit sigma-points
-        x = mean + np.linalg.cholesky(cov).dot(self.unit_sp)
+        x = mean[:, na] + np.linalg.cholesky(cov).dot(self.unit_sp)
         # push sigma-points through non-linearity
         fx = np.apply_along_axis(f, 0, x, *args)
         # output mean
         mean_f = fx.dot(self.w)
         # output covariance
-        dfx = fx - mean_f
+        dfx = fx - mean_f[:, na]
         cov_f = dfx.dot(self.W).dot(dfx.T)
         # input-output covariance
-        cov_fx = dfx.dot(self.W).dot((x - mean).T)
+        cov_fx = dfx.dot(self.W).dot((x - mean[:, na]).T)
         return mean_f, cov_f, cov_fx
 
 
@@ -107,14 +107,14 @@ class GaussHermite(MomentTransform):
 
     def apply(self, f, mean, cov, *args):
         # form sigma-points from unit sigma-points
-        x = mean + np.linalg.cholesky(cov).dot(self.unit_sp)
+        x = mean[:, na] + np.linalg.cholesky(cov).dot(self.unit_sp)
         # push sigma-points through non-linearity
         fx = np.apply_along_axis(f, 0, x, *args)
         # output mean
         mean_f = fx.dot(self.w)
         # output covariance
-        dfx = fx - mean_f
+        dfx = fx - mean_f[:, na]
         cov_f = dfx.dot(self.W).dot(dfx.T)
         # input-output covariance
-        cov_fx = dfx.dot(self.W).dot((x - mean).T)
+        cov_fx = dfx.dot(self.W).dot((x - mean[:, na]).T)
         return mean_f, cov_f, cov_fx

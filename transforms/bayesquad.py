@@ -26,7 +26,7 @@ class GPQuad(MomentTransform):
 
     def apply(self, f, mean, cov, *args):
         # form sigma-points from unit sigma-points
-        x = mean + cholesky(cov).dot(self.unit_sp)
+        x = mean[:, na] + cholesky(cov).dot(self.unit_sp)
         # push sigma-points through non-linearity
         fx = np.apply_along_axis(f, 0, x, *args)
         # output mean
@@ -35,9 +35,8 @@ class GPQuad(MomentTransform):
         cov_f = fx.dot(self.Wc).dot(fx.T) - np.outer(mean_f, mean_f.T)
         cov_f += self.model_var
         # input-output covariance
-        dx = x - mean
-        cov_fx = self.D.dot(dx).dot(self.Wcc).dot(fx.T)
-        return mean_f, cov_f, cov_fx
+        cov_fx = self.D.dot(x - mean[:, na]).dot(self.Wcc).dot(fx.T)
+        return mean_f, cov_f, cov_fx.T
 
     def weights_rbf(self):
         # BQ weights for RBF kernel with given hypers, computations adopted from the GP-ADF code [Deisenroth] with
