@@ -36,8 +36,8 @@ class StateSpaceInference(object):
 
     def forward_pass(self, data):
         self.D, self.N = data.shape
-        self.fi_mean = np.zeros((self.D, self.N))
-        self.fi_cov = np.zeros((self.D, self.D, self.N))
+        self.fi_mean = np.zeros((self.sys.xD, self.N))
+        self.fi_cov = np.zeros((self.sys.xD, self.sys.xD, self.N))
         self.pr_mean = self.fi_mean.copy()
         self.pr_cov = self.fi_cov.copy()
         self.pr_xx_cov = self.fi_cov.copy()
@@ -104,12 +104,12 @@ class StateSpaceInference(object):
         self.xx_cov = self.xx_cov[:, :self.sys.xD]
 
     def _measurement_update(self, y):
-        gain = cho_solve(cho_factor(self.z_cov_pred), self.xz_cov)
+        gain = cho_solve(cho_factor(self.z_cov_pred), self.xz_cov).T
         self.x_mean_filt = self.x_mean_pred + gain.dot(y - self.z_mean_pred)
         self.x_cov_filt = self.x_cov_pred - gain.dot(self.z_cov_pred).dot(gain.T)
 
     def _smoothing_update(self):
-        gain = cho_solve(cho_factor(self.x_cov_pred), self.xx_cov)
+        gain = cho_solve(cho_factor(self.x_cov_pred), self.xx_cov).T
         self.x_mean_smooth = self.x_mean_filt + gain.dot(self.x_mean_smooth - self.x_mean_pred)
         self.x_cov_smooth = self.x_cov_filt + gain.dot(self.x_cov_smooth - self.x_cov_pred).dot(gain.T)
 

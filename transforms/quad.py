@@ -1,4 +1,5 @@
 import numpy as np
+from numpy import newaxis as na
 from numpy.polynomial.hermite_e import hermegauss, hermeval
 from scipy.special import factorial
 from sklearn.utils.extmath import cartesian
@@ -69,16 +70,16 @@ class Unscented(MomentTransform):
 
     def apply(self, f, mean, cov, *args):  # supply the augmented mean and cov in case noise is non-additive
         # form sigma-points from unit sigma-points
-        x = mean + np.linalg.cholesky(cov).dot(self.unit_sp)
+        x = mean[:, na] + np.linalg.cholesky(cov).dot(self.unit_sp)
         # push sigma-points through non-linearity
         fx = np.apply_along_axis(f, 0, x, *args)
         # output mean
         mean_f = fx.dot(self.wm)
         # output covariance
-        dfx = fx - mean_f
+        dfx = fx - mean_f[:, na]
         cov_f = dfx.dot(self.Wc).dot(dfx.T)
         # input-output covariance
-        cov_fx = dfx.dot(self.Wc).dot((x - mean).T)
+        cov_fx = dfx.dot(self.Wc).dot((x - mean[:, na]).T)
         return mean_f, cov_f, cov_fx
 
 
