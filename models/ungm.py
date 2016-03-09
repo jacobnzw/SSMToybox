@@ -46,6 +46,12 @@ class UNGM(StateSpaceModel):
     def par_fcn(self, time):
         return time
 
+    def dyn_fcn_dx(self, x, q, *args):
+        return np.asarray([0.5 + 25 * (1 - x[0] ** 2) / (1 + x[0] ** 2) ** 2])
+
+    def meas_fcn_dx(self, x, r, *args):
+        return np.asarray([0.1 * x[0]])
+
 
 class UNGMnonadd(StateSpaceModel):
     """
@@ -87,6 +93,12 @@ class UNGMnonadd(StateSpaceModel):
 
     def par_fcn(self, time):
         return time
+
+    def dyn_fcn_dx(self, x, q, *args):
+        pass
+
+    def meas_fcn_dx(self, x, r, *args):
+        pass
 
 
 def ungm_demo():

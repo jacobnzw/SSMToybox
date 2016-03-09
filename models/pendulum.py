@@ -36,6 +36,13 @@ class Pendulum(StateSpaceModel):
     def par_fcn(self, time):
         pass  # pendulum model does not have time-varying parameters
 
+    def dyn_fcn_dx(self, x, q, *args):
+        return np.array([[1.0, x[0] + self.dt],
+                         [-self.g * self.dt * np.cos(x[0]), 1.0]])
+
+    def meas_fcn_dx(self, x, r, *args):
+        return np.array([np.cos(x[0])])
+
 
 def pendulum_demo():
     steps = 250

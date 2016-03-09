@@ -28,23 +28,51 @@ class StateSpaceModel(object):
         # describes how parameter value depends on time (for time varying systems)
         raise NotImplementedError
 
+    def dyn_fcn_dx(self, x, q, *args):
+        # Jacobian of state dynamics
+        raise NotImplementedError
+
+    def meas_fcn_dx(self, x, r, *args):
+        # Jacobian of measurement function
+        raise NotImplementedError
+
     # TODO: implment Jacobians for ExtendedKalman,
     # TODO: could approximate Jacobians with differences
     def dyn_eval(self, xq, *args):
         if self.q_additive:
             assert len(xq) == self.xD
-            return self.dyn_fcn(xq, 0, *args)
+            out = self.dyn_fcn(xq, 0, *args)
         else:
             x, q = xq[:self.xD], xq[-self.qD:]
-            return self.dyn_fcn(x, q, *args)
+            out = self.dyn_fcn(x, q, *args)
+        return out
 
     def meas_eval(self, xr, *args):
         if self.r_additive:
             assert len(xr) == self.xD
-            return self.meas_fcn(xr, 0, *args)
+            out = self.meas_fcn(xr, 0, *args)
         else:
             x, r = xr[:self.xD], xr[-self.rD:]
-            return self.meas_fcn(x, r, *args)
+            out = self.meas_fcn(x, r, *args)
+        return out
+
+    def dyn_dx_eval(self, xq, *args):
+        if self.q_additive:
+            assert len(xq) == self.xD
+            out = self.dyn_fcn_dx(xq, 0, *args).flatten()
+        else:
+            x, q = xq[:self.xD], xq[-self.qD:]
+            out = self.dyn_fcn_dx(x, q, *args).flatten()
+        return out
+
+    def meas_dx_eval(self, xr, *args):
+        if self.r_additive:
+            assert len(xr) == self.xD
+            out = self.meas_fcn_dx(xr, 0, *args).flatten()
+        else:
+            x, r = xr[:self.xD], xr[-self.rD:]
+            out = self.meas_fcn_dx(x, r, *args).flatten()
+        return out
 
     def simulate(self, steps, mc_sims=1):
         """
