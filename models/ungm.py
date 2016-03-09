@@ -89,14 +89,16 @@ class UNGMnonadd(StateSpaceModel):
         return time
 
 
-# TODO: spice up the UNGM demos
 def ungm_demo():
     steps = 100
     mc_simulations = 50
     ssm = UNGM(q_cov=10, r_cov=.1)
     x, z = ssm.simulate(steps, mc_sims=mc_simulations)
+
+    plt.figure()
     plt.plot(x[0, ...], color='b', alpha=0.15, label='state trajectory')
     plt.plot(z[0, ...], color='k', alpha=0.25, ls='None', marker='.', label='measurements')
+    plt.show()
 
 
 def ungm_nonadd_demo():
@@ -104,8 +106,11 @@ def ungm_nonadd_demo():
     mc_simulations = 50
     ssm = UNGMnonadd(q_cov=10, r_cov=.1)
     x, z = ssm.simulate(steps, mc_sims=mc_simulations)
+
+    plt.figure()
     plt.plot(x[0, ...], color='b', alpha=0.15, label='state trajectory')
     plt.plot(z[0, ...], color='k', alpha=0.25, ls='None', marker='.', label='measurements')
+    plt.show()
 
 
 def ungm_filter_demo(filt_class, **kwargs):
