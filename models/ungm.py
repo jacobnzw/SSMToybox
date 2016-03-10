@@ -37,19 +37,19 @@ class UNGM(StateSpaceModel):
         self.set_pars('r_mean', np.atleast_1d(r_mean))
         self.set_pars('r_cov', np.atleast_2d(r_cov))
 
-    def dyn_fcn(self, x, q, *pars):
+    def dyn_fcn(self, x, q, pars):
         return np.asarray([0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * np.cos(1.2 * pars[0])]) + q
 
-    def meas_fcn(self, x, r, *pars):
+    def meas_fcn(self, x, r, pars):
         return np.asarray([0.05 * x[0] ** 2]) + r
 
     def par_fcn(self, time):
-        return time
+        return np.atleast_1d(time)
 
-    def dyn_fcn_dx(self, x, q, *args):
+    def dyn_fcn_dx(self, x, q, pars):
         return np.asarray([0.5 + 25 * (1 - x[0] ** 2) / (1 + x[0] ** 2) ** 2])
 
-    def meas_fcn_dx(self, x, r, *args):
+    def meas_fcn_dx(self, x, r, pars):
         return np.asarray([0.1 * x[0]])
 
 

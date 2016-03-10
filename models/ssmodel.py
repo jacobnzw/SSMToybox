@@ -26,6 +26,7 @@ class StateSpaceModel(object):
 
     def par_fcn(self, time):
         # describes how parameter value depends on time (for time varying systems)
+        # ensure returned value is at least 1D
         raise NotImplementedError
 
     def dyn_fcn_dx(self, x, q, pars):
@@ -36,8 +37,7 @@ class StateSpaceModel(object):
         # Jacobian of measurement function
         raise NotImplementedError
 
-    # TODO: implment Jacobians for ExtendedKalman,
-    # TODO: could approximate Jacobians with differences
+    # TODO: could approximate Jacobians with differences, make check_jacobians()
     def dyn_eval(self, xq, pars, dx=False):
         if self.q_additive:
             assert len(xq) == self.xD
