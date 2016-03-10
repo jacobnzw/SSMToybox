@@ -85,26 +85,28 @@ class UNGMnonadd(StateSpaceModel):
         self.set_pars('r_mean', np.atleast_1d(r_mean))
         self.set_pars('r_cov', np.atleast_2d(r_cov))
 
-    def dyn_fcn(self, x, q, *pars):
-        return np.asarray([0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * np.cos(1.2 * q * pars[0])])
+    def dyn_fcn(self, x, q, pars):
+        return np.asarray([0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * np.cos(1.2 * q[0] * pars[0])])
 
-    def meas_fcn(self, x, r, *pars):
-        return np.asarray([0.05 * x[0] ** 2]) + 0.5 * r * np.sin(r)
+    def meas_fcn(self, x, r, pars):
+        return np.asarray([0.05 * x[0] ** 2]) + 0.5 * r[0] * np.sin(r[0])
 
     def par_fcn(self, time):
-        return time
+        return np.atleast_1d(time)
 
-    def dyn_fcn_dx(self, x, q, *args):
-        pass
+    def dyn_fcn_dx(self, x, q, pars):
+        return np.asarray([0.5 + 25 * (1 - x[0] ** 2) / (1 + x[0] ** 2) ** 2,
+                           -8 * np.sin(1.2 * q[0] * pars[0]) * 1.2 * pars[0]])
 
-    def meas_fcn_dx(self, x, r, *args):
-        pass
+    def meas_fcn_dx(self, x, r, pars):
+        return np.asarray([0.1 * x[0], 0.5 * (np.sin(r) + r * np.cos(r))])
 
 
 def ungm_demo():
     steps = 100
     mc_simulations = 50
     ssm = UNGM(q_cov=10, r_cov=.1)
+    ssm.check_jacobians(eps=1e-8)
     x, z = ssm.simulate(steps, mc_sims=mc_simulations)
 
     plt.figure()
@@ -127,7 +129,7 @@ def ungm_nonadd_demo():
 
 def ungm_filter_demo(filt_class, **kwargs):
     assert issubclass(filt_class, StateSpaceInference)
-    system = UNGM(q_cov=1, r_cov=1)
+    system = UNGMnonadd(q_cov=1, r_cov=1)
     # create filter object, pass in additional kwargs
     filt = filt_class(system, **kwargs)
     # simulate dynamic system for given number of steps and mc simulations

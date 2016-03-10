@@ -1,4 +1,5 @@
 import numpy as np
+from numpy import newaxis as na
 # TODO: Abstract Base Classes to enforce the requirements of the base class on the derived classes.
 
 
@@ -37,7 +38,6 @@ class StateSpaceModel(object):
         # Jacobian of measurement function
         raise NotImplementedError
 
-    # TODO: could approximate Jacobians with differences, make check_jacobians()
     def dyn_eval(self, xq, pars, dx=False):
         if self.q_additive:
             assert len(xq) == self.xD
@@ -69,6 +69,30 @@ class StateSpaceModel(object):
             else:
                 out = self.meas_fcn(x, r, pars)
         return out
+
+    def check_jacobians(self, eps=1e-16):
+        x = np.random.rand(self.xD)
+        h = np.sqrt(eps)
+        hdiag = np.diag(h * np.ones(self.xD))
+        assert hdiag.shape == (self.xD, self.xD)
+        xph, xmh = x[:, na] + hdiag, x[:, na] - hdiag
+        par = np.atleast_1d(1.0)
+        fph = np.zeros((self.xD, self.xD))
+        hph = np.zeros((self.zD, self.xD))
+        fmh, hmh = fph.copy(), hph.copy()
+        for i in range(self.xD):
+            # fph[:, i] = self.dyn_fcn(xph[:, i], xph[:, i], par)
+            # fmh[:, i] = self.dyn_fcn(xmh[:, i], xmh[:, i], par)
+            # hph[:, i] = self.meas_fcn(xph[:, i], xph[:, i], par)
+            # hmh[:, i] = self.meas_fcn(xmh[:, i], xmh[:, i], par)
+            fph[:, i] = self.dyn_fcn(xph[:, i], 0.0, par)
+            fmh[:, i] = self.dyn_fcn(xmh[:, i], 0.0, par)
+            hph[:, i] = self.meas_fcn(xph[:, i], 0.0, par)
+            hmh[:, i] = self.meas_fcn(xmh[:, i], 0.0, par)
+        jac_fx = (2 * h) ** -1 * (fph - fmh)
+        jac_hx = (2 * h) ** -1 * (hph - hmh)
+        print "Errors in Jacobians\n{}\n{}".format(np.abs(jac_fx - self.dyn_fcn_dx(x, x, par)),
+                                                   np.abs(jac_hx - self.meas_fcn_dx(x, x, par)))
 
     def simulate(self, steps, mc_sims=1):
         """
