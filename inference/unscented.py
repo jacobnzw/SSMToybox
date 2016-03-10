@@ -18,10 +18,10 @@ class UnscentedKalman(StateSpaceInference):
 
 
 def main():
-    # from models.ungm import ungm_filter_demo
-    # ungm_filter_demo(UnscentedKalman, kap=0.0)
-    from models.pendulum import pendulum_filter_demo
-    pendulum_filter_demo(UnscentedKalman)
+    from models.ungm import ungm_filter_demo
+    ungm_filter_demo(UnscentedKalman, kap=0.0)
+    # from models.pendulum import pendulum_filter_demo
+    # pendulum_filter_demo(UnscentedKalman)
 
 
 if __name__ == '__main__':

@@ -24,11 +24,11 @@ class GPQuad(MomentTransform):
         # GPy RBF kernel with given hypers
         self.kern = RBF(self.d, variance=hypers['sig_var'], lengthscale=hypers['lengthscale'], ARD=True)
 
-    def apply(self, f, mean, cov, *args):
+    def apply(self, f, mean, cov, pars):
         # form sigma-points from unit sigma-points
         x = mean[:, na] + cholesky(cov).dot(self.unit_sp)
         # push sigma-points through non-linearity
-        fx = np.apply_along_axis(f, 0, x, *args)
+        fx = np.apply_along_axis(f, 0, x, pars)
         # output mean
         mean_f = fx.dot(self.wm)
         # output covariance
@@ -79,8 +79,8 @@ class GPQuad(MomentTransform):
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
         return wm_f, wc_f, wc_fx
 
-    def plot_gp_model(self, f, unit_sp, *args):
-        fx = np.apply_along_axis(f, 0, unit_sp, *args)
+    def plot_gp_model(self, f, unit_sp, args):
+        fx = np.apply_along_axis(f, 0, unit_sp, args)
         # TODO: plotting w/o GPy's routines
         # TODO: which output dimension to plot, what about n-D inputs?
         from GPy.models import GPRegression
@@ -184,7 +184,7 @@ class GPQuad(MomentTransform):
 
 
 class GPQuadAlt(GPQuad):
-    def apply(self, f, mean, cov, *args):
+    def apply(self, f, mean, cov, pars):
         # this variant of the GPQuad recomputes weights based on moments (computationally costly)
         pass
 
@@ -203,11 +203,11 @@ class TPQuad(MomentTransform):
         # GPy RBF kernel with given hypers
         self.kern = RBF(self.d, variance=hypers['sig_var'], lengthscale=hypers['lengthscale'], ARD=True)
 
-    def apply(self, f, mean, cov, *args):
+    def apply(self, f, mean, cov, pars):
         # form sigma-points from unit sigma-points
         x = mean + cholesky(cov).dot(self.unit_sp)
         # push sigma-points through non-linearity
-        fx = np.apply_along_axis(f, 0, x, *args)
+        fx = np.apply_along_axis(f, 0, x, pars)
         # output mean
         mean_f = fx.dot(self.wm)
         # output covariance

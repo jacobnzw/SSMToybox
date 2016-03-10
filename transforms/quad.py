@@ -26,11 +26,11 @@ class SphericalRadial(MomentTransform):
     def unit_sigma_points(dim, c):
         return np.hstack((c * np.eye(dim), -c * np.eye(dim)))
 
-    def apply(self, f, mean, cov, *args):
+    def apply(self, f, mean, cov, pars):
         # form sigma-points from unit sigma-points
         x = mean[:, na] + np.linalg.cholesky(cov).dot(self.unit_sp)
         # push sigma-points through non-linearity
-        fx = np.apply_along_axis(f, 0, x, *args)
+        fx = np.apply_along_axis(f, 0, x, pars)
         # output mean
         mean_f = fx.dot(self.w)
         # output covariance
@@ -68,11 +68,11 @@ class Unscented(MomentTransform):
         wc[0] = wm[0] + (1 - alpha ** 2 + beta)
         return wm, wc
 
-    def apply(self, f, mean, cov, *args):  # supply the augmented mean and cov in case noise is non-additive
+    def apply(self, f, mean, cov, pars):  # supply the augmented mean and cov in case noise is non-additive
         # form sigma-points from unit sigma-points
         x = mean[:, na] + np.linalg.cholesky(cov).dot(self.unit_sp)
         # push sigma-points through non-linearity
-        fx = np.apply_along_axis(f, 0, x, *args)
+        fx = np.apply_along_axis(f, 0, x, pars)
         # output mean
         mean_f = fx.dot(self.wm)
         # output covariance
@@ -105,11 +105,11 @@ class GaussHermite(MomentTransform):
         # nD sigma-points by cartesian product
         return cartesian([x] * dim).T  # column/sigma-point
 
-    def apply(self, f, mean, cov, *args):
+    def apply(self, f, mean, cov, pars):
         # form sigma-points from unit sigma-points
         x = mean[:, na] + np.linalg.cholesky(cov).dot(self.unit_sp)
         # push sigma-points through non-linearity
-        fx = np.apply_along_axis(f, 0, x, *args)
+        fx = np.apply_along_axis(f, 0, x, *pars)
         # output mean
         mean_f = fx.dot(self.w)
         # output covariance

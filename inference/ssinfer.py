@@ -86,17 +86,15 @@ class StateSpaceInference(object):
         mean = self.x_mean_filt if self.sys.q_additive else np.vstack((self.x_mean_filt, self.q_mean))
         cov = self.x_cov_filt if self.sys.q_additive else block_diag(self.x_cov_filt, self.q_cov)
         # apply moment transform to compute predicted state mean, covariance
-        self.x_mean_pred, self.x_cov_pred, self.xx_cov = self.transf_dyn.apply(
-                self.sys.dyn_eval, mean, cov, self.sys.par_fcn(time)
-        )
+        self.x_mean_pred, self.x_cov_pred, self.xx_cov = self.transf_dyn.apply(self.sys.dyn_eval, mean, cov,
+                                                                               self.sys.par_fcn(time))
         if self.sys.q_additive: self.x_cov_pred += self.q_cov
         # in non-additive case, augment mean and covariance
         mean = self.x_mean_pred if self.sys.r_additive else np.vstack((self.x_mean_pred, self.r_mean))
         cov = self.x_cov_pred if self.sys.r_additive else block_diag(self.x_cov_pred, self.r_cov)
         # apply moment transform to compute measurement mean, covariance
-        self.z_mean_pred, self.z_cov_pred, self.xz_cov = self.transf_meas.apply(
-                self.sys.meas_eval, mean, cov, self.sys.par_fcn(time)
-        )
+        self.z_mean_pred, self.z_cov_pred, self.xz_cov = self.transf_meas.apply(self.sys.meas_eval, mean, cov,
+                                                                                self.sys.par_fcn(time))
         # in additive case, noise covariances need to be added
         if self.sys.r_additive: self.z_cov_pred += self.r_cov
         # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)

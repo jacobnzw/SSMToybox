@@ -38,22 +38,30 @@ class StateSpaceModel(object):
 
     # TODO: implment Jacobians for ExtendedKalman,
     # TODO: could approximate Jacobians with differences
-    def dyn_eval(self, xq, *args):
+    def dyn_eval(self, xq, pars, dx=False):
         if self.q_additive:
             assert len(xq) == self.xD
-            out = self.dyn_fcn(xq, 0, *args)
+            out = self.dyn_fcn(xq, 0, pars)
+            if dx:
+                out = np.vstack((out, self.dyn_fcn_dx(xq, 0, pars).flatten()))
         else:
             x, q = xq[:self.xD], xq[-self.qD:]
-            out = self.dyn_fcn(x, q, *args)
+            out = self.dyn_fcn(x, q, pars)
+            if dx:
+                out = np.vstack((out, self.dyn_fcn_dx(x, q, pars).flatten()))
         return out
 
-    def meas_eval(self, xr, *args):
+    def meas_eval(self, xr, pars, dx=False):
         if self.r_additive:
             assert len(xr) == self.xD
-            out = self.meas_fcn(xr, 0, *args)
+            out = self.meas_fcn(xr, 0, pars)
+            if dx:
+                out = np.vstack((out, self.meas_fcn_dx(xr, 0, pars).flatten()))
         else:
             x, r = xr[:self.xD], xr[-self.rD:]
-            out = self.meas_fcn(x, r, *args)
+            out = self.meas_fcn(x, r, pars)
+            if dx:
+                out = np.vstack((out, self.meas_fcn_dx(x, r, pars).flatten()))
         return out
 
     def dyn_dx_eval(self, xq, *args):
