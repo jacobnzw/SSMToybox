@@ -11,7 +11,7 @@ class GPQuadKalman(StateSpaceInference):
     GP quadrature filter and smoother.
     """
 
-    def __init__(self, sys):
+    def __init__(self, sys):  # TODO: hypers and unit sigma points as argument
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD

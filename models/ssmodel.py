@@ -16,11 +16,11 @@ class StateSpaceModel(object):
     def __init__(self, **kwargs):
         self.pars = kwargs
 
-    def dyn_fcn(self, x, q, *args):
+    def dyn_fcn(self, x, q, pars):
         # system dynamics
         raise NotImplementedError
 
-    def meas_fcn(self, x, r, *args):
+    def meas_fcn(self, x, r, pars):
         # state measurement model
         raise NotImplementedError
 
@@ -28,11 +28,11 @@ class StateSpaceModel(object):
         # describes how parameter value depends on time (for time varying systems)
         raise NotImplementedError
 
-    def dyn_fcn_dx(self, x, q, *args):
+    def dyn_fcn_dx(self, x, q, pars):
         # Jacobian of state dynamics
         raise NotImplementedError
 
-    def meas_fcn_dx(self, x, r, *args):
+    def meas_fcn_dx(self, x, r, pars):
         # Jacobian of measurement function
         raise NotImplementedError
 
@@ -41,45 +41,33 @@ class StateSpaceModel(object):
     def dyn_eval(self, xq, pars, dx=False):
         if self.q_additive:
             assert len(xq) == self.xD
-            out = self.dyn_fcn(xq, 0, pars)
             if dx:
-                out = np.vstack((out, self.dyn_fcn_dx(xq, 0, pars).flatten()))
+                out = self.dyn_fcn_dx(xq, 0, pars).flatten()
+            else:
+                out = self.dyn_fcn(xq, 0, pars)
         else:
+            assert len(xq) == self.xD + self.qD
             x, q = xq[:self.xD], xq[-self.qD:]
-            out = self.dyn_fcn(x, q, pars)
             if dx:
-                out = np.vstack((out, self.dyn_fcn_dx(x, q, pars).flatten()))
+                out = self.dyn_fcn_dx(x, q, pars).flatten()
+            else:
+                out = self.dyn_fcn(x, q, pars)
         return out
 
     def meas_eval(self, xr, pars, dx=False):
         if self.r_additive:
             assert len(xr) == self.xD
-            out = self.meas_fcn(xr, 0, pars)
             if dx:
-                out = np.vstack((out, self.meas_fcn_dx(xr, 0, pars).flatten()))
+                out = self.meas_fcn_dx(xr, 0, pars).flatten()
+            else:
+                out = self.meas_fcn(xr, 0, pars)
         else:
+            assert len(xr) == self.xD + self.rD
             x, r = xr[:self.xD], xr[-self.rD:]
-            out = self.meas_fcn(x, r, pars)
             if dx:
-                out = np.vstack((out, self.meas_fcn_dx(x, r, pars).flatten()))
-        return out
-
-    def dyn_dx_eval(self, xq, *args):
-        if self.q_additive:
-            assert len(xq) == self.xD
-            out = self.dyn_fcn_dx(xq, 0, *args).flatten()
-        else:
-            x, q = xq[:self.xD], xq[-self.qD:]
-            out = self.dyn_fcn_dx(x, q, *args).flatten()
-        return out
-
-    def meas_dx_eval(self, xr, *args):
-        if self.r_additive:
-            assert len(xr) == self.xD
-            out = self.meas_fcn_dx(xr, 0, *args).flatten()
-        else:
-            x, r = xr[:self.xD], xr[-self.rD:]
-            out = self.meas_fcn_dx(x, r, *args).flatten()
+                out = self.meas_fcn_dx(x, r, pars).flatten()
+            else:
+                out = self.meas_fcn(x, r, pars)
         return out
 
     def simulate(self, steps, mc_sims=1):
@@ -113,4 +101,3 @@ class StateSpaceModel(object):
         for k in keys:
             values.append(self.pars.get(k))
         return values
-

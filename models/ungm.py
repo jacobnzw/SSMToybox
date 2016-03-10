@@ -127,7 +127,7 @@ def ungm_nonadd_demo():
 
 def ungm_filter_demo(filt_class, **kwargs):
     assert issubclass(filt_class, StateSpaceInference)
-    system = UNGM(q_cov=10, r_cov=1)
+    system = UNGM(q_cov=1, r_cov=1)
     # create filter object, pass in additional kwargs
     filt = filt_class(system, **kwargs)
     # simulate dynamic system for given number of steps and mc simulations

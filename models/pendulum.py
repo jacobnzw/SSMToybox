@@ -27,21 +27,21 @@ class Pendulum(StateSpaceModel):
         }
         super(Pendulum, self).__init__(**req_kwargs)
 
-    def dyn_fcn(self, x, q, *args):
+    def dyn_fcn(self, x, q, pars):
         return np.array([x[0] + x[1] * self.dt, x[1] - self.g * self.dt * np.sin(x[0])]) + q
 
-    def meas_fcn(self, x, r, *args):
+    def meas_fcn(self, x, r, pars):
         return np.array([np.sin(x[0])]) + r
 
     def par_fcn(self, time):
         pass  # pendulum model does not have time-varying parameters
 
-    def dyn_fcn_dx(self, x, q, *args):
-        return np.array([[1.0, x[0] + self.dt],
+    def dyn_fcn_dx(self, x, q, pars):
+        return np.array([[1.0, self.dt],
                          [-self.g * self.dt * np.cos(x[0]), 1.0]])
 
-    def meas_fcn_dx(self, x, r, *args):
-        return np.array([np.cos(x[0])])
+    def meas_fcn_dx(self, x, r, pars):
+        return np.array([np.cos(x[0]), 0.0])
 
 
 def pendulum_demo():
