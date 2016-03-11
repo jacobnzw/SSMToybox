@@ -17,8 +17,8 @@ class TPQuadKalman(StateSpaceInference):
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
         unit_sp_f = Unscented.unit_sigma_points(nq, np.sqrt(nq + 0))
         unit_sp_h = Unscented.unit_sigma_points(nr, np.sqrt(nr + 0))
-        hypers_f = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones((nq, 1)), 'noise_var': 1e-8}
-        hypers_h = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones((nr, 1)), 'noise_var': 1e-8}
+        hypers_f = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones((nq,)), 'noise_var': 1e-8}
+        hypers_h = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones((nr,)), 'noise_var': 1e-8}
         self.tf = TPQuad(unit_sp_f, hypers_f, nu=2.5)
         self.th = TPQuad(unit_sp_h, hypers_h, nu=2.5)
         super(TPQuadKalman, self).__init__(self.tf, self.th, sys)

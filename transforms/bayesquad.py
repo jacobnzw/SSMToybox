@@ -26,7 +26,7 @@ class GPQuad(MomentTransform):
 
     def apply(self, f, mean, cov, pars):
         # form sigma-points from unit sigma-points
-        x = mean[:, na] + cholesky(cov).dot(self.unit_sp)
+        x = mean + cholesky(cov).dot(self.unit_sp)
         # push sigma-points through non-linearity
         fx = np.apply_along_axis(f, 0, x, pars)
         # output mean
@@ -35,7 +35,7 @@ class GPQuad(MomentTransform):
         cov_f = fx.dot(self.Wc).dot(fx.T) - np.outer(mean_f, mean_f.T)
         cov_f += self.model_var
         # input-output covariance
-        cov_fx = self.D.dot(x - mean[:, na]).dot(self.Wcc).dot(fx.T)
+        cov_fx = self.D.dot(x - mean).dot(self.Wcc).dot(fx.T)
         return mean_f, cov_f, cov_fx.T
 
     def weights_rbf(self):
@@ -217,7 +217,7 @@ class TPQuad(MomentTransform):
         # input-output covariance
         dx = x - mean
         cov_fx = self.D.dot(dx).dot(self.Wcc).dot(fx.T)
-        return mean_f, cov_f, cov_fx
+        return mean_f, cov_f, cov_fx.T
 
     def weights_rbf(self):
         # TODO: hypers as input argument (in case they're estimated online)

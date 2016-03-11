@@ -129,11 +129,11 @@ def ungm_nonadd_demo():
 
 def ungm_filter_demo(filt_class, **kwargs):
     assert issubclass(filt_class, StateSpaceInference)
-    system = UNGMnonadd(q_cov=1, r_cov=1)
+    system = UNGM(q_cov=10, r_cov=1)
     # create filter object, pass in additional kwargs
     filt = filt_class(system, **kwargs)
     # simulate dynamic system for given number of steps and mc simulations
-    time_steps, mc = 500, 100
+    time_steps, mc = 250, 50
     x, z = system.simulate(time_steps, mc_sims=mc)
     print "Running {} filter/smoother ({} time steps, {} MC simulations) ...".format(filt_class.__name__,
                                                                                      time_steps, mc)

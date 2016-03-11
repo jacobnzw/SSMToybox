@@ -1,21 +1,20 @@
 import numpy as np
-from numpy import newaxis as na
 from numpy.polynomial.hermite_e import hermegauss, hermeval
 from scipy.special import factorial
 from sklearn.utils.extmath import cartesian
 
-from transforms.transform import MomentTransform
+from transforms.transform import SigmaPointTransform
 
 
 # TODO: add higher-order fully symmetric rules from [McNamee, Stenger]
 # TODO: MCquad for Gaussian Monte Carlo filter [Djuric]
 
 
-class SphericalRadial(MomentTransform):
+class SphericalRadial(SigmaPointTransform):
     # Could be implemented with Unscented with kappa=0, alpha=1, beta=0.
     def __init__(self, dim):
-        self.w = self.weights(dim)
-        self.W = np.diag(self.w)
+        self.wm = self.weights(dim)
+        self.Wc = np.diag(self.wm)
         self.unit_sp = self.unit_sigma_points(dim, np.sqrt(dim))
 
     @staticmethod
@@ -26,22 +25,8 @@ class SphericalRadial(MomentTransform):
     def unit_sigma_points(dim, c):
         return np.hstack((c * np.eye(dim), -c * np.eye(dim)))
 
-    def apply(self, f, mean, cov, pars):
-        # form sigma-points from unit sigma-points
-        x = mean[:, na] + np.linalg.cholesky(cov).dot(self.unit_sp)
-        # push sigma-points through non-linearity
-        fx = np.apply_along_axis(f, 0, x, pars)
-        # output mean
-        mean_f = fx.dot(self.w)
-        # output covariance
-        dfx = fx - mean_f[:, na]
-        cov_f = dfx.dot(self.W).dot(dfx.T)
-        # input-output covariance
-        cov_fx = dfx.dot(self.W).dot((x - mean[:, na]).T)
-        return mean_f, cov_f, cov_fx
 
-
-class Unscented(MomentTransform):
+class Unscented(SigmaPointTransform):
     """
     General purpose class implementing Uscented transform.
     """
@@ -68,26 +53,12 @@ class Unscented(MomentTransform):
         wc[0] = wm[0] + (1 - alpha ** 2 + beta)
         return wm, wc
 
-    def apply(self, f, mean, cov, pars):  # supply the augmented mean and cov in case noise is non-additive
-        # form sigma-points from unit sigma-points
-        x = mean[:, na] + np.linalg.cholesky(cov).dot(self.unit_sp)
-        # push sigma-points through non-linearity
-        fx = np.apply_along_axis(f, 0, x, pars)
-        # output mean
-        mean_f = fx.dot(self.wm)
-        # output covariance
-        dfx = fx - mean_f[:, na]
-        cov_f = dfx.dot(self.Wc).dot(dfx.T)
-        # input-output covariance
-        cov_fx = dfx.dot(self.Wc).dot((x - mean[:, na]).T)
-        return mean_f, cov_f, cov_fx
 
-
-class GaussHermite(MomentTransform):
+class GaussHermite(SigmaPointTransform):
     def __init__(self, dim, degree=3):
         self.degree = degree
-        self.w = self.weights(dim, degree)
-        self.W = np.diag(self.w)
+        self.wm = self.weights(dim, degree)
+        self.Wc = np.diag(self.wm)
         self.unit_sp = self.unit_sigma_points(dim, degree)
 
     @staticmethod
@@ -104,17 +75,3 @@ class GaussHermite(MomentTransform):
         x, w = hermegauss(degree)
         # nD sigma-points by cartesian product
         return cartesian([x] * dim).T  # column/sigma-point
-
-    def apply(self, f, mean, cov, pars):
-        # form sigma-points from unit sigma-points
-        x = mean[:, na] + np.linalg.cholesky(cov).dot(self.unit_sp)
-        # push sigma-points through non-linearity
-        fx = np.apply_along_axis(f, 0, x, *pars)
-        # output mean
-        mean_f = fx.dot(self.w)
-        # output covariance
-        dfx = fx - mean_f[:, na]
-        cov_f = dfx.dot(self.W).dot(dfx.T)
-        # input-output covariance
-        cov_fx = dfx.dot(self.W).dot((x - mean[:, na]).T)
-        return mean_f, cov_f, cov_fx
