@@ -42,14 +42,14 @@ class StateSpaceModel(object):
         if self.q_additive:
             assert len(xq) == self.xD
             if dx:
-                out = self.dyn_fcn_dx(xq, 0, pars).flatten()
+                out = np.atleast_2d(self.dyn_fcn_dx(xq, 0, pars).flatten())
             else:
                 out = self.dyn_fcn(xq, 0, pars)
         else:
             assert len(xq) == self.xD + self.qD
             x, q = xq[:self.xD], xq[-self.qD:]
             if dx:
-                out = self.dyn_fcn_dx(x, q, pars).flatten()
+                out = np.atleast_2d(self.dyn_fcn_dx(x, q, pars).flatten())
             else:
                 out = self.dyn_fcn(x, q, pars)
         return out
@@ -58,25 +58,27 @@ class StateSpaceModel(object):
         if self.r_additive:
             assert len(xr) == self.xD
             if dx:
-                out = self.meas_fcn_dx(xr, 0, pars).flatten()
+                out = np.atleast_2d(self.meas_fcn_dx(xr, 0, pars).flatten())
             else:
                 out = self.meas_fcn(xr, 0, pars)
         else:
             assert len(xr) == self.xD + self.rD
             x, r = xr[:self.xD], xr[-self.rD:]
             if dx:
-                out = self.meas_fcn_dx(x, r, pars).flatten()
+                out = np.atleast_2d(self.meas_fcn_dx(x, r, pars).flatten())
             else:
                 out = self.meas_fcn(x, r, pars)
         return out
 
     def check_jacobians(self, eps=1e-16):
+        # FIXME: generate x depending on the noise additivity
         x = np.random.rand(self.xD)
         h = np.sqrt(eps)
         hdiag = np.diag(h * np.ones(self.xD))
         assert hdiag.shape == (self.xD, self.xD)
         xph, xmh = x[:, na] + hdiag, x[:, na] - hdiag
         par = np.atleast_1d(1.0)
+        par0 = np.atleast_1d(0.0)
         fph = np.zeros((self.xD, self.xD))
         hph = np.zeros((self.zD, self.xD))
         fmh, hmh = fph.copy(), hph.copy()
@@ -85,10 +87,10 @@ class StateSpaceModel(object):
             # fmh[:, i] = self.dyn_fcn(xmh[:, i], xmh[:, i], par)
             # hph[:, i] = self.meas_fcn(xph[:, i], xph[:, i], par)
             # hmh[:, i] = self.meas_fcn(xmh[:, i], xmh[:, i], par)
-            fph[:, i] = self.dyn_fcn(xph[:, i], 0.0, par)
-            fmh[:, i] = self.dyn_fcn(xmh[:, i], 0.0, par)
-            hph[:, i] = self.meas_fcn(xph[:, i], 0.0, par)
-            hmh[:, i] = self.meas_fcn(xmh[:, i], 0.0, par)
+            fph[:, i] = self.dyn_fcn(xph[:, i], par0, par)
+            fmh[:, i] = self.dyn_fcn(xmh[:, i], par0, par)
+            hph[:, i] = self.meas_fcn(xph[:, i], par0, par)
+            hmh[:, i] = self.meas_fcn(xmh[:, i], par0, par)
         jac_fx = (2 * h) ** -1 * (fph - fmh)
         jac_hx = (2 * h) ** -1 * (hph - hmh)
         print "Errors in Jacobians\n{}\n{}".format(np.abs(jac_fx - self.dyn_fcn_dx(x, x, par)),

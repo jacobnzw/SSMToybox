@@ -53,7 +53,7 @@ class GPQuad(MomentTransform):
         iLam2 = np.atleast_2d(np.diag(el ** -2))
 
         inp = self.unit_sp.T.dot(iLam1)  # sigmas / el[:, na] (x - m)^T*sqrt(Lambda^-1) # (numSP, xdim)
-        K = np.exp(2 * np.log(alpha) - 0.5 * self._maha(inp, inp))
+        K = np.exp(2 * np.log(alpha) - 0.5 * maha(inp, inp))
         iK = cho_solve(cho_factor(K + jitter * eye_n), eye_n)
         B = iLam2 + eye_d  # (D, D)
         c = alpha ** 2 / np.sqrt(det(B))
@@ -63,7 +63,7 @@ class GPQuad(MomentTransform):
         inp = inp.dot(iLam1)
         R = 2 * iLam2 + eye_d
         t = 1 / np.sqrt(det(R))
-        L = np.exp((zet[:, na] + zet[:, na].T) + self._maha(inp, -inp, V=0.5 * inv(R)))
+        L = np.exp((zet[:, na] + zet[:, na].T) + maha(inp, -inp, V=0.5 * inv(R)))
         q = c * l  # evaluations of the kernel mean map (from the viewpoint of RHKS methods)
         # mean weights
         wm_f = q.dot(iK)
@@ -165,23 +165,6 @@ class GPQuad(MomentTransform):
         # finds hypers by minimizing the sum of log-marginal likelihood and the integral variance objectives
         pass
 
-    @staticmethod
-    def _maha(x, y, V=None):
-        """
-        Pair-wise Mahalanobis distance of rows of x and y with given weight matrix V.
-        :param x: (n, d) matrix of row vectors
-        :param y: (n, d) matrix of row vectors
-        :param V: weight matrix (d, d), if V=None, V=eye(d) is used
-        :return:
-        """
-        if V is None:
-            V = np.eye(x.shape[1])
-        x2V = np.sum(x.dot(V) * x, 1)
-        y2V = np.sum(y.dot(V) * y, 1)
-        MD = (x2V[:, na] + y2V[:, na].T) - 2 * x.dot(V).dot(y.T)
-
-        return MD
-
 
 class GPQuadAlt(GPQuad):
     def apply(self, f, mean, cov, pars):
@@ -235,7 +218,7 @@ class TPQuad(MomentTransform):
         iLam2 = np.atleast_2d(np.diag(el ** -2))
 
         inp = self.unit_sp.T.dot(iLam1)  # sigmas / el[:, na] (x - m)^T*sqrt(Lambda^-1) # (numSP, xdim)
-        K = np.exp(2 * np.log(alpha) - 0.5 * self._maha(inp, inp))
+        K = np.exp(2 * np.log(alpha) - 0.5 * maha(inp, inp))
         iK = cho_solve(cho_factor(K + jitter * eye_n), eye_n)
         B = iLam2 + eye_d  # (D, D)
         c = alpha ** 2 / np.sqrt(det(B))
@@ -245,7 +228,7 @@ class TPQuad(MomentTransform):
         inp = inp.dot(iLam1)
         R = 2 * iLam2 + eye_d
         t = 1 / np.sqrt(det(R))
-        L = np.exp((zet[:, na] + zet[:, na].T) + self._maha(inp, -inp, V=0.5 * inv(R)))
+        L = np.exp((zet[:, na] + zet[:, na].T) + maha(inp, -inp, V=0.5 * inv(R)))
         q = c * l  # evaluations of the kernel mean map (from the viewpoint of RHKS methods)
         # mean weights
         wm_f = q.dot(iK)
@@ -262,19 +245,21 @@ class TPQuad(MomentTransform):
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
         return wm_f, wc_f, wc_fx
 
-    @staticmethod
-    def _maha(x, y, V=None):
-        """
-        Pair-wise Mahalanobis distance of rows of x and y with given weight matrix V.
-        :param x: (n, d) matrix of row vectors
-        :param y: (n, d) matrix of row vectors
-        :param V: weight matrix (d, d), if V=None, V=eye(d) is used
-        :return:
-        """
-        if V is None:
-            V = np.eye(x.shape[1])
-        x2V = np.sum(x.dot(V) * x, 1)
-        y2V = np.sum(y.dot(V) * y, 1)
-        MD = (x2V[:, na] + y2V[:, na].T) - 2 * x.dot(V).dot(y.T)
 
-        return MD
+def maha(x, y, V=None):
+    """
+    Pair-wise Mahalanobis distance of rows of x and y with given weight matrix V.
+    :param x: (n, d) matrix of row vectors
+    :param y: (n, d) matrix of row vectors
+    :param V: weight matrix (d, d), if V=None, V=eye(d) is used
+    :return:
+    """
+    if V is None:
+        V = np.eye(x.shape[1])
+    x2V = np.sum(x.dot(V) * x, 1)
+    y2V = np.sum(y.dot(V) * y, 1)
+    return (x2V[:, na] + y2V[:, na].T) - 2 * x.dot(V).dot(y.T)
+
+# TODO: add GPQ+D(derivative observations),
+# TODO: add GPQ+TD (total derivative observations)
+# TODO: add GPQ+DIV (divergence observations)

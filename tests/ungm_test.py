@@ -40,7 +40,7 @@ class TestUNGM(unittest.TestCase):
         ssm = UNGMnonadd()
         x, z = ssm.simulate(100, mc_sims=1)
         inf_method = (
-            # ExtendedKalman(ssm),
+            ExtendedKalman(ssm),
             UnscentedKalman(ssm, kap=0.0),
             CubatureKalman(ssm),
             GaussHermiteKalman(ssm),
