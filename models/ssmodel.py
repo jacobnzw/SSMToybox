@@ -18,27 +18,90 @@ class StateSpaceModel(object):
         self.pars = kwargs
 
     def dyn_fcn(self, x, q, pars):
-        # system dynamics
+        """
+        Function of the system dynamics.
+
+        :param x: 1-D array_like, of shape (self.xD,)
+            system state
+        :param q: 1-D array_like, of shape (self.qD,)
+            system noise
+        :param pars: 1-D array_like
+            system parameter
+        :return: ndarray, of shape (self.xD,)
+            system state in the next time step
+        """
         raise NotImplementedError
 
     def meas_fcn(self, x, r, pars):
-        # state measurement model
+        """
+        Function of the measurement model.
+
+        :param x: 1-D array_like, of shape (self.xD,)
+            system state
+        :param r: 1-D array_like, of shape (self.rD,)
+            measurement noise
+        :param pars: 1-D array_like
+            system parameter
+        :return: 1-D ndarray, of shape (self.zD,)
+            measurement of the state
+        """
         raise NotImplementedError
 
     def par_fcn(self, time):
-        # describes how parameter value depends on time (for time varying systems)
-        # ensure returned value is at least 1D
+        """
+        Parameter function of the system dynamics and measurement model.
+
+        :param time: time step
+        :return: 1-D ndarray, of shape (self.pD,)
+            parameter value at a given time, first dimensions are for system parameters,
+            later for the measurement model parameters
+        """
         raise NotImplementedError
 
     def dyn_fcn_dx(self, x, q, pars):
-        # Jacobian of state dynamics
+        """
+        Jacobian of the system dynamics.
+
+        :param x: 1-D array_like, of shape (self.xD,)
+            system state
+        :param q: 1-D array_like, of shape (self.qD,)
+            system noise
+        :param pars: 1-D array_like, of shape (self.pD,)
+            system parameter
+        :return: 2-D ndarray, of shape (self.xD, in_dim), where in = self.xD (add) or self.xD+self.qD (non-add)
+            Jacobian matrix of the system dynamics, where the second dimension dependes on the noise additivity.
+        """
         raise NotImplementedError
 
     def meas_fcn_dx(self, x, r, pars):
-        # Jacobian of measurement function
+        """
+        Jacobian of the measurement function.
+
+        :param x: 1-D array_like, of shape (self.xD,)
+            system state
+        :param r: 1-D array_like, of shape (self.qD,)
+            measurement noise
+        :param pars: 1-D array_like, of shape (self.pD,)
+            measurement model parameter
+        :return: 2-D ndarray, of shape (self.xD, in_dim), where in = self.xD (add) or self.xD+self.rD (non-add)
+            Jacobian matrix of the measurement model, where the second dimension dependes on the noise additivity.
+        """
         raise NotImplementedError
 
     def dyn_eval(self, xq, pars, dx=False):
+        """
+        Evaluates system dynamics function according to noise additivity.
+
+        :param xq: 1-D array_like
+            augmented system state
+        :param pars:
+            system dynamics parameters
+        :param dx: boolean
+
+        :return:
+            if dx == True returns evaluation of the system dynamics Jacobian
+            if dx == False returns evaluation of the system dynamics
+        """
         if self.q_additive:
             assert len(xq) == self.xD
             if dx:
@@ -55,6 +118,19 @@ class StateSpaceModel(object):
         return out
 
     def meas_eval(self, xr, pars, dx=False):
+        """
+        Evaluates measurement model function according to noise additivity.
+
+        :param xr: 1-D array_like
+            augmented system state
+        :param pars:
+            measurement model parameters
+        :param dx: boolean
+
+        :return:
+            if dx == True returns evaluation of the measurement model Jacobian
+            if dx == False returns evaluation of the measurement model
+        """
         if self.r_additive:
             assert len(xr) == self.xD
             if dx:
@@ -70,11 +146,17 @@ class StateSpaceModel(object):
                 out = self.meas_fcn(x, r, pars)
         return out
 
-    def check_jacobians(self, eps=1e-16):
+    def check_jacobians(self, h=1e-8):
+        """
+        Checks that both Jacobians are correctly implemented using numerical approximations.
+        Prints the errors, user decides whether they're acceptable.
+
+        :param h: step size in derivative approximations
+        :return: None
+        """
         nq = self.xD if self.q_additive else self.xD + self.qD
         nr = self.xD if self.r_additive else self.xD + self.rD
         xq, xr = np.random.rand(nq), np.random.rand(nr)
-        h = np.sqrt(eps)
         hq_diag, hr_diag = np.diag(h * np.ones(nq)), np.diag(h * np.ones(nr))
         assert hq_diag.shape == (nq, nq) and hr_diag.shape == (nr, nr)
         xqph, xqmh = xq[:, na] + hq_diag, xq[:, na] - hq_diag
@@ -97,9 +179,13 @@ class StateSpaceModel(object):
     def simulate(self, steps, mc_sims=1):
         """
         General implementation of the SSM simulation starting from initial conditions for a given number of time steps
-        :param steps: number of time steps in state trajectory
-        :param mc_sims: number of trajectories to simulate (the initial state is drawn randomly)
-        :return: arrays with simulated state trajectories and measurements
+
+        :param steps:
+            number of time steps in state trajectory
+        :param mc_sims:
+            number of trajectories to simulate (the initial state is drawn randomly)
+        :return:
+            arrays with simulated state trajectories and measurements
         """
         x0_mean, x0_cov, q_mean, q_cov, r_mean, r_cov = self.get_pars(
                 'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov'
