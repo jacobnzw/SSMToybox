@@ -41,12 +41,18 @@ class TestUNGM(unittest.TestCase):
         x, z = ssm.simulate(100, mc_sims=1)
         inf_method = (
             ExtendedKalman(ssm),
-            UnscentedKalman(ssm, kap=0.0),
+            UnscentedKalman(ssm),
             CubatureKalman(ssm),
             GaussHermiteKalman(ssm),
             GPQuadKalman(ssm),
             TPQuadKalman(ssm),
         )
         for inf in inf_method:
-            inf.forward_pass(z[..., 0])
-            inf.backward_pass()
+            print r"Testing {} ...".format(inf.__class__.__name__),
+            try:
+                inf.forward_pass(z[..., 0])
+                inf.backward_pass()
+            except BaseException as e:
+                print "Failed {}".format(e)
+                continue
+            print "OK"

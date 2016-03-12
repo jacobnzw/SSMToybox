@@ -86,7 +86,7 @@ class UNGMnonadd(StateSpaceModel):
         self.set_pars('r_cov', np.atleast_2d(r_cov))
 
     def dyn_fcn(self, x, q, pars):
-        return np.asarray([0.5 * x[0] * q[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * np.cos(1.2 * pars[0])])
+        return np.asarray([0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * q[0] * np.cos(1.2 * pars[0])])
 
     def meas_fcn(self, x, r, pars):
         return np.asarray([0.05 * r[0] * x[0] ** 2])
@@ -94,11 +94,11 @@ class UNGMnonadd(StateSpaceModel):
     def par_fcn(self, time):
         return np.atleast_1d(time)
 
-    def dyn_fcn_dx(self, x, q, pars):  # TODO: workout the Jacobians properly
-        return np.asarray([0.5 + 25 * (1 - x[0] ** 2) / (1 + x[0] ** 2) ** 2, 16 * q[0] * np.cos(1.2 * pars[0])])
+    def dyn_fcn_dx(self, x, q, pars):
+        return np.asarray([0.5 + 25 * (1 - x[0] ** 2) / (1 + x[0] ** 2) ** 2, 8 * np.cos(1.2 * pars[0])])
 
     def meas_fcn_dx(self, x, r, pars):
-        return np.asarray([0.1 * x[0], r[0]])
+        return np.asarray([0.1 * r[0] * x[0], 0.05 * x[0] ** 2])
 
 
 def ungm_demo():
