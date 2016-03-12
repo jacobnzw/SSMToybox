@@ -25,6 +25,7 @@ class GPQuad(MomentTransform):
         self.kern = RBF(self.d, variance=hypers['sig_var'], lengthscale=hypers['lengthscale'], ARD=True)
 
     def apply(self, f, mean, cov, pars):
+        mean = mean[:, na]
         # form sigma-points from unit sigma-points
         x = mean + cholesky(cov).dot(self.unit_sp)
         # push sigma-points through non-linearity
@@ -187,6 +188,7 @@ class TPQuad(MomentTransform):
         self.kern = RBF(self.d, variance=hypers['sig_var'], lengthscale=hypers['lengthscale'], ARD=True)
 
     def apply(self, f, mean, cov, pars):
+        mean = mean[:, na]
         # form sigma-points from unit sigma-points
         x = mean + cholesky(cov).dot(self.unit_sp)
         # push sigma-points through non-linearity

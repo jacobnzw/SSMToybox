@@ -18,10 +18,10 @@ class CubatureKalman(StateSpaceInference):
 
 
 def main():
-    # from models.ungm import ungm_filter_demo
-    # ungm_filter_demo(CubatureKalman)
-    from models.pendulum import pendulum_filter_demo
-    pendulum_filter_demo(CubatureKalman)
+    from models.ungm import ungm_filter_demo
+    ungm_filter_demo(CubatureKalman)
+    # from models.pendulum import pendulum_filter_demo
+    # pendulum_filter_demo(CubatureKalman)
 
 
 if __name__ == '__main__':

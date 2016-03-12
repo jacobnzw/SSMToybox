@@ -5,8 +5,11 @@ from models.ungm import UNGM, UNGMnonadd
 
 
 class TestUNGM(unittest.TestCase):
-
+    # TODO: Tests for classes deriving from StateSpaceModel should ensure function implementation meet requirements.
     def test_dyn_fcn(self):
+        pass
+
+    def test_meas_fcn(self):
         pass
 
     def test_simulate(self):
@@ -37,7 +40,7 @@ class TestUNGM(unittest.TestCase):
         """
         Test bunch of filters on Univariate Non-linear Growth Model (with NON-additive noise)
         """
-        ssm = UNGMnonadd()
+        ssm = UNGMnonadd(x0_mean=0.1)
         x, z = ssm.simulate(100, mc_sims=1)
         inf_method = (
             ExtendedKalman(ssm),
