@@ -1,6 +1,7 @@
 import unittest
 
 from inference import *
+from models.pendulum import Pendulum
 from models.ungm import UNGM, UNGMnonadd
 
 
@@ -59,3 +60,23 @@ class TestUNGM(unittest.TestCase):
                 print "Failed {}".format(e)
                 continue
             print "OK"
+
+
+class TestPendulum(unittest.TestCase):
+    def test_pendulum_inference(self):
+        """
+        Test bunch of filters on a pendulum example
+        """
+        ssm = Pendulum()
+        x, z = ssm.simulate(100, mc_sims=1)
+        inf_method = (
+            ExtendedKalman(ssm),
+            UnscentedKalman(ssm),
+            CubatureKalman(ssm),
+            GaussHermiteKalman(ssm),
+            GPQuadKalman(ssm),
+            TPQuadKalman(ssm),
+        )
+        for inf in inf_method:
+            inf.forward_pass(z[..., 0])
+            inf.backward_pass()
