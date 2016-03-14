@@ -25,3 +25,5 @@ class SigmaPointTransform(MomentTransform):
         # input-output covariance
         cov_fx = dfx.dot(self.Wc).dot((x - mean).T)
         return mean_f, cov_f, cov_fx
+
+        # TODO: make a parent class for BQ-based transform
