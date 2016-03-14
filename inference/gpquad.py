@@ -11,7 +11,7 @@ class GPQuadKalman(StateSpaceInference):
     GP quadrature filter and smoother.
     """
 
-    def __init__(self, sys, usp_dyn, usp_meas, hyp_dyn, hyp_meas):
+    def __init__(self, sys, usp_dyn=None, usp_meas=None, hyp_dyn=None, hyp_meas=None):
         assert isinstance(sys, StateSpaceModel)
         if usp_dyn is not None and usp_meas is not None and hyp_dyn is not None and hyp_meas is not None:
             self.usp_dyn, self.usp_meas, self.hyp_dyn, self.hyp_meas = usp_dyn, usp_meas, hyp_dyn, hyp_meas
