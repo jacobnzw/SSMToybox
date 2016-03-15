@@ -291,14 +291,14 @@ class GPQuadDer(MomentTransform):
         # wanna have as many columns as output dims, one column includes function and derivative evaluations
         # for every sigma-point, thus it is (n + n*d,); n = # sigma-points, d = sigma-point dimensionality
         # fx should be (n + n*d, e); e = output dimensionality
-        fx = np.vstack((fx.flatten(), dfx))
+        fx = np.hstack((fx, dfx))
         # output mean
         mean_f = fx.dot(self.wm)
         # output covariance
         cov_f = fx.dot(self.Wc).dot(fx.T) - np.outer(mean_f, mean_f.T)
         cov_f += self.model_var
         # input-output covariance
-        cov_fx = self.Wcc.dot(fx) - np.outer(mean_f, mean)
+        cov_fx = self.Wcc.dot(fx.T) - np.outer(mean_f, mean.T)
         return mean_f, cov_f, cov_fx.T
 
     def weights_rbf(self):
@@ -359,6 +359,8 @@ class GPQuadDer(MomentTransform):
         # weights for covariance
         iKQ = iK.dot(Q_tilde)
         Wc = iKQ.dot(iK)
+        # model variance
+        self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
 
         return wm, Wc, Wcc
 
