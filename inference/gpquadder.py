@@ -2,13 +2,13 @@ import numpy as np
 
 from inference.ssinfer import StateSpaceInference
 from models.ssmodel import StateSpaceModel
-from transforms import Unscented
-from transforms.bayesquad import TPQuad
+from transforms.bayesquad import GPQuadDer
+from transforms.quad import Unscented
 
 
-class TPQuadKalman(StateSpaceInference):
+class GPQuadDerKalman(StateSpaceInference):
     """
-    T-Process-quadrature filter and smoother.
+    GP quadrature filter and smoother.
     """
 
     def __init__(self, sys, usp_dyn=None, usp_meas=None, hyp_dyn=None, hyp_meas=None):
@@ -17,9 +17,9 @@ class TPQuadKalman(StateSpaceInference):
             self.usp_dyn, self.usp_meas, self.hyp_dyn, self.hyp_meas = usp_dyn, usp_meas, hyp_dyn, hyp_meas
         else:
             self._set_default_usp_hyp(sys)
-        self.tf = TPQuad(self.usp_dyn, self.hyp_dyn, nu=2.5)
-        self.th = TPQuad(self.usp_meas, self.hyp_meas, nu=2.5)
-        super(TPQuadKalman, self).__init__(self.tf, self.th, sys)
+        self.tf = GPQuadDer(self.usp_dyn, self.hyp_dyn)
+        self.th = GPQuadDer(self.usp_meas, self.hyp_meas)
+        super(GPQuadDerKalman, self).__init__(self.tf, self.th, sys)
 
     def _set_default_usp_hyp(self, sys):
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
@@ -32,7 +32,9 @@ class TPQuadKalman(StateSpaceInference):
 
 def main():
     from models.ungm import ungm_filter_demo
-    ungm_filter_demo(TPQuadKalman)
+    ungm_filter_demo(GPQuadDerKalman)
+    # from models.pendulum import pendulum_filter_demo
+    # pendulum_filter_demo(GPQuadKalman)
 
 
 if __name__ == '__main__':
