@@ -26,7 +26,7 @@ class GPQuadDerKalman(StateSpaceInference):
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
         self.usp_dyn = Unscented.unit_sigma_points(nq, np.sqrt(nq + 0))
         self.usp_meas = Unscented.unit_sigma_points(nr, np.sqrt(nr + 0))
-        self.hyp_dyn = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones((nq,)), 'noise_var': 1e-8}
+        self.hyp_dyn = {'sig_var': 1.0, 'lengthscale': 30.0 * np.ones((nq,)), 'noise_var': 1e-8}
         self.hyp_meas = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones((nr,)), 'noise_var': 1e-8}
 
 
