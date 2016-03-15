@@ -307,13 +307,13 @@ class GPQuadDer(MomentTransform):
         alpha, el, jitter = self.hypers['sig_var'], self.hypers['lengthscale'], self.hypers['noise_var']
         assert len(el) == d
         # pre-allocation for convenience
-        eye_d, eye_n, eye_y = eye(d), eye(n), eye(n + d * n)
+        eye_d, eye_n, eye_y = np.eye(d), np.eye(n), np.eye(n + d * n)
 
-        K = kern_eq_der(self.unit_sp, hypers)  # evaluate kernel matrix BOTTLENECK
+        K = self.kern_eq_der(self.unit_sp, self.hypers)  # evaluate kernel matrix BOTTLENECK
         iK = cho_solve(cho_factor(K + jitter * eye_y), eye_y)  # invert kernel matrix BOTTLENECK
-        Lam = diag(el ** 2)
-        iLam = diag(el ** -1)  # sqrt(Lambda^-1)
-        iiLam = diag(el ** -2)  # Lambda^-1
+        Lam = np.diag(el ** 2)
+        iLam = np.diag(el ** -1)  # sqrt(Lambda^-1)
+        iiLam = np.diag(el ** -2)  # Lambda^-1
         inn = iLam.dot(self.unit_sp)  # (x-m)^T*iLam  # (N, D)
         B = iiLam + eye_d  # P*Lambda^-1+I, (P+Lam)^-1 = Lam^-1*(P*Lam^-1+I)^-1 # (D, D)
         cho_B = cho_factor(B)
@@ -327,7 +327,7 @@ class GPQuadDer(MomentTransform):
         q_tilde = np.hstack((q.T, r.T.ravel()))  # (1, N+N*D)
 
         # weights for mean
-        wm = dot(q_tilde, iK)
+        wm = q_tilde.dot(iK)
 
         #  quantities for cross-covariance "weights"
         iLamSig = iiLam.dot(Sig_q)  # (D,D)
@@ -364,6 +364,7 @@ class GPQuadDer(MomentTransform):
 
     @staticmethod
     def kern_eq_der(X, hypers):
+        # TODO: rewrite in Cython, get rid of double loops
         D, N = X.shape
         # extract hypers
         alpha, el, jitter = hypers['sig_var'], hypers['lengthscale'], hypers['noise_var']
