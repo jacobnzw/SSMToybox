@@ -31,10 +31,10 @@ class GPQuadDerKalman(StateSpaceInference):
 
 
 def main():
-    from models.ungm import ungm_filter_demo
-    ungm_filter_demo(GPQuadDerKalman)
-    # from models.pendulum import pendulum_filter_demo
-    # pendulum_filter_demo(GPQuadKalman)
+    # from models.ungm import ungm_filter_demo
+    # ungm_filter_demo(GPQuadDerKalman)
+    from models.pendulum import pendulum_filter_demo
+    pendulum_filter_demo(GPQuadDerKalman)
 
 
 if __name__ == '__main__':

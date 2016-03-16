@@ -28,16 +28,16 @@ class SigmaPointTransform(MomentTransform):
 
 
 class BayesianQuadratureTransform(MomentTransform):
-    # it's possible I'll need to make some more specialed parent classes
-    def __init__(self, dim, unit_sp, hypers=None):
-        # set
-        self.unit_sp = unit_sp  # (d, n)
+    # it's possible I'll need to make some more specialized parent classes
+    def __init__(self, dim, unit_sp=None, hypers=None):
+        # use default sigma-points if not provided
+        self.unit_sp = unit_sp if unit_sp else self.default_sigma_points(dim)  # (d, n)
         # get number of sigmas (n) and dimension of sigmas (d)
         self.d, self.n = self.unit_sp.shape
         assert self.d == dim  # check unit sigmas have proper dimension
-        # set kernel hyper-parameters (manually or some principled method)
-        self.hypers = self._min_var_hypers() if hypers is None else hypers
-        # BQ weights given the unit sigma-points and the kernel hyper-parameters
+        # use default kernel hyper-parameters if not provided
+        self.hypers = hypers if hypers else self.default_hypers(dim)
+        # BQ weights given the unit sigma-points, kernel hyper-parameters and the RBF kernel
         self.wm, self.Wc, self.Wcc = self.weights_rbf()
 
     def default_sigma_points(self, dim):
@@ -49,13 +49,24 @@ class BayesianQuadratureTransform(MomentTransform):
         return {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(dim, ), 'noise_var': 1e-8}
 
     def apply(self, f, mean, cov, pars):
-        # unsure which implementation to choose
-        # GPQ and TPQ might be put under one roof, GPQ+D however has different equations
-        # I could defined abstract private functions for computing mean, covariance and cross-covariance and call them
-        # from this method
+        # method defined in terms of abstract private functions for computing mean, covariance and cross-covariance
+        # and call them from this method
         x = mean[:, na] + cholesky(cov).dot(self.unit_sp)
-        fx = self._fcn_observations(f, x, pars)  # derived class decides whether to return derivatives also
+        fx = self._fcn_eval(f, x, pars)
         mean_f = self._mean(self.wm, fx)
         cov_f = self._covariance(self.Wc, fx, mean, mean_f)
         cov_fx = self._cross_covariance(self.Wcc, fx)
         return mean_f, cov_f, cov_fx
+
+    def _fcn_eval(self, fcn, x, fcn_pars):
+        # derived class decides whether to return derivatives also
+        raise NotImplementedError
+
+    def _mean(self, weights, fcn_evals):
+        raise NotImplementedError
+
+    def _covariance(self, weights, fcn_evals, mean_out):
+        raise NotImplementedError
+
+    def _cross_covariance(self, weights, fcn_evals, mean_in, mean_out):
+        raise NotImplementedError
