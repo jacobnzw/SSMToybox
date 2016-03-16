@@ -37,16 +37,8 @@ class BayesianQuadratureTransform(MomentTransform):
         assert self.d == dim  # check unit sigmas have proper dimension
         # use default kernel hyper-parameters if not provided
         self.hypers = hypers if hypers else self.default_hypers(dim)
-        # BQ weights given the unit sigma-points, kernel hyper-parameters and the RBF kernel
-        self.wm, self.Wc, self.Wcc = self.weights_rbf()
-
-    def default_sigma_points(self, dim):
-        # create unscented points
-        return Unscented.unit_sigma_points(dim, 2)
-
-    def default_hypers(self, dim):
-        # define default hypers
-        return {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(dim, ), 'noise_var': 1e-8}
+        # BQ weights given the unit sigma-points, kernel hyper-parameters and the kernel
+        self.wm, self.Wc, self.Wcc = self._weights(sigma_points, hypers)
 
     def apply(self, f, mean, cov, pars):
         # method defined in terms of abstract private functions for computing mean, covariance and cross-covariance
@@ -57,6 +49,19 @@ class BayesianQuadratureTransform(MomentTransform):
         cov_f = self._covariance(self.Wc, fx, mean, mean_f)
         cov_fx = self._cross_covariance(self.Wcc, fx)
         return mean_f, cov_f, cov_fx
+
+    def default_sigma_points(self, dim):
+        # create unscented points
+        return Unscented.unit_sigma_points(dim, 2)
+
+    def default_hypers(self, dim):
+        # define default hypers
+        return {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(dim, ), 'noise_var': 1e-8}
+
+    def _weights(self, sigma_points, hypers):
+        # implementation will differ based on kernel
+        # it's possible it will call functions which implement weights for particular kernel
+        raise NotImplementedError
 
     def _fcn_eval(self, fcn, x, fcn_pars):
         # derived class decides whether to return derivatives also
