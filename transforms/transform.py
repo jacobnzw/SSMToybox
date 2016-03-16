@@ -31,28 +31,29 @@ class BayesianQuadratureTransform(MomentTransform):
     # it's possible I'll need to make some more specialized parent classes
     def __init__(self, dim, unit_sp=None, hypers=None):
         # use default sigma-points if not provided
-        self.unit_sp = unit_sp if unit_sp else self.default_sigma_points(dim)  # (d, n)
+        self.unit_sp = unit_sp if unit_sp is not None else self.default_sigma_points(dim)  # (d, n)
         # get number of sigmas (n) and dimension of sigmas (d)
         self.d, self.n = self.unit_sp.shape
         assert self.d == dim  # check unit sigmas have proper dimension
         # use default kernel hyper-parameters if not provided
-        self.hypers = hypers if hypers else self.default_hypers(dim)
+        self.hypers = hypers if hypers is not None else self.default_hypers(dim)
         # BQ weights given the unit sigma-points, kernel hyper-parameters and the kernel
-        self.wm, self.Wc, self.Wcc = self._weights(sigma_points, hypers)
+        self.wm, self.Wc, self.Wcc = self._weights(self.unit_sp, self.hypers)
 
     def apply(self, f, mean, cov, pars):
         # method defined in terms of abstract private functions for computing mean, covariance and cross-covariance
-        # and call them from this method
-        x = mean[:, na] + cholesky(cov).dot(self.unit_sp)
+        mean = mean[:, na]
+        x = mean + cholesky(cov).dot(self.unit_sp)
         fx = self._fcn_eval(f, x, pars)
         mean_f = self._mean(self.wm, fx)
-        cov_f = self._covariance(self.Wc, fx, mean, mean_f)
-        cov_fx = self._cross_covariance(self.Wcc, fx)
+        cov_f = self._covariance(self.Wc, fx, mean_f)
+        cov_fx = self._cross_covariance(self.Wcc, fx, x, mean_f, mean)
         return mean_f, cov_f, cov_fx
 
     def default_sigma_points(self, dim):
         # create unscented points
-        return Unscented.unit_sigma_points(dim, 2)
+        c = np.sqrt(dim)
+        return np.hstack((np.zeros((dim, 1)), c * np.eye(dim), -c * np.eye(dim)))
 
     def default_hypers(self, dim):
         # define default hypers
@@ -63,6 +64,7 @@ class BayesianQuadratureTransform(MomentTransform):
         # it's possible it will call functions which implement weights for particular kernel
         raise NotImplementedError
 
+    # TODO: specify requirements for shape of input/output for all of these fcns
     def _fcn_eval(self, fcn, x, fcn_pars):
         # derived class decides whether to return derivatives also
         raise NotImplementedError
@@ -73,5 +75,5 @@ class BayesianQuadratureTransform(MomentTransform):
     def _covariance(self, weights, fcn_evals, mean_out):
         raise NotImplementedError
 
-    def _cross_covariance(self, weights, fcn_evals, mean_in, mean_out):
+    def _cross_covariance(self, weights, fcn_evals, x, mean_out, mean_in):
         raise NotImplementedError

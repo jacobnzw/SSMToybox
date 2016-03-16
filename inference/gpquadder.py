@@ -17,8 +17,10 @@ class GPQuadDerKalman(StateSpaceInference):
             self.usp_dyn, self.usp_meas, self.hyp_dyn, self.hyp_meas = usp_dyn, usp_meas, hyp_dyn, hyp_meas
         else:
             self._set_default_usp_hyp(sys)
-        self.tf = GPQuadDer(self.usp_dyn, self.hyp_dyn)
-        self.th = GPQuadDer(self.usp_meas, self.hyp_meas)
+        nq = sys.xD if sys.q_additive else sys.xD + sys.qD
+        nr = sys.xD if sys.r_additive else sys.xD + sys.rD
+        self.tf = GPQuadDer(nq, self.usp_dyn, self.hyp_dyn)
+        self.th = GPQuadDer(nr, self.usp_meas, self.hyp_meas)
         super(GPQuadDerKalman, self).__init__(self.tf, self.th, sys)
 
     def _set_default_usp_hyp(self, sys):
@@ -31,10 +33,10 @@ class GPQuadDerKalman(StateSpaceInference):
 
 
 def main():
-    # from models.ungm import ungm_filter_demo
-    # ungm_filter_demo(GPQuadDerKalman)
-    from models.pendulum import pendulum_filter_demo
-    pendulum_filter_demo(GPQuadDerKalman)
+    from models.ungm import ungm_filter_demo
+    ungm_filter_demo(GPQuadDerKalman)
+    # from models.pendulum import pendulum_filter_demo
+    # pendulum_filter_demo(GPQuadDerKalman)
 
 
 if __name__ == '__main__':
