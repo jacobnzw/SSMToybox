@@ -105,14 +105,14 @@ class StateSpaceModel(object):
         if self.q_additive:
             assert len(xq) == self.xD
             if dx:
-                out = np.atleast_2d(self.dyn_fcn_dx(xq, 0, pars).flatten())
+                out = (self.dyn_fcn_dx(xq, 0, pars).T.flatten())
             else:
                 out = self.dyn_fcn(xq, 0, pars)
         else:
             assert len(xq) == self.xD + self.qD
             x, q = xq[:self.xD], xq[-self.qD:]
             if dx:
-                out = np.atleast_2d(self.dyn_fcn_dx(x, q, pars).flatten())
+                out = (self.dyn_fcn_dx(x, q, pars).T.flatten())
             else:
                 out = self.dyn_fcn(x, q, pars)
         return out
@@ -134,14 +134,14 @@ class StateSpaceModel(object):
         if self.r_additive:
             assert len(xr) == self.xD
             if dx:
-                out = np.atleast_2d(self.meas_fcn_dx(xr, 0, pars).flatten())
+                out = (self.meas_fcn_dx(xr, 0, pars).T.flatten())
             else:
                 out = self.meas_fcn(xr, 0, pars)
         else:
             assert len(xr) == self.xD + self.rD
             x, r = xr[:self.xD], xr[-self.rD:]
             if dx:
-                out = np.atleast_2d(self.meas_fcn_dx(x, r, pars).flatten())
+                out = (self.meas_fcn_dx(x, r, pars).T.flatten())
             else:
                 out = self.meas_fcn(x, r, pars)
         return out

@@ -275,14 +275,13 @@ class GPQuadDer(BayesianQuadratureTransform):
         return self.weights_rbf(sigma_points, hypers)
 
     def _fcn_eval(self, fcn, x, fcn_pars):
-        fx = np.apply_along_axis(fcn, 0, x, fcn_pars)
-        dfx = np.apply_along_axis(fcn, 0, x, fcn_pars, dx=True)  # Jacobians evaluated at x
-        # stack function values and derivative values into one column
-        # TODO: make sure that observations of one output dim are stacked in a column
         # wanna have as many columns as output dims, one column includes function and derivative evaluations
         # for every sigma-point, thus it is (n + n*d,); n = # sigma-points, d = sigma-point dimensionality
         # fx should be (n + n*d, e); e = output dimensionality
-        return np.hstack((fx, dfx))
+        fx = np.apply_along_axis(fcn, 0, x, fcn_pars)
+        dfx = np.apply_along_axis(fcn, 0, x, fcn_pars, dx=True)  # Jacobians evaluated at x
+        # stack function values and derivative values into one column
+        return np.vstack((fx.T, dfx.T.reshape(self.d * self.n, -1))).T
 
     def _mean(self, weights, fcn_evals):
         return fcn_evals.dot(weights)
@@ -291,7 +290,7 @@ class GPQuadDer(BayesianQuadratureTransform):
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + self.model_var
 
     def _cross_covariance(self, weights, fcn_evals, x, mean_out, mean_in):
-        return fcn_evals.dot(weights.T) - np.outer(mean_in, mean_out.T)
+        return fcn_evals.dot(weights.T) - np.outer(mean_out, mean_in.T)
 
 
 class GPQuadAlt(GPQuad):

@@ -28,15 +28,15 @@ class GPQuadDerKalman(StateSpaceInference):
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
         self.usp_dyn = Unscented.unit_sigma_points(nq, np.sqrt(nq + 0))
         self.usp_meas = Unscented.unit_sigma_points(nr, np.sqrt(nr + 0))
-        self.hyp_dyn = {'sig_var': 1.0, 'lengthscale': 30.0 * np.ones((nq,)), 'noise_var': 1e-8}
-        self.hyp_meas = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones((nr,)), 'noise_var': 1e-8}
+        self.hyp_dyn = {'sig_var': 1.0, 'lengthscale': 0.1 * np.ones((nq,)), 'noise_var': 1e-8}
+        self.hyp_meas = {'sig_var': 1.0, 'lengthscale': 0.1 * np.ones((nr,)), 'noise_var': 1e-8}
 
 
 def main():
-    from models.ungm import ungm_filter_demo
-    ungm_filter_demo(GPQuadDerKalman)
-    # from models.pendulum import pendulum_filter_demo
-    # pendulum_filter_demo(GPQuadDerKalman)
+    # from models.ungm import ungm_filter_demo
+    # ungm_filter_demo(GPQuadDerKalman)
+    from models.pendulum import pendulum_filter_demo
+    pendulum_filter_demo(GPQuadDerKalman)
 
 
 if __name__ == '__main__':
