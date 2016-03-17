@@ -71,13 +71,15 @@ class GPQuad(BayesianQuadratureTransform):
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
         return wm_f, wc_f, wc_fx
 
-    def plot_gp_model(self, f, unit_sp, args):
+    def plot_gp_model(self, f, unit_sp, args, in_dim=0, out_dim=0):
         fx = np.apply_along_axis(f, 0, unit_sp, args)
-        # TODO: plotting w/o GPy's routines
-        # TODO: which output dimension to plot, what about n-D inputs?
-        from GPy.models import GPRegression
-        m = GPRegression(unit_sp.T, fx.T, kernel=self.kern, noise_var=self.hypers['noise_var'])
-        m.plot()
+        K = self.kern.K(unit_sp)  # covariances between sigma-points
+        k = self.kern.K(x, unit_sp)  # covariance between test inputs and sigma-points
+        kxx = self.kern.Kdiag(x)  # prior predictive variance
+        k_iK = cho_solve(cho_factor(K), k)
+        gp_mean = k_iK.dot(fx[:, out_dim])
+        gp_var = kxx - k_iK.dot(k)
+
 
     def _weights(self, sigma_points, hypers):
         return self.weights_rbf(sigma_points, hypers)
