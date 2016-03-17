@@ -4,8 +4,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from models.ungm import UNGM
+from models.pendulum import Pendulum
 from transforms.bayesquad import GPQuad
-from transforms.quad import Unscented
+from transforms.quad import Unscented, GaussHermite
 
 
 class GPQuadTest(unittest.TestCase):
@@ -52,7 +53,9 @@ class GPQuadTest(unittest.TestCase):
         kappa, alpha, beta = 0, 1.0, 2.0
         lam = alpha ** 2 * (n + kappa) - n
         unit_sp = Unscented.unit_sigma_points(n, np.sqrt(n + lam))
+        # unit_sp = GaussHermite.unit_sigma_points(n, 10)
         hypers = {'sig_var': 1.0, 'lengthscale': 1.0 * np.ones((n,)), 'noise_var': 1e-8}
-        tf = GPQuad(unit_sp, hypers)
+        tf = GPQuad(n, unit_sp, hypers)
         sys = UNGM()
-        tf.plot_gp_model(sys.dyn_eval, unit_sp, 0)
+        tf.plot_gp_model(sys.dyn_eval, unit_sp, np.atleast_1d(1.0), test_range=(-5, 5, 50), plot_dims=(0, 0))
+        # tf.plot_gp_model(sys.meas_eval, unit_sp, np.atleast_1d(1.0), test_range=(-5, 5, 50), plot_dims=(0, 0))

@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from GPy.kern import RBF
 from numpy import newaxis as na
 from numpy.linalg import det, inv, cholesky
@@ -71,14 +72,32 @@ class GPQuad(BayesianQuadratureTransform):
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
         return wm_f, wc_f, wc_fx
 
-    def plot_gp_model(self, f, unit_sp, args, in_dim=0, out_dim=0):
-        fx = np.apply_along_axis(f, 0, unit_sp, args)
-        K = self.kern.K(unit_sp)  # covariances between sigma-points
-        k = self.kern.K(x, unit_sp)  # covariance between test inputs and sigma-points
-        kxx = self.kern.Kdiag(x)  # prior predictive variance
-        k_iK = cho_solve(cho_factor(K), k)
-        gp_mean = k_iK.dot(fx[:, out_dim])
-        gp_var = kxx - k_iK.dot(k)
+    def plot_gp_model(self, f, unit_sp, args, test_range=(-5, 5, 50), plot_dims=(0, 0)):
+        # plot out_dim vs. in_dim
+        in_dim, out_dim = plot_dims
+        # test input must have the same dimension as specified in kernel
+        test = np.linspace(*test_range)
+        test_pts = np.zeros((self.d, len(test)))
+        test_pts[in_dim, :] = test
+        # function value observations at training points (unit sigma-points)
+        y = np.apply_along_axis(f, 0, unit_sp, args)
+        fx = np.apply_along_axis(f, 0, test_pts, args)  # function values at test points
+        K = self.kern.K(unit_sp.T)  # covariances between sigma-points
+        k = self.kern.K(test_pts.T, unit_sp.T)  # covariance between test inputs and sigma-points
+        kxx = self.kern.Kdiag(test_pts.T)  # prior predictive variance
+        k_iK = cho_solve(cho_factor(K), k.T).T
+        gp_mean = k_iK.dot(y[out_dim, :])  # GP mean
+        gp_var = np.diag(np.diag(kxx) - k_iK.dot(k.T))  # GP predictive variance
+        # plot the GP mean, predictive variance and the true function
+        plt.figure()
+        plt.plot(test, fx[out_dim, :], color='r', ls='--', lw=2, label='true')
+        plt.plot(test, gp_mean, color='b', ls='-', lw=2, label='GP mean')
+        plt.fill_between(test, gp_mean + 2 * np.sqrt(gp_var), gp_mean - 2 * np.sqrt(gp_var),
+                         color='b', alpha=0.25, label='GP variance')
+        plt.plot(unit_sp[in_dim, :], y[out_dim, :],
+                 color='k', ls='', marker='o', ms=8, label='data')
+        plt.legend()
+        plt.show()
 
 
     def _weights(self, sigma_points, hypers):
