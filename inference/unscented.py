@@ -8,12 +8,12 @@ class UnscentedKalman(StateSpaceInference):
     Unscented Kalman filter and smoother.
     """
 
-    def __init__(self, sys, kap=None, al=1.0, bet=2.0):
+    def __init__(self, sys, kappa=None, alpha=1.0, beta=2.0):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        tf = Unscented(nq, kappa=kap, alpha=al, beta=bet)
-        th = Unscented(nr, kappa=kap, alpha=al, beta=bet)
+        tf = Unscented(nq, kappa=kappa, alpha=alpha, beta=beta)
+        th = Unscented(nr, kappa=kappa, alpha=alpha, beta=beta)
         super(UnscentedKalman, self).__init__(tf, th, sys)
 
 

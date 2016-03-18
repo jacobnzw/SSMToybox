@@ -48,7 +48,7 @@ class TestUNGM(unittest.TestCase):
         usp_dyn, usp_meas = default_bq_unit_sp(ssm)
         inf_method = (
             ExtendedKalman(ssm),
-            UnscentedKalman(ssm, kap=0.0),
+            UnscentedKalman(ssm, kappa=0.0),
             CubatureKalman(ssm),
             GaussHermiteKalman(ssm),
             GPQuadKalman(ssm, usp_dyn, usp_meas, hyp_dyn, hyp_meas),
