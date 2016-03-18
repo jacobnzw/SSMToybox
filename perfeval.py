@@ -54,6 +54,10 @@ def nci(x, m, P):
     return NCI[:, 1:, ...].mean(axis=1)  # average over time steps (ignore the 1st)
 
 
+def bootstrap_var():
+    # TODO: compute variance of the estimate by bootstrapping
+    pass
+
 def print_table(data, row_labels=None, col_labels=None, latex=False):
     pd.DataFrame(data, index=row_labels, columns=col_labels)
     print pd
@@ -66,14 +70,10 @@ from inference import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHerm
 from transforms import SphericalRadial, Unscented, GaussHermite, GPQuad
 from models.ungm import UNGM
 import time
-import scipy.io as sio
-
-# mat = sio.loadmat('d:\\Dropbox\\sources\matlab\\test_lab\\BHKF_testing\\ungm_data_500N_100MC.mat')
 
 steps, mc = 500, 100
 ssm = UNGM()  # initialize UNGM model
 x, z = ssm.simulate(steps, mc_sims=mc)  # generate some data
-# x, z = mat['x'][:, :steps, :], mat['z'][:, :steps, :]
 # initialize filters/smoothers
 algorithms = (
     # ExtendedKalman(ssm),
@@ -138,16 +138,16 @@ rmse_table_f = pd.DataFrame(rmseData_f.reshape(2, 5).T, index=row_labels, column
 nci_table_f = pd.DataFrame(nciData_f.reshape(2, 5).T, index=row_labels, columns=col_labels)
 rmse_table_s = pd.DataFrame(rmseData_s.reshape(2, 5).T, index=row_labels, columns=col_labels)
 nci_table_s = pd.DataFrame(nciData_s.reshape(2, 5).T, index=row_labels, columns=col_labels)
-print 'Filter RMSE';
+print 'Filter RMSE'
 print rmse_table_f
-print 'Filter NCI';
+print 'Filter NCI'
 print nci_table_f
-print 'Smoother RMSE';
+print 'Smoother RMSE'
 print rmse_table_s
-print 'Smoother NCI';
+print 'Smoother NCI'
 print nci_table_s
 
-# table.to_latex()
+# TODO: code dependency on hypers demo
 
 
 # if __name__ == '__main__':
