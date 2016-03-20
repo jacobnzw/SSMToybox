@@ -23,8 +23,8 @@ def rmse(x, m):
     """
 
     dx = x[..., na] - m
-    MSE = (dx ** 2).mean(axis=1)
-    return np.sqrt(MSE)[:, 1:, ...]
+    MSE = (dx[:, 1:, ...] ** 2).mean(axis=1)  # average over time steps
+    return np.sqrt(MSE)
 
 
 def nci(x, m, P):
@@ -54,9 +54,16 @@ def nci(x, m, P):
     return NCI[:, 1:, ...].mean(axis=1)  # average over time steps (ignore the 1st)
 
 
-def bootstrap_var():
+def bootstrap_var(data, samples=1000):
+    # data (1, mc_sims)
+    data = data.squeeze()
+    mc_sims = data.shape[0]
     # TODO: compute variance of the estimate by bootstrapping
-    pass
+    # sample with replacement to create new datasets
+    smp_data = np.random.choice(data, (samples, mc_sims))
+    # calculate sample mean of each dataset and variance of the means
+    var = np.var(np.mean(smp_data, 1))
+    return 2 * np.sqrt(np.var(np.mean(smp_data, 1)))
 
 def print_table(data, row_labels=None, col_labels=None, latex=False):
     pd.DataFrame(data, index=row_labels, columns=col_labels)
@@ -64,91 +71,135 @@ def print_table(data, row_labels=None, col_labels=None, latex=False):
     if latex:
         pd.to_latex()
 
-
-# def main():
 from inference import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GPQuadKalman
 from transforms import SphericalRadial, Unscented, GaussHermite, GPQuad
 from models.ungm import UNGM
+import matplotlib.pyplot as plt
 import time
 
-steps, mc = 500, 100
-ssm = UNGM()  # initialize UNGM model
-x, z = ssm.simulate(steps, mc_sims=mc)  # generate some data
-# initialize filters/smoothers
-algorithms = (
-    # ExtendedKalman(ssm),
-    CubatureKalman(ssm),
-    UnscentedKalman(ssm, kappa=0.0),
-    GaussHermiteKalman(ssm, deg=5),
-    GaussHermiteKalman(ssm, deg=7),
-    GaussHermiteKalman(ssm, deg=10),
-    GPQuadKalman(ssm,
-                 usp_dyn=SphericalRadial.unit_sigma_points(ssm.xD),
-                 usp_meas=SphericalRadial.unit_sigma_points(ssm.xD),
-                 hyp_dyn={'sig_var': 1.0, 'lengthscale': 0.3 * np.ones(ssm.xD, ), 'noise_var': 1e-8},
-                 hyp_meas={'sig_var': 1.0, 'lengthscale': 0.3 * np.ones(ssm.xD, ), 'noise_var': 1e-8}),
-    GPQuadKalman(ssm,
-                 usp_dyn=Unscented.unit_sigma_points(ssm.xD, kappa=0.0),
-                 usp_meas=Unscented.unit_sigma_points(ssm.xD, kappa=0.0),
-                 hyp_dyn={'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(ssm.xD, ), 'noise_var': 1e-8},
-                 hyp_meas={'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(ssm.xD, ), 'noise_var': 1e-8}),
-    GPQuadKalman(ssm,
-                 usp_dyn=GaussHermite.unit_sigma_points(ssm.xD, degree=5),
-                 usp_meas=GaussHermite.unit_sigma_points(ssm.xD, degree=5),
-                 hyp_dyn={'sig_var': 1.0, 'lengthscale': 0.3 * np.ones(ssm.xD, ), 'noise_var': 1e-8},
-                 hyp_meas={'sig_var': 1.0, 'lengthscale': 0.3 * np.ones(ssm.xD, ), 'noise_var': 1e-8}),
-    GPQuadKalman(ssm,
-                 usp_dyn=GaussHermite.unit_sigma_points(ssm.xD, degree=7),
-                 usp_meas=GaussHermite.unit_sigma_points(ssm.xD, degree=7),
-                 hyp_dyn={'sig_var': 1.0, 'lengthscale': 0.1 * np.ones(ssm.xD, ), 'noise_var': 1e-8},
-                 hyp_meas={'sig_var': 1.0, 'lengthscale': 0.1 * np.ones(ssm.xD, ), 'noise_var': 1e-8}),
-    GPQuadKalman(ssm,
-                 usp_dyn=GaussHermite.unit_sigma_points(ssm.xD, degree=10),
-                 usp_meas=GaussHermite.unit_sigma_points(ssm.xD, degree=10),
-                 hyp_dyn={'sig_var': 1.0, 'lengthscale': 0.1 * np.ones(ssm.xD, ), 'noise_var': 1e-8},
-                 hyp_meas={'sig_var': 1.0, 'lengthscale': 0.1 * np.ones(ssm.xD, ), 'noise_var': 1e-8}),
-)
-num_algs = len(algorithms)
-# space for estimates
-mean_f, cov_f = np.zeros((ssm.xD, steps, mc, num_algs)), np.zeros((ssm.xD, ssm.xD, steps, mc, num_algs))
-mean_s, cov_s = np.zeros((ssm.xD, steps, mc, num_algs)), np.zeros((ssm.xD, ssm.xD, steps, mc, num_algs))
 
-# do filtering/smoothing
-t0 = time.time()  # measure execution time
-print 'Running filters/smoothers ...'
-for a, alg in enumerate(algorithms):
-    print '{}'.format(alg.__class__.__name__)  # print filter/smoother name
-    for sim in range(mc):
-        mean_f[..., sim, a], cov_f[..., sim, a] = alg.forward_pass(z[..., sim])
-        mean_s[..., sim, a], cov_s[..., sim, a] = alg.backward_pass()
-        alg.reset()
-print 'Done in {0:.4f} [sec]'.format(time.time() - t0)
+def rmse_nci_tables():
+    steps, mc = 500, 100
+    ssm = UNGM()  # initialize UNGM model
+    x, z = ssm.simulate(steps, mc_sims=mc)  # generate some data
+    # initialize filters/smoothers
+    algorithms = (
+        # ExtendedKalman(ssm),
+        CubatureKalman(ssm),
+        UnscentedKalman(ssm, kappa=0.0),
+        GaussHermiteKalman(ssm, deg=5),
+        GaussHermiteKalman(ssm, deg=7),
+        GaussHermiteKalman(ssm, deg=10),
+        GPQuadKalman(ssm,
+                     usp_dyn=SphericalRadial.unit_sigma_points(ssm.xD),
+                     usp_meas=SphericalRadial.unit_sigma_points(ssm.xD),
+                     hyp_dyn={'sig_var': 1.0, 'lengthscale': 0.3 * np.ones(ssm.xD, ), 'noise_var': 1e-8},
+                     hyp_meas={'sig_var': 1.0, 'lengthscale': 0.3 * np.ones(ssm.xD, ), 'noise_var': 1e-8}),
+        GPQuadKalman(ssm,
+                     usp_dyn=Unscented.unit_sigma_points(ssm.xD, kappa=0.0),
+                     usp_meas=Unscented.unit_sigma_points(ssm.xD, kappa=0.0),
+                     hyp_dyn={'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(ssm.xD, ), 'noise_var': 1e-8},
+                     hyp_meas={'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(ssm.xD, ), 'noise_var': 1e-8}),
+        GPQuadKalman(ssm,
+                     usp_dyn=GaussHermite.unit_sigma_points(ssm.xD, degree=5),
+                     usp_meas=GaussHermite.unit_sigma_points(ssm.xD, degree=5),
+                     hyp_dyn={'sig_var': 1.0, 'lengthscale': 0.3 * np.ones(ssm.xD, ), 'noise_var': 1e-8},
+                     hyp_meas={'sig_var': 1.0, 'lengthscale': 0.3 * np.ones(ssm.xD, ), 'noise_var': 1e-8}),
+        GPQuadKalman(ssm,
+                     usp_dyn=GaussHermite.unit_sigma_points(ssm.xD, degree=7),
+                     usp_meas=GaussHermite.unit_sigma_points(ssm.xD, degree=7),
+                     hyp_dyn={'sig_var': 1.0, 'lengthscale': 0.1 * np.ones(ssm.xD, ), 'noise_var': 1e-8},
+                     hyp_meas={'sig_var': 1.0, 'lengthscale': 0.1 * np.ones(ssm.xD, ), 'noise_var': 1e-8}),
+        GPQuadKalman(ssm,
+                     usp_dyn=GaussHermite.unit_sigma_points(ssm.xD, degree=10),
+                     usp_meas=GaussHermite.unit_sigma_points(ssm.xD, degree=10),
+                     hyp_dyn={'sig_var': 1.0, 'lengthscale': 0.1 * np.ones(ssm.xD, ), 'noise_var': 1e-8},
+                     hyp_meas={'sig_var': 1.0, 'lengthscale': 0.1 * np.ones(ssm.xD, ), 'noise_var': 1e-8}),
+    )
+    num_algs = len(algorithms)
 
-# evaluate perfomance
-rmseData_f = rmse(x, mean_f).mean(axis=1).T  # averaged filter RMSE over time steps
-rmseData_s = rmse(x, mean_s).mean(axis=1).T  # averaged smoother RMSE over time steps
-nciData_f = nci(x, mean_f, cov_f).mean(axis=1).T
-nciData_s = nci(x, mean_s, cov_s).mean(axis=1).T
-data_f = np.hstack((rmseData_f, nciData_f))
-data_s = np.hstack((rmseData_s, nciData_s))
-# put data into Pandas DataFrame for fancy printing and latex export
-row_labels = ['SR', 'UT', 'GH-5', 'GH-7', 'GH-10']  # [alg.__class__.__name__ for alg in algorithms]
-col_labels = ['Classical', 'Bayesian']
-rmse_table_f = pd.DataFrame(rmseData_f.reshape(2, 5).T, index=row_labels, columns=col_labels)
-nci_table_f = pd.DataFrame(nciData_f.reshape(2, 5).T, index=row_labels, columns=col_labels)
-rmse_table_s = pd.DataFrame(rmseData_s.reshape(2, 5).T, index=row_labels, columns=col_labels)
-nci_table_s = pd.DataFrame(nciData_s.reshape(2, 5).T, index=row_labels, columns=col_labels)
-print 'Filter RMSE'
-print rmse_table_f
-print 'Filter NCI'
-print nci_table_f
-print 'Smoother RMSE'
-print rmse_table_s
-print 'Smoother NCI'
-print nci_table_s
+    # space for estimates
+    mean_f, cov_f = np.zeros((ssm.xD, steps, mc, num_algs)), np.zeros((ssm.xD, ssm.xD, steps, mc, num_algs))
+    mean_s, cov_s = np.zeros((ssm.xD, steps, mc, num_algs)), np.zeros((ssm.xD, ssm.xD, steps, mc, num_algs))
+    # do filtering/smoothing
+    t0 = time.time()  # measure execution time
+    print 'Running filters/smoothers ...'
+    for a, alg in enumerate(algorithms):
+        print '{}'.format(alg.__class__.__name__)  # print filter/smoother name
+        for sim in range(mc):
+            mean_f[..., sim, a], cov_f[..., sim, a] = alg.forward_pass(z[..., sim])
+            mean_s[..., sim, a], cov_s[..., sim, a] = alg.backward_pass()
+            alg.reset()
+    print 'Done in {0:.4f} [sec]'.format(time.time() - t0)
 
-# TODO: code dependency on hypers demo
+    # evaluate perfomance
+    rmseData_f, rmseData_s = rmse(x, mean_f), rmse(x, mean_s)  # averaged RMSE over time steps
+    nciData_f, nciData_s = nci(x, mean_f, cov_f), nci(x, mean_s, cov_s)  # averaged NCI over time steps
+    # average scores (over MC simulations)
+    rmseMean_f, rmseMean_s = rmseData_f.mean(axis=1).T, rmseData_s.mean(axis=1).T
+    nciMean_f, nciMean_s = nciData_f.mean(axis=1).T, nciData_s.mean(axis=1).T
+    # +/- 2 standard deviations of the scores (using bootstrapping)
+    rmseStd_f, rmseStd_s = np.zeros(num_algs), np.zeros(num_algs)
+    nciStd_f, nciStd_s = rmseStd_f.copy(), rmseStd_f.copy()
+    for f in range(num_algs):
+        rmseStd_f[f] = bootstrap_var(rmseData_f[..., f], samples=1e4)
+        rmseStd_s[f] = bootstrap_var(rmseData_s[..., f], samples=1e4)
+        nciStd_f[f] = bootstrap_var(nciData_f[..., f], samples=1e4)
+        nciStd_s[f] = bootstrap_var(nciData_s[..., f], samples=1e4)
+
+    # put data into Pandas DataFrame for fancy printing and latex export
+    row_labels = ['SR', 'UT', 'GH-5', 'GH-7', 'GH-10']  # [alg.__class__.__name__ for alg in algorithms]
+    col_labels = ['Classical', 'Bayesian', 'Classical (2std)', 'Bayesian (2std)']
+    rmse_table_f = pd.DataFrame(np.hstack((rmseMean_f.reshape(2, 5).T, rmseStd_f.reshape(2, 5).T)), index=row_labels,
+                                columns=col_labels)
+    nci_table_f = pd.DataFrame(np.hstack((nciMean_f.reshape(2, 5).T, nciStd_f.reshape(2, 5).T)), index=row_labels,
+                               columns=col_labels)
+    rmse_table_s = pd.DataFrame(np.hstack((rmseMean_s.reshape(2, 5).T, rmseStd_s.reshape(2, 5).T)), index=row_labels,
+                                columns=col_labels)
+    nci_table_s = pd.DataFrame(np.hstack((nciMean_s.reshape(2, 5).T, nciStd_s.reshape(2, 5).T)), index=row_labels,
+                               columns=col_labels)
+    # print tables
+    print 'Filter RMSE'
+    print rmse_table_f
+    print 'Filter NCI'
+    print nci_table_f
+    print 'Smoother RMSE'
+    print rmse_table_s
+    print 'Smoother NCI'
+    print nci_table_s
+    # return computed metrics for filters and smoothers
+    return {'filter_RMSE': (rmseMean_f, rmseStd_f), 'filter_NCI': (nciMean_f, nciStd_f),
+            'smoother_RMSE': (rmseMean_s, rmseStd_s), 'smoother_NCI': (nciMean_s, nciStd_s)}
 
 
-# if __name__ == '__main__':
-#     main()
+def hypers_demo():
+    steps, mc = 500, 20
+    ssm = UNGM()  # initialize UNGM model
+    x, z = ssm.simulate(steps, mc_sims=mc)  # generate some data
+    lscale = [1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1, 3, 1e1, 3e1]  # , 1e2, 3e2]
+    sigmas_ut = Unscented.unit_sigma_points(ssm.xD, kappa=0.0)
+    mean_f, cov_f = np.zeros((ssm.xD, steps, mc, len(lscale))), np.zeros((ssm.xD, ssm.xD, steps, mc, len(lscale)))
+    for iel, el in enumerate(lscale):
+        # initialize BHKF with current lenghtscale
+        f = GPQuadKalman(ssm, usp_dyn=sigmas_ut, usp_meas=sigmas_ut,
+                         hyp_dyn={'sig_var': 1.0, 'lengthscale': el * np.ones(ssm.xD, ), 'noise_var': 1e-8},
+                         hyp_meas={'sig_var': 1.0, 'lengthscale': el * np.ones(ssm.xD, ), 'noise_var': 1e-8})
+        # filtering
+        for s in range(mc):
+            mean_f[..., s, iel], cov_f[..., s, iel] = f.forward_pass(z[..., s])
+
+    # compute average (over MC sims) RMSE and NCI
+    rmseVsEl = rmse(x, mean_f).mean(axis=1)
+    nciVsEl = nci(x, mean_f, cov_f).mean(axis=1)
+    # plot influence of changing lengthscale on the RMSE and NCI filter performance
+    plt.figure()
+    plt.semilogx(lscale, rmseVsEl.squeeze(), color='k', ls='-', lw=2, marker='o', label='RMSE')
+    plt.semilogx(lscale, nciVsEl.squeeze(), color='k', ls='--', lw=2, marker='o', label='NCI')
+    plt.grid(True)
+    plt.legend()
+    plt.show()
+    return lscale, rmseVsEl, nciVsEl
+
+
+if __name__ == '__main__':
+    hypers_demo()
