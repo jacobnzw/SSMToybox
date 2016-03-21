@@ -33,8 +33,6 @@ class Unscented(SigmaPointTransform):
     """
 
     def __init__(self, dim, kappa=None, alpha=1.0, beta=2.0):
-        kappa = np.max([3.0 - dim, 0.0]) if kappa is None else kappa
-        lam = alpha ** 2 * (dim + kappa) - dim
         # UT weights
         self.wm, self.wc = self.weights(dim, kappa=kappa, alpha=alpha, beta=alpha)
         self.Wm = np.diag(self.wm)
