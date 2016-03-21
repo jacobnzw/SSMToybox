@@ -4,6 +4,11 @@ from numpy import newaxis as na
 from scipy.stats import multivariate_normal
 from scipy.linalg import cho_factor, cho_solve
 from numpy.linalg import cholesky
+from inference import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GPQuadKalman
+from transforms import SphericalRadial, Unscented, GaussHermite, GPQuad
+from models.ungm import UNGM
+import matplotlib.pyplot as plt
+import time
 
 
 def rmse(x, m):
@@ -58,24 +63,17 @@ def bootstrap_var(data, samples=1000):
     # data (1, mc_sims)
     data = data.squeeze()
     mc_sims = data.shape[0]
-    # TODO: compute variance of the estimate by bootstrapping
     # sample with replacement to create new datasets
     smp_data = np.random.choice(data, (samples, mc_sims))
     # calculate sample mean of each dataset and variance of the means
     var = np.var(np.mean(smp_data, 1))
-    return 2 * np.sqrt(np.var(np.mean(smp_data, 1)))
+    return 2 * np.sqrt(var)  # 2*STD
 
 def print_table(data, row_labels=None, col_labels=None, latex=False):
     pd.DataFrame(data, index=row_labels, columns=col_labels)
     print pd
     if latex:
         pd.to_latex()
-
-from inference import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GPQuadKalman
-from transforms import SphericalRadial, Unscented, GaussHermite, GPQuad
-from models.ungm import UNGM
-import matplotlib.pyplot as plt
-import time
 
 
 def rmse_nci_tables():
@@ -202,4 +200,5 @@ def hypers_demo():
 
 
 if __name__ == '__main__':
+    rmse_nci_tables()
     hypers_demo()
