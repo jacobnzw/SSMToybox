@@ -276,24 +276,26 @@ class GPQuadDer(BayesianQuadratureTransform):
         assert len(el) == d
         # pre-allocation for convenience
         eye_d, eye_n, eye_y = np.eye(d), np.eye(n), np.eye(n + d * n)
+        Lam = np.diag(el ** 2)
 
         K = self.kern_affine_der(unit_sp, hypers)  # evaluate kernel matrix BOTTLENECK
         iK = cho_solve(cho_factor(K + jitter * eye_y), eye_y)  # invert kernel matrix BOTTLENECK
-        q_tilde = 0
+        q_tilde = np.hstack((alpha ** 2 * np.ones(n), np.zeros(n * d)))
         # weights for mean
         wm = q_tilde.dot(iK)
 
-        #  quantities for cross-covariance "weights"
-        iLamSig = iiLam.dot(Sig_q)  # (D,D)
-        r_tilde = (q[na, na, :] * iLamSig[..., na] + mu_q[na, ...] * r[:, na, :]).T.reshape(n * d, d).T  # (D, N*D)
-        R_tilde = np.hstack((q[na, :] * mu_q, r_tilde))  # (D, N+N*D)
-
+        #  quantities for cross-covariance "weights"  # FIXME: did I choose the right expressions? (other are possible)
+        R_tilde = np.hstack((Lam.dot(X), np.tile(Lam, (1, n))))  # (D, N+N*D)
         # input-output covariance (cross-covariance) "weights"
         Wcc = R_tilde.dot(iK)  # (D, N+N*D)
-
+        # expectations of products of kernels
+        E_ff_ff = alpha ** 2 + X.T.dot(Lam).dot(Lam).dot(X)
+        E_ff_fd = np.tile(alpha ** 2 * X.T.dot(Lam), (1, n))
+        E_dd_dd = np.tile(Lam, (n, n))
+        Q_tilde = np.vstack((np.hstack((E_ff_ff, E_ff_fd)), np.hstack((E_ff_fd.T, E_dd_dd))))
         # weights for covariance
         iKQ = iK.dot(Q_tilde)
-        Wc = np.eye(n + n * d)
+        Wc = iKQ.dot(iK)
         # model variance
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
         return wm, Wc, Wcc
