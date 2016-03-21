@@ -199,6 +199,7 @@ class GPQuadDer(BayesianQuadratureTransform):
     Gaussian Process Quadrature which uses derivative observations in addition to function values.
     """
 
+    # TODO: boolean mask indicating which sigmas have derivative obs.
     def __init__(self, dim, unit_sp=None, hypers=None):
         super(GPQuadDer, self).__init__(dim, unit_sp, hypers)
         # get number of sigmas (n) and dimension of sigmas (d)
@@ -214,7 +215,7 @@ class GPQuadDer(BayesianQuadratureTransform):
         # pre-allocation for convenience
         eye_d, eye_n, eye_y = np.eye(d), np.eye(n), np.eye(n + d * n)
 
-        K = self.kern_eq_der(unit_sp, hypers)  # evaluate kernel matrix BOTTLENECK
+        K = self.kern_rbf_der(unit_sp, hypers)  # evaluate kernel matrix BOTTLENECK
         iK = cho_solve(cho_factor(K + jitter * eye_y), eye_y)  # invert kernel matrix BOTTLENECK
         Lam = np.diag(el ** 2)
         iLam = np.diag(el ** -1)  # sqrt(Lambda^-1)
@@ -268,8 +269,37 @@ class GPQuadDer(BayesianQuadratureTransform):
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
         return wm, Wc, Wcc
 
+    def weights_affine(self, unit_sp, hypers):
+        d, n = unit_sp.shape
+        # GP kernel hyper-parameters
+        alpha, el, jitter = hypers['bias'], hypers['variance'], hypers['noise_var']
+        assert len(el) == d
+        # pre-allocation for convenience
+        eye_d, eye_n, eye_y = np.eye(d), np.eye(n), np.eye(n + d * n)
+
+        K = self.kern_affine_der(unit_sp, hypers)  # evaluate kernel matrix BOTTLENECK
+        iK = cho_solve(cho_factor(K + jitter * eye_y), eye_y)  # invert kernel matrix BOTTLENECK
+        q_tilde = 0
+        # weights for mean
+        wm = q_tilde.dot(iK)
+
+        #  quantities for cross-covariance "weights"
+        iLamSig = iiLam.dot(Sig_q)  # (D,D)
+        r_tilde = (q[na, na, :] * iLamSig[..., na] + mu_q[na, ...] * r[:, na, :]).T.reshape(n * d, d).T  # (D, N*D)
+        R_tilde = np.hstack((q[na, :] * mu_q, r_tilde))  # (D, N+N*D)
+
+        # input-output covariance (cross-covariance) "weights"
+        Wcc = R_tilde.dot(iK)  # (D, N+N*D)
+
+        # weights for covariance
+        iKQ = iK.dot(Q_tilde)
+        Wc = np.eye(n + n * d)
+        # model variance
+        self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
+        return wm, Wc, Wcc
+
     @staticmethod
-    def kern_eq_der(X, hypers):
+    def kern_rbf_der(X, hypers):
         # TODO: rewrite in Cython, get rid of double loops
         D, N = X.shape
         # extract hypers
@@ -290,6 +320,18 @@ class GPQuadDer(BayesianQuadratureTransform):
                 Kfd[i, jstart:jend] = Kff[i, j] * XmX[:, i, j]
                 Kdd[istart:iend, jstart:jend] = Kff[i, j] * (iiLam - np.outer(XmX[:, i, j], XmX[:, i, j]))
         # Kdd = (Kdd + Kdd.T)
+        return np.vstack((np.hstack((Kff, Kfd)), np.hstack((Kfd.T, Kdd))))
+
+    @staticmethod
+    def kern_affine_der(X, hypers):
+        d, n = X.shape
+        # extract hypers
+        alpha, el, jitter = hypers['bias'], hypers['variance'], hypers['noise_var']
+        assert len(el) == d
+        Lam = diag(el ** 2)
+        Kff = alpha ** 2 + X.T.dot(Lam).dot(X)
+        Kfd = X.T.dot(Lam)
+        Kdd = alpha ** 2 * np.eye(n * d)
         return np.vstack((np.hstack((Kff, Kfd)), np.hstack((Kfd.T, Kdd))))
 
     def _weights(self, sigma_points, hypers):
