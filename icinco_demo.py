@@ -59,6 +59,19 @@ def nci(x, m, P):
     return NCI[:, 1:, ...].mean(axis=1)  # average over time steps (ignore the 1st)
 
 
+def nll(x, m, P):
+    d, time, mc_sims, algs = m.shape
+    dx = x[..., na] - m
+    NLL = np.empty((1, time, mc_sims, algs))
+    dx_iP_dx = np.empty((1, time, mc_sims, algs))
+    for k in range(1, time):
+        for s in range(mc_sims):
+            for fi in range(algs):
+                S = P[..., k, s, fi]
+                dx_iP_dx[:, k, s, fi] = dx[:, k, s, fi].dot(np.linalg.inv(S)).dot(dx[:, k, s, fi])
+                NLL[:, k, s, fi] = 0.5 * (np.log(np.linalg.det(S)) + dx_iP_dx[:, k, s, fi] + d * np.log(2 * np.pi))
+    return NLL[:, 1:, ...].mean(axis=1)  # average over time steps (ignore the 1st)
+
 def bootstrap_var(data, samples=1000):
     # data (1, mc_sims)
     data = data.squeeze()
@@ -76,7 +89,7 @@ def print_table(data, row_labels=None, col_labels=None, latex=False):
         pd.to_latex()
 
 
-def rmse_nci_tables():
+def tables():
     steps, mc = 500, 100
     ssm = UNGM()  # initialize UNGM model
     x, z = ssm.simulate(steps, mc_sims=mc)  # generate some data
@@ -88,6 +101,8 @@ def rmse_nci_tables():
         GaussHermiteKalman(ssm, deg=5),
         GaussHermiteKalman(ssm, deg=7),
         GaussHermiteKalman(ssm, deg=10),
+        GaussHermiteKalman(ssm, deg=15),
+        GaussHermiteKalman(ssm, deg=20),
         GPQuadKalman(ssm,
                      usp_dyn=SphericalRadial.unit_sigma_points(ssm.xD),
                      usp_meas=SphericalRadial.unit_sigma_points(ssm.xD),
@@ -113,6 +128,16 @@ def rmse_nci_tables():
                      usp_meas=GaussHermite.unit_sigma_points(ssm.xD, degree=10),
                      hyp_dyn={'sig_var': 1.0, 'lengthscale': 0.1 * np.ones(ssm.xD, ), 'noise_var': 1e-8},
                      hyp_meas={'sig_var': 1.0, 'lengthscale': 0.1 * np.ones(ssm.xD, ), 'noise_var': 1e-8}),
+        GPQuadKalman(ssm,
+                     usp_dyn=GaussHermite.unit_sigma_points(ssm.xD, degree=15),
+                     usp_meas=GaussHermite.unit_sigma_points(ssm.xD, degree=15),
+                     hyp_dyn={'sig_var': 1.0, 'lengthscale': 0.1 * np.ones(ssm.xD, ), 'noise_var': 1e-8},
+                     hyp_meas={'sig_var': 1.0, 'lengthscale': 0.1 * np.ones(ssm.xD, ), 'noise_var': 1e-8}),
+        GPQuadKalman(ssm,
+                     usp_dyn=GaussHermite.unit_sigma_points(ssm.xD, degree=20),
+                     usp_meas=GaussHermite.unit_sigma_points(ssm.xD, degree=20),
+                     hyp_dyn={'sig_var': 1.0, 'lengthscale': 0.1 * np.ones(ssm.xD, ), 'noise_var': 1e-8},
+                     hyp_meas={'sig_var': 1.0, 'lengthscale': 0.1 * np.ones(ssm.xD, ), 'noise_var': 1e-8})
     )
     num_algs = len(algorithms)
 
@@ -133,41 +158,59 @@ def rmse_nci_tables():
     # evaluate perfomance
     rmseData_f, rmseData_s = rmse(x, mean_f), rmse(x, mean_s)  # averaged RMSE over time steps
     nciData_f, nciData_s = nci(x, mean_f, cov_f), nci(x, mean_s, cov_s)  # averaged NCI over time steps
+    nllData_f, nllData_s = nll(x, mean_f, cov_f), nll(x, mean_s, cov_s)  # averaged NCI over time steps
     # average scores (over MC simulations)
     rmseMean_f, rmseMean_s = rmseData_f.mean(axis=1).T, rmseData_s.mean(axis=1).T
     nciMean_f, nciMean_s = nciData_f.mean(axis=1).T, nciData_s.mean(axis=1).T
+    nllMean_f, nllMean_s = nllData_f.mean(axis=1).T, nllData_s.mean(axis=1).T
     # +/- 2 standard deviations of the scores (using bootstrapping)
     rmseStd_f, rmseStd_s = np.zeros(num_algs), np.zeros(num_algs)
     nciStd_f, nciStd_s = rmseStd_f.copy(), rmseStd_f.copy()
+    nllStd_f, nllStd_s = rmseStd_f.copy(), rmseStd_f.copy()
     for f in range(num_algs):
         rmseStd_f[f] = bootstrap_var(rmseData_f[..., f], samples=1e4)
         rmseStd_s[f] = bootstrap_var(rmseData_s[..., f], samples=1e4)
         nciStd_f[f] = bootstrap_var(nciData_f[..., f], samples=1e4)
         nciStd_s[f] = bootstrap_var(nciData_s[..., f], samples=1e4)
+        nllStd_f[f] = bootstrap_var(nllData_f[..., f], samples=1e4)
+        nllStd_s[f] = bootstrap_var(nllData_s[..., f], samples=1e4)
 
     # put data into Pandas DataFrame for fancy printing and latex export
-    row_labels = ['SR', 'UT', 'GH-5', 'GH-7', 'GH-10']  # [alg.__class__.__name__ for alg in algorithms]
+    row_labels = ['SR', 'UT', 'GH-5', 'GH-7', 'GH-10', 'GH-15',
+                  'GH-20']  # [alg.__class__.__name__ for alg in algorithms]
     col_labels = ['Classical', 'Bayesian', 'Classical (2std)', 'Bayesian (2std)']
-    rmse_table_f = pd.DataFrame(np.hstack((rmseMean_f.reshape(2, 5).T, rmseStd_f.reshape(2, 5).T)), index=row_labels,
+    rmse_table_f = pd.DataFrame(np.hstack((rmseMean_f.reshape(2, 7).T, rmseStd_f.reshape(2, 7).T)), index=row_labels,
                                 columns=col_labels)
-    nci_table_f = pd.DataFrame(np.hstack((nciMean_f.reshape(2, 5).T, nciStd_f.reshape(2, 5).T)), index=row_labels,
+    nci_table_f = pd.DataFrame(np.hstack((nciMean_f.reshape(2, 7).T, nciStd_f.reshape(2, 7).T)), index=row_labels,
                                columns=col_labels)
-    rmse_table_s = pd.DataFrame(np.hstack((rmseMean_s.reshape(2, 5).T, rmseStd_s.reshape(2, 5).T)), index=row_labels,
+    nll_table_f = pd.DataFrame(np.hstack((nllMean_f.reshape(2, 7).T, nllStd_f.reshape(2, 7).T)), index=row_labels,
+                               columns=col_labels)
+    rmse_table_s = pd.DataFrame(np.hstack((rmseMean_s.reshape(2, 7).T, rmseStd_s.reshape(2, 7).T)), index=row_labels,
                                 columns=col_labels)
-    nci_table_s = pd.DataFrame(np.hstack((nciMean_s.reshape(2, 5).T, nciStd_s.reshape(2, 5).T)), index=row_labels,
+    nci_table_s = pd.DataFrame(np.hstack((nciMean_s.reshape(2, 7).T, nciStd_s.reshape(2, 7).T)), index=row_labels,
+                               columns=col_labels)
+    nll_table_s = pd.DataFrame(np.hstack((nllMean_s.reshape(2, 7).T, nllStd_s.reshape(2, 7).T)), index=row_labels,
                                columns=col_labels)
     # print tables
     print 'Filter RMSE'
     print rmse_table_f
     print 'Filter NCI'
     print nci_table_f
+    print 'Filter NLL'
+    print nll_table_f
     print 'Smoother RMSE'
     print rmse_table_s
     print 'Smoother NCI'
     print nci_table_s
+    print 'Smoother NLL'
+    print nll_table_s
     # return computed metrics for filters and smoothers
-    return {'filter_RMSE': (rmseMean_f, rmseStd_f), 'filter_NCI': (nciMean_f, nciStd_f),
-            'smoother_RMSE': (rmseMean_s, rmseStd_s), 'smoother_NCI': (nciMean_s, nciStd_s)}
+    return {'filter_RMSE': (rmseMean_f, rmseStd_f),
+            'filter_NCI': (nciMean_f, nciStd_f),
+            'filter_NLL': (nllMean_f, nllStd_f),
+            'smoother_RMSE': (rmseMean_s, rmseStd_s),
+            'smoother_NCI': (nciMean_s, nciStd_s),
+            'smoother_NLL': (nllMean_s, nllStd_s)}
 
 
 def hypers_demo():
@@ -186,19 +229,21 @@ def hypers_demo():
         for s in range(mc):
             mean_f[..., s, iel], cov_f[..., s, iel] = f.forward_pass(z[..., s])
 
-    # compute average (over MC sims) RMSE and NCI
+    # compute average (over MC sims) RMSE and NCI and NLL
     rmseVsEl = rmse(x, mean_f).mean(axis=1)
     nciVsEl = nci(x, mean_f, cov_f).mean(axis=1)
-    # plot influence of changing lengthscale on the RMSE and NCI filter performance
+    nllVsEl = nll(x, mean_f, cov_f).mean(axis=1)
+    # plot influence of changing lengthscale on the RMSE and NCI and NLL filter performance
     plt.figure()
     plt.semilogx(lscale, rmseVsEl.squeeze(), color='k', ls='-', lw=2, marker='o', label='RMSE')
     plt.semilogx(lscale, nciVsEl.squeeze(), color='k', ls='--', lw=2, marker='o', label='NCI')
+    plt.semilogx(lscale, nllVsEl.squeeze(), color='k', ls='-.', lw=2, marker='o', label='NLL')
     plt.grid(True)
     plt.legend()
     plt.show()
-    return lscale, rmseVsEl, nciVsEl
+    return lscale, rmseVsEl, nciVsEl, nllVsEl
 
 
 if __name__ == '__main__':
-    rmse_nci_tables()
+    tables()
     hypers_demo()
