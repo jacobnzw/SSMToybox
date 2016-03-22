@@ -200,10 +200,12 @@ class GPQuadDer(BayesianQuadratureTransform):
     """
 
     # TODO: boolean mask indicating which sigmas have derivative obs.
-    def __init__(self, dim, unit_sp=None, hypers=None):
+    def __init__(self, dim, unit_sp=None, hypers=None, which_der=None):
         super(GPQuadDer, self).__init__(dim, unit_sp, hypers)
         # get number of sigmas (n) and dimension of sigmas (d)
         self.d, self.n = self.unit_sp.shape
+        # assume derivatives evaluated at all sigmas if unspecified
+        self.which_der = which_der if which_der is not None else np.arange(self.n)
         # GPy RBF kernel with given hypers
         # self.kern = RBF(self.d, variance=self.hypers['sig_var'], lengthscale=self.hypers['lengthscale'], ARD=True)
 
@@ -269,7 +271,7 @@ class GPQuadDer(BayesianQuadratureTransform):
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
         return wm, Wc, Wcc
 
-    def weights_affine(self, unit_sp, hypers):
+    def weights_affine(self, unit_sp, hypers):  # FIXME: weights still seem fishy, not symmetric etc.
         d, n = unit_sp.shape
         # GP kernel hyper-parameters
         alpha, el, jitter = hypers['bias'], hypers['variance'], hypers['noise_var']
@@ -281,23 +283,31 @@ class GPQuadDer(BayesianQuadratureTransform):
         K = self.kern_affine_der(unit_sp, hypers)  # evaluate kernel matrix BOTTLENECK
         iK = cho_solve(cho_factor(K + jitter * eye_y), eye_y)  # invert kernel matrix BOTTLENECK
         q_tilde = np.hstack((alpha ** 2 * np.ones(n), np.zeros(n * d)))
+        # q_tilde = np.hstack((alpha ** 2 * np.ones(n), unit_sp.T.dot(Lam).reshape(n*d)))
         # weights for mean
         wm = q_tilde.dot(iK)
 
         #  quantities for cross-covariance "weights"  # FIXME: did I choose the right expressions? (other are possible)
         R_tilde = np.hstack((Lam.dot(unit_sp), np.tile(Lam, (1, n))))  # (D, N+N*D)
+        # R_tilde = np.hstack((Lam.dot(unit_sp), np.zeros((d, n*d))))
         # input-output covariance (cross-covariance) "weights"
         Wcc = R_tilde.dot(iK)  # (D, N+N*D)
         # expectations of products of kernels
         E_ff_ff = alpha ** 2 + unit_sp.T.dot(Lam).dot(Lam).dot(unit_sp)
-        E_ff_fd = np.tile(alpha ** 2 * unit_sp.T.dot(Lam), (1, n))
-        E_dd_dd = np.tile(Lam, (n, n))
-        Q_tilde = np.vstack((np.hstack((E_ff_ff, E_ff_fd)), np.hstack((E_ff_fd.T, E_dd_dd))))
+        E_ff_fd = np.tile(unit_sp.T.dot(Lam).dot(Lam), (1, n))
+        E_df_fd = np.tile(Lam.dot(Lam), (n, n))
+        # E_ff_fd = np.tile(alpha ** 2 * unit_sp.T.dot(Lam), (1, n))
+        # uspLam = unit_sp.T.dot(Lam)
+        # E_df_fd = (uspLam[:, na, :, na] * uspLam[na, :, na, :]).swapaxes(0, 3).reshape(d * n, -1)
+        Q_tilde = np.vstack((np.hstack((E_ff_ff, E_ff_fd)), np.hstack((E_ff_fd.T, E_df_fd))))
+
         # weights for covariance
         iKQ = iK.dot(Q_tilde)
         Wc = iKQ.dot(iK)
+
         # model variance
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
+        assert self.model_var > 0
         return wm, Wc, Wcc
 
     @staticmethod
@@ -340,11 +350,14 @@ class GPQuadDer(BayesianQuadratureTransform):
         return self.weights_affine(sigma_points, hypers)
 
     def _fcn_eval(self, fcn, x, fcn_pars):
-        # wanna have as many columns as output dims, one column includes function and derivative evaluations
+        # should return as many columns as output dims, one column includes function and derivative evaluations
         # for every sigma-point, thus it is (n + n*d,); n = # sigma-points, d = sigma-point dimensionality
         # fx should be (n + n*d, e); e = output dimensionality
+        # evaluate function at sigmas (e, n)
         fx = np.apply_along_axis(fcn, 0, x, fcn_pars)
-        dfx = np.apply_along_axis(fcn, 0, x, fcn_pars, dx=True)  # Jacobians evaluated at x
+        # Jacobians evaluated only at sigmas specified by which_der array
+        dfx = np.zeros((fx.shape[0] * self.d, self.n))
+        dfx[:, self.which_der] = np.apply_along_axis(fcn, 0, x[:, self.which_der], fcn_pars, dx=True)
         # stack function values and derivative values into one column
         return np.vstack((fx.T, dfx.T.reshape(self.d * self.n, -1))).T
 
