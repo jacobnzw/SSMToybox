@@ -205,7 +205,7 @@ class GPQuadDer(BayesianQuadratureTransform):
         # get number of sigmas (n) and dimension of sigmas (d)
         self.d, self.n = self.unit_sp.shape
         # GPy RBF kernel with given hypers
-        self.kern = RBF(self.d, variance=self.hypers['sig_var'], lengthscale=self.hypers['lengthscale'], ARD=True)
+        # self.kern = RBF(self.d, variance=self.hypers['sig_var'], lengthscale=self.hypers['lengthscale'], ARD=True)
 
     def weights_rbf(self, unit_sp, hypers):
         d, n = unit_sp.shape
@@ -285,12 +285,12 @@ class GPQuadDer(BayesianQuadratureTransform):
         wm = q_tilde.dot(iK)
 
         #  quantities for cross-covariance "weights"  # FIXME: did I choose the right expressions? (other are possible)
-        R_tilde = np.hstack((Lam.dot(X), np.tile(Lam, (1, n))))  # (D, N+N*D)
+        R_tilde = np.hstack((Lam.dot(unit_sp), np.tile(Lam, (1, n))))  # (D, N+N*D)
         # input-output covariance (cross-covariance) "weights"
         Wcc = R_tilde.dot(iK)  # (D, N+N*D)
         # expectations of products of kernels
-        E_ff_ff = alpha ** 2 + X.T.dot(Lam).dot(Lam).dot(X)
-        E_ff_fd = np.tile(alpha ** 2 * X.T.dot(Lam), (1, n))
+        E_ff_ff = alpha ** 2 + unit_sp.T.dot(Lam).dot(Lam).dot(unit_sp)
+        E_ff_fd = np.tile(alpha ** 2 * unit_sp.T.dot(Lam), (1, n))
         E_dd_dd = np.tile(Lam, (n, n))
         Q_tilde = np.vstack((np.hstack((E_ff_ff, E_ff_fd)), np.hstack((E_ff_fd.T, E_dd_dd))))
         # weights for covariance
@@ -330,14 +330,14 @@ class GPQuadDer(BayesianQuadratureTransform):
         # extract hypers
         alpha, el, jitter = hypers['bias'], hypers['variance'], hypers['noise_var']
         assert len(el) == d
-        Lam = diag(el ** 2)
+        Lam = np.diag(el ** 2)
         Kff = alpha ** 2 + X.T.dot(Lam).dot(X)
-        Kfd = X.T.dot(Lam)
-        Kdd = alpha ** 2 * np.eye(n * d)
+        Kfd = np.tile(X.T.dot(Lam), (1, n))
+        Kdd = np.tile(Lam, (n, n))
         return np.vstack((np.hstack((Kff, Kfd)), np.hstack((Kfd.T, Kdd))))
 
     def _weights(self, sigma_points, hypers):
-        return self.weights_rbf(sigma_points, hypers)
+        return self.weights_affine(sigma_points, hypers)
 
     def _fcn_eval(self, fcn, x, fcn_pars):
         # wanna have as many columns as output dims, one column includes function and derivative evaluations

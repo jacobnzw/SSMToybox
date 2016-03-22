@@ -5,7 +5,7 @@ import numpy as np
 
 from models.ungm import UNGM
 from models.pendulum import Pendulum
-from transforms.bayesquad import GPQuad
+from transforms.bayesquad import GPQuad, GPQuadDer
 from transforms.quad import Unscented, GaussHermite
 
 
@@ -17,7 +17,7 @@ class GPQuadTest(unittest.TestCase):
         unit_sp = Unscented.unit_sigma_points(n, np.sqrt(n + lam))
         hypers = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones((n,)), 'noise_var': 1e-8}
         tf = GPQuad(unit_sp, hypers)
-        wm, wc, wcc = tf.weights_rbf()
+        wm, wc, wcc = tf.weights_rbf(unit_sp, hypers)
         # print 'wm = \n{}\nwc = \n{}\nwcc = \n{}'.format(wm, wc, wcc)
         # print 'GP model variance: {}'.format(tf.model_var)
 
@@ -59,3 +59,22 @@ class GPQuadTest(unittest.TestCase):
         sys = UNGM()
         tf.plot_gp_model(sys.dyn_eval, unit_sp, np.atleast_1d(1.0), test_range=(-5, 5, 50), plot_dims=(0, 0))
         # tf.plot_gp_model(sys.meas_eval, unit_sp, np.atleast_1d(1.0), test_range=(-5, 5, 50), plot_dims=(0, 0))
+
+
+class GPQuadDerTest(unittest.TestCase):
+    def test_kern_affine(self):
+        d = 2
+        kappa, alpha, beta = 0, 1.0, 2.0
+        unit_sp = Unscented.unit_sigma_points(d, kappa, alpha, beta)
+        hypers = {'bias': 1.0, 'variance': 1.0 * np.ones((d,)), 'noise_var': 1e-8}
+        kern_mat = GPQuadDer.kern_affine_der(unit_sp, hypers)
+        d, n = unit_sp.shape
+        self.assertEqual(kern_mat.shape, (n + n * d, n + n * d))
+
+    def test_weights_affine(self):
+        d = 2
+        kappa, alpha, beta = 0, 1.0, 2.0
+        unit_sp = Unscented.unit_sigma_points(d, kappa, alpha, beta)
+        hypers = {'bias': 1.0, 'variance': 1.0 * np.ones((d,)), 'noise_var': 1e-8}
+        tf = GPQuadDer(d, unit_sp=unit_sp, hypers=hypers)
+        wm, wc, wcc = tf.weights_affine(unit_sp, hypers)
