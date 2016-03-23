@@ -272,7 +272,7 @@ class GPQuadDer(BayesianQuadratureTransform):
         return wm, Wc, Wcc
 
     # TODO: extract this to an extra class dealing with affine kernel only, use GPy's Linear + Bias for plotting
-    def weights_affine(self, unit_sp, hypers):  # FIXME: weights still seem fishy, not symmetric etc.
+    def weights_affine(self, unit_sp, hypers):
         d, n = unit_sp.shape
         # GP kernel hyper-parameters
         alpha, el, jitter = hypers['bias'], hypers['variance'], hypers['noise_var']
@@ -288,11 +288,11 @@ class GPQuadDer(BayesianQuadratureTransform):
         # weights for mean
         wm = q_tilde.dot(iK)
 
-        #  quantities for cross-covariance "weights"  # FIXME: did I choose the right expressions? (other are possible)
+        #  quantities for cross-covariance "weights"  # FIXME: did I choose the right expressions?
         R_tilde = np.hstack((Lam.dot(unit_sp), np.tile(Lam, (1, n))))  # (D, N+N*D)
         # R_tilde = np.hstack((Lam.dot(unit_sp), np.zeros((d, n*d))))
         # input-output covariance (cross-covariance) "weights"
-        Wcc = R_tilde.dot(iK)  # (D, N+N*D)
+        Wcc = R_tilde.dot(iK)  # (D, N+N*D)  # FIXME: weights still seem fishy, not symmetric etc.
         # expectations of products of kernels
         E_ff_ff = alpha ** 2 + unit_sp.T.dot(Lam).dot(Lam).dot(unit_sp)
         E_ff_fd = np.tile(unit_sp.T.dot(Lam).dot(Lam), (1, n))
@@ -307,8 +307,8 @@ class GPQuadDer(BayesianQuadratureTransform):
         Wc = iKQ.dot(iK)
 
         # model variance
-        self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
-        assert self.model_var > 0
+        self.model_var = np.diag((alpha ** 2 + np.trace(Lam) - np.trace(iKQ)) * np.ones((d, 1)))
+        assert self.model_var >= 0
         return wm, Wc, Wcc
 
     @staticmethod
@@ -376,7 +376,8 @@ class GPQuadDer(BayesianQuadratureTransform):
         plt.show()
 
     def _weights(self, sigma_points, hypers):
-        return self.weights_rbf(sigma_points, hypers)
+        # return self.weights_rbf(sigma_points, hypers)
+        return self.weights_affine(sigma_points, hypers)
 
     def _fcn_eval(self, fcn, x, fcn_pars):
         # should return as many columns as output dims, one column includes function and derivative evaluations

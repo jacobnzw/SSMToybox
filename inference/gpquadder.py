@@ -39,8 +39,8 @@ def main():
     from models.ungm import ungm_filter_demo
     from models.pendulum import pendulum_filter_demo
     der_mask = np.array([0])
-    # hyp = {'bias': 1.1, 'variance': 0.1 * np.ones((1,)), 'noise_var': 1e-8}
-    hyp = {'sig_var': 1.0, 'lengthscale': 0.1 * np.ones((1,)), 'noise_var': 1e-8}
+    hyp = {'bias': 1.0, 'variance': 1.0 * np.ones((1,)), 'noise_var': 1e-16}
+    # hyp = {'sig_var': 1.0, 'lengthscale': 1.0 * np.ones((1,)), 'noise_var': 1e-8}
     usp = np.zeros((1, 1))  # central sigma, GPQuadDerKalman ~= EKF)
     # usp = Unscented.unit_sigma_points(1)
     ungm_filter_demo(GPQuadDerKalman,
