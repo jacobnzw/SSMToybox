@@ -205,12 +205,8 @@ def tables():
     print 'Smoother NLL'
     print nll_table_s
     # return computed metrics for filters and smoothers
-    return {'filter_RMSE': (rmseMean_f, rmseStd_f),
-            'filter_NCI': (nciMean_f, nciStd_f),
-            'filter_NLL': (nllMean_f, nllStd_f),
-            'smoother_RMSE': (rmseMean_s, rmseStd_s),
-            'smoother_NCI': (nciMean_s, nciStd_s),
-            'smoother_NLL': (nllMean_s, nllStd_s)}
+    return {'filter_RMSE': rmse_table_f, 'filter_NCI': nci_table_f, 'filter_NLL': nll_table_f,
+            'smoother_RMSE': rmse_table_s, 'smoother_NCI': nci_table_s, 'smoother_NLL': nll_table_s}
 
 
 def hypers_demo():
@@ -245,5 +241,5 @@ def hypers_demo():
 
 
 if __name__ == '__main__':
-    tables()
-    hypers_demo()
+    tables_dict = tables()
+    metrics_vs_el = hypers_demo()
