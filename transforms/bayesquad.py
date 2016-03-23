@@ -59,18 +59,17 @@ class GPQuad(BayesianQuadratureTransform):
         L = np.exp((zet[:, na] + zet[:, na].T) + maha(inp, -inp, V=0.5 * inv(R)))
         q = c * l  # evaluations of the kernel mean map (from the viewpoint of RHKS methods)
         # mean weights
-        wm_f = q.dot(iK)
+        wm = q.dot(iK)
         iKQ = iK.dot(t * L)
         # covariance weights
-        wc_f = iKQ.dot(iK)
+        Wc = iKQ.dot(iK)
         # cross-covariance "weights"
-        wc_fx = np.diag(q).dot(iK)
-        # used for self.D.dot(x - mean).dot(wc_fx).dot(fx)
-        self.D = inv(eye_d + np.diag(el ** 2))  # S(S+Lam)^-1; for S=I, (I+Lam)^-1
+        mu_q = inv(np.diag(el ** 2) + eye_d).dot(unit_sp)  # (d, n)
+        Wcc = (q[na, :] * mu_q).dot(iK)  # (d, n)
         # model variance; to be added to the covariance
         # this diagonal form assumes independent GP outputs (cov(f^a, f^b) = 0 for all a, b: a neq b)
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
-        return wm_f, wc_f, wc_fx
+        return wm, Wc, Wcc
 
     def plot_gp_model(self, f, unit_sp, args, test_range=(-5, 5, 50), plot_dims=(0, 0)):
         # plot out_dim vs. in_dim
@@ -106,14 +105,14 @@ class GPQuad(BayesianQuadratureTransform):
     def _fcn_eval(self, fcn, x, fcn_pars):
         return np.apply_along_axis(fcn, 0, x, fcn_pars)
 
-    def _mean(self, weights, fcn_evals):
+    def _mean(self, weights, fcn_evals):  # TODO: pull these definitions out to parent class
         return fcn_evals.dot(weights)
 
     def _covariance(self, weights, fcn_evals, mean_out):
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + self.model_var
 
-    def _cross_covariance(self, weights, fcn_evals, x, mean_out, mean_in):
-        return fcn_evals.dot(weights.T).dot((x - mean_in).T).dot(self.D)
+    def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
+        return fcn_evals.dot(weights.T).dot(chol_cov_in.T)
 
     def _int_var_rbf(self, X, hyp, jitter=1e-8):
         """
@@ -397,8 +396,8 @@ class GPQuadDer(BayesianQuadratureTransform):
     def _covariance(self, weights, fcn_evals, mean_out):
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + self.model_var
 
-    def _cross_covariance(self, weights, fcn_evals, x, mean_out, mean_in):
-        return fcn_evals.dot(weights.T) - np.outer(mean_out, mean_in.T)
+    def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
+        return fcn_evals.dot(weights.T).dot(chol_cov_in)
 
 
 class GPQuadAlt(GPQuad):

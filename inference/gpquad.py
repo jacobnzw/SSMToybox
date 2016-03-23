@@ -22,12 +22,12 @@ class GPQuadKalman(StateSpaceInference):
 
 def main():
     from models.ungm import ungm_filter_demo
-    hdyn = {'sig_var': 30.0, 'lengthscale': 1.0 * np.ones(1, ), 'noise_var': 1e-8}
-    hmeas = {'sig_var': 10.0, 'lengthscale': 1.0 * np.ones(1, ), 'noise_var': 1e-8}
+    from models.pendulum import pendulum_filter_demo
+    hdyn = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(2, ), 'noise_var': 1e-16}
+    hmeas = {'sig_var': 1.0, 'lengthscale': 10.0 * np.ones(2, ), 'noise_var': 1e-16}
     # hdyn, hmeas = None, None
-    ungm_filter_demo(GPQuadKalman, hyp_dyn=hdyn, hyp_meas=hmeas)
-    # from models.pendulum import pendulum_filter_demo
-    # pendulum_filter_demo(GPQuadKalman)
+    # ungm_filter_demo(GPQuadKalman, hyp_dyn=hdyn, hyp_meas=hmeas)
+    pendulum_filter_demo(GPQuadKalman, hyp_dyn=hdyn, hyp_meas=hmeas)
 
 
 if __name__ == '__main__':

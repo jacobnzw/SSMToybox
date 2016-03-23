@@ -43,11 +43,12 @@ class BayesianQuadratureTransform(MomentTransform):
     def apply(self, f, mean, cov, pars):
         # method defined in terms of abstract private functions for computing mean, covariance and cross-covariance
         mean = mean[:, na]
-        x = mean + cholesky(cov).dot(self.unit_sp)
+        chol_cov = cholesky(cov)
+        x = mean + chol_cov.dot(self.unit_sp)
         fx = self._fcn_eval(f, x, pars)
         mean_f = self._mean(self.wm, fx)
         cov_f = self._covariance(self.Wc, fx, mean_f)
-        cov_fx = self._cross_covariance(self.Wcc, fx, x, mean_f, mean)
+        cov_fx = self._cross_covariance(self.Wcc, fx, chol_cov)
         return mean_f, cov_f, cov_fx
 
     def default_sigma_points(self, dim):
@@ -75,5 +76,5 @@ class BayesianQuadratureTransform(MomentTransform):
     def _covariance(self, weights, fcn_evals, mean_out):
         raise NotImplementedError
 
-    def _cross_covariance(self, weights, fcn_evals, x, mean_out, mean_in):
+    def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
         raise NotImplementedError
