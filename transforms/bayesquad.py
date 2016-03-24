@@ -375,8 +375,8 @@ class GPQuadDer(BayesianQuadratureTransform):
         plt.show()
 
     def _weights(self, sigma_points, hypers):
-        # return self.weights_rbf(sigma_points, hypers)
-        return self.weights_affine(sigma_points, hypers)
+        return self.weights_rbf(sigma_points, hypers)
+        # return self.weights_affine(sigma_points, hypers)
 
     def _fcn_eval(self, fcn, x, fcn_pars):
         # should return as many columns as output dims, one column includes function and derivative evaluations
@@ -442,19 +442,18 @@ class TPQuad(BayesianQuadratureTransform):
         L = np.exp((zet[:, na] + zet[:, na].T) + maha(inp, -inp, V=0.5 * inv(R)))
         q = c * l  # evaluations of the kernel mean map (from the viewpoint of RHKS methods)
         # mean weights
-        wm_f = q.dot(iK)
+        wm = q.dot(iK)
         iKQ = iK.dot(t * L)
         # covariance weights
-        wc_f = iKQ.dot(iK)
+        Wc = iKQ.dot(iK)
         # cross-covariance "weights"
-        wc_fx = np.diag(q).dot(iK)
+        mu_q = inv(np.diag(el ** 2) + eye_d).dot(unit_sp)  # (d, n)
+        Wcc = (q[na, :] * mu_q).dot(iK)  # (d, n)
         self.iK = iK
-        # used for self.D.dot(x - mean).dot(wc_fx).dot(fx)
-        self.D = inv(eye_d + np.diag(el ** 2))  # S(S+Lam)^-1; for S=I, (I+Lam)^-1
         # model variance; to be added to the covariance
         # this diagonal form assumes independent GP outputs (cov(f^a, f^b) = 0 for all a, b: a neq b)
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
-        return wm_f, wc_f, wc_fx
+        return wm, Wc, Wcc
 
     def _weights(self, sigma_points, hypers):
         return self.weights_rbf(sigma_points, hypers)
@@ -469,9 +468,8 @@ class TPQuad(BayesianQuadratureTransform):
         scale = (self.nu - 2 + fcn_evals.dot(self.iK).dot(fcn_evals.T)) / (self.nu - 2 + self.n)
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + scale * self.model_var
 
-    def _cross_covariance(self, weights, fcn_evals, x, mean_out, mean_in):
-        # return self.D.dot(x - mean_in).dot(weights).dot(fcn_evals.T)
-        return fcn_evals.dot(weights).dot((x - mean_in).T).dot(self.D)
+    def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
+        return fcn_evals.dot(weights.T).dot(chol_cov_in.T)
 
 # TODO: add GPQ+TD (total derivative observations)
 # TODO: add GPQ+DIV (divergence observations)

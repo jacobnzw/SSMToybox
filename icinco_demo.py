@@ -209,11 +209,11 @@ def tables():
             'smoother_RMSE': rmse_table_s, 'smoother_NCI': nci_table_s, 'smoother_NLL': nll_table_s}
 
 
-def hypers_demo():
+def hypers_demo(lscale=[1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1, 3, 1e1, 3e1]):
     steps, mc = 500, 20
     ssm = UNGM()  # initialize UNGM model
     x, z = ssm.simulate(steps, mc_sims=mc)  # generate some data
-    lscale = [1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1, 3, 1e1, 3e1]  # , 1e2, 3e2]
+    # lscale = [1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1, 3, 1e1, 3e1]  # , 1e2, 3e2]
     sigmas_ut = Unscented.unit_sigma_points(ssm.xD, kappa=0.0)
     mean_f, cov_f = np.zeros((ssm.xD, steps, mc, len(lscale))), np.zeros((ssm.xD, ssm.xD, steps, mc, len(lscale)))
     for iel, el in enumerate(lscale):
@@ -237,9 +237,10 @@ def hypers_demo():
     plt.grid(True)
     plt.legend()
     plt.show()
-    return lscale, rmseVsEl, nciVsEl, nllVsEl
+    plot_data = {'el': lscale, 'rmse': rmseVsEl, 'nci': nciVsEl, 'nll': nllVsEl}
+    return plot_data
 
 
 if __name__ == '__main__':
     tables_dict = tables()
-    metrics_vs_el = hypers_demo()
+    plot_data = hypers_demo()
