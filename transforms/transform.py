@@ -71,10 +71,10 @@ class BayesianQuadratureTransform(MomentTransform):
         raise NotImplementedError
 
     def _mean(self, weights, fcn_evals):
-        raise NotImplementedError
+        return fcn_evals.dot(weights)
 
     def _covariance(self, weights, fcn_evals, mean_out):
-        raise NotImplementedError
+        return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + self.model_var
 
     def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
-        raise NotImplementedError
+        return fcn_evals.dot(weights.T).dot(chol_cov_in.T)

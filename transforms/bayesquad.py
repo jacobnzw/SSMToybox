@@ -1,13 +1,13 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 from GPy.kern import RBF
 from numpy import newaxis as na
-from numpy.linalg import det, inv, cholesky
+from numpy.linalg import det, inv
 from scipy.linalg import cho_factor, cho_solve, solve
 from scipy.optimize import minimize
 from scipy.stats import multivariate_normal
 
-from transform import MomentTransform, BayesianQuadratureTransform
+from transform import BayesianQuadratureTransform
 
 
 def maha(x, y, V=None):
@@ -105,15 +105,6 @@ class GPQuad(BayesianQuadratureTransform):
     def _fcn_eval(self, fcn, x, fcn_pars):
         return np.apply_along_axis(fcn, 0, x, fcn_pars)
 
-    def _mean(self, weights, fcn_evals):  # TODO: pull these definitions out to parent class
-        return fcn_evals.dot(weights)
-
-    def _covariance(self, weights, fcn_evals, mean_out):
-        return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + self.model_var
-
-    def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
-        return fcn_evals.dot(weights.T).dot(chol_cov_in.T)
-
     def _int_var_rbf(self, X, hyp, jitter=1e-8):
         """
         Posterior integral variance of the Gaussian Process quadrature.
@@ -198,7 +189,6 @@ class GPQuadDer(BayesianQuadratureTransform):
     Gaussian Process Quadrature which uses derivative observations in addition to function values.
     """
 
-    # TODO: boolean mask indicating which sigmas have derivative obs.
     def __init__(self, dim, unit_sp=None, hypers=None, which_der=None):
         super(GPQuadDer, self).__init__(dim, unit_sp, hypers)
         # get number of sigmas (n) and dimension of sigmas (d)
@@ -283,22 +273,17 @@ class GPQuadDer(BayesianQuadratureTransform):
         K = self.kern_affine_der(unit_sp, hypers)  # evaluate kernel matrix BOTTLENECK
         iK = cho_solve(cho_factor(K + jitter * eye_y), eye_y)  # invert kernel matrix BOTTLENECK
         q_tilde = np.hstack((alpha ** 2 * np.ones(n), np.zeros(n * d)))
-        # q_tilde = np.hstack((alpha ** 2 * np.ones(n), unit_sp.T.dot(Lam).reshape(n*d)))
         # weights for mean
         wm = q_tilde.dot(iK)
 
-        #  quantities for cross-covariance "weights"  # FIXME: did I choose the right expressions?
+        #  quantities for cross-covariance "weights"
         R_tilde = np.hstack((Lam.dot(unit_sp), np.tile(Lam, (1, n))))  # (D, N+N*D)
-        # R_tilde = np.hstack((Lam.dot(unit_sp), np.zeros((d, n*d))))
         # input-output covariance (cross-covariance) "weights"
         Wcc = R_tilde.dot(iK)  # (D, N+N*D)  # FIXME: weights still seem fishy, not symmetric etc.
         # expectations of products of kernels
         E_ff_ff = alpha ** 2 + unit_sp.T.dot(Lam).dot(Lam).dot(unit_sp)
         E_ff_fd = np.tile(unit_sp.T.dot(Lam).dot(Lam), (1, n))
         E_df_fd = np.tile(Lam.dot(Lam), (n, n))
-        # E_ff_fd = np.tile(alpha ** 2 * unit_sp.T.dot(Lam), (1, n))
-        # uspLam = unit_sp.T.dot(Lam)
-        # E_df_fd = (uspLam[:, na, :, na] * uspLam[na, :, na, :]).swapaxes(0, 3).reshape(d * n, -1)
         Q_tilde = np.vstack((np.hstack((E_ff_ff, E_ff_fd)), np.hstack((E_ff_fd.T, E_df_fd))))
 
         # weights for covariance
@@ -390,21 +375,6 @@ class GPQuadDer(BayesianQuadratureTransform):
         # stack function values and derivative values into one column
         return np.vstack((fx.T, dfx.T.reshape(self.d * self.n, -1))).T
 
-    def _mean(self, weights, fcn_evals):
-        return fcn_evals.dot(weights)
-
-    def _covariance(self, weights, fcn_evals, mean_out):
-        return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + self.model_var
-
-    def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
-        return fcn_evals.dot(weights.T).dot(chol_cov_in)
-
-
-class GPQuadAlt(GPQuad):
-    def apply(self, f, mean, cov, pars):
-        # this variant of the GPQuad recomputes weights based on moments (computationally costly)
-        pass
-
 
 class TPQuad(BayesianQuadratureTransform):
     def __init__(self, dim, unit_sp=None, hypers=None, nu=3.0):
@@ -461,15 +431,9 @@ class TPQuad(BayesianQuadratureTransform):
     def _fcn_eval(self, fcn, x, fcn_pars):
         return np.apply_along_axis(fcn, 0, x, fcn_pars)
 
-    def _mean(self, weights, fcn_evals):
-        return fcn_evals.dot(weights)
-
     def _covariance(self, weights, fcn_evals, mean_out):
         scale = (self.nu - 2 + fcn_evals.dot(self.iK).dot(fcn_evals.T)) / (self.nu - 2 + self.n)
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + scale * self.model_var
-
-    def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
-        return fcn_evals.dot(weights.T).dot(chol_cov_in.T)
 
 # TODO: add GPQ+TD (total derivative observations)
 # TODO: add GPQ+DIV (divergence observations)
