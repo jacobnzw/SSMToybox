@@ -18,89 +18,129 @@ class StateSpaceModel(object):
         self.pars = kwargs
 
     def dyn_fcn(self, x, q, pars):
-        """
-        Function of the system dynamics.
+        """ System dynamics.
 
-        :param x: 1-D array_like, of shape (self.xD,)
-            system state
-        :param q: 1-D array_like, of shape (self.qD,)
-            system noise
-        :param pars: 1-D array_like
-            system parameter
-        :return: ndarray, of shape (self.xD,)
+        Abstract method for the system dynamics.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            System state
+        q : 1-D array_like of shape (self.qD,)
+            System noise
+        pars : 1-D array_like
+            Parameters of the system dynamics
+
+        Returns
+        -------
+        1-D numpy.ndarray of shape (self.xD,)
             system state in the next time step
         """
         raise NotImplementedError
 
     def meas_fcn(self, x, r, pars):
-        """
-        Function of the measurement model.
+        """Measurement model.
 
-        :param x: 1-D array_like, of shape (self.xD,)
+        Abstract method for the measurement model.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
             system state
-        :param r: 1-D array_like, of shape (self.rD,)
+        r : 1-D array_like of shape (self.rD,)
             measurement noise
-        :param pars: 1-D array_like
-            system parameter
-        :return: 1-D ndarray, of shape (self.zD,)
+        pars : 1-D array_like
+            parameters of the measurement model
+
+        Returns
+        -------
+        1-D numpy.ndarray of shape (self.zD,)
             measurement of the state
         """
         raise NotImplementedError
 
     def par_fcn(self, time):
-        """
-        Parameter function of the system dynamics and measurement model.
+        """Parameter function of the system dynamics and measurement model.
 
-        :param time: time step
-        :return: 1-D ndarray, of shape (self.pD,)
-            parameter value at a given time, first dimensions are for system parameters,
-            later for the measurement model parameters
+        Abstract method for the parameter function of the whole state-space model. The implementation should ensure
+        that the system dynamics parameters come before the measurement model parameters in the returned vector of
+        parameters.
+
+        Parameters
+        ----------
+        time : int
+            Discrete time step
+
+        Returns
+        -------
+        1-D numpy.ndarray of shape (self.pD,)
+            Vector of parameters at a given time.
         """
         raise NotImplementedError
 
     def dyn_fcn_dx(self, x, q, pars):
-        """
-        Jacobian of the system dynamics.
+        """Jacobian of the system dynamics.
 
-        :param x: 1-D array_like, of shape (self.xD,)
-            system state
-        :param q: 1-D array_like, of shape (self.qD,)
-            system noise
-        :param pars: 1-D array_like, of shape (self.pD,)
-            system parameter
-        :return: 2-D ndarray, of shape (self.xD, in_dim), where in = self.xD (add) or self.xD+self.qD (non-add)
-            Jacobian matrix of the system dynamics, where the second dimension dependes on the noise additivity.
+        Abstract method for the Jacobian of system dynamics. Jacobian is a matrix of first partial derivatives.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            System state
+        q : 1-D array_like of shape (self.qD,)
+            System noise
+        pars : 1-D array_like of shape (self.pD,)
+            System parameter
+
+        Returns
+        -------
+        2-D numpy.ndarray
+            Jacobian matrix of the system dynamics, where the second dimension depends on the noise additivity.
+            The shape depends on whether or not the state noise is additive. The two cases are:
+                * additive: (self.xD, self.xD)
+                * non-additive: (self.xD, self.xD + self.qD)
         """
         raise NotImplementedError
 
     def meas_fcn_dx(self, x, r, pars):
-        """
-        Jacobian of the measurement function.
+        """Jacobian of the measurement model.
 
-        :param x: 1-D array_like, of shape (self.xD,)
-            system state
-        :param r: 1-D array_like, of shape (self.qD,)
-            measurement noise
-        :param pars: 1-D array_like, of shape (self.pD,)
-            measurement model parameter
-        :return: 2-D ndarray, of shape (self.xD, in_dim), where in = self.xD (add) or self.xD+self.rD (non-add)
-            Jacobian matrix of the measurement model, where the second dimension dependes on the noise additivity.
+        Abstract method for the Jacobian of measurement model. Jacobian is a matrix of first partial derivatives.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            System state
+        r : 1-D array_like of shape (self.qD,)
+            Measurement noise
+        pars : 1-D array_like of shape (self.pD,)
+            System parameter
+
+        Returns
+        -------
+        2-D numpy.ndarray
+            Jacobian matrix of the measurement model, where the second dimension depends on the noise additivity.
+            The shape depends on whether or not the state noise is additive. The two cases are:
+                * additive: (self.xD, self.xD)
+                * non-additive: (self.xD, self.xD + self.rD)
         """
         raise NotImplementedError
 
     def dyn_eval(self, xq, pars, dx=False):
-        """
-        Evaluates system dynamics function according to noise additivity.
+        """Evaluation of the system dynamics according to noise additivity.
 
-        :param xq: 1-D array_like
-            augmented system state
-        :param pars:
-            system dynamics parameters
-        :param dx: boolean
-
-        :return:
-            if dx == True returns evaluation of the system dynamics Jacobian
-            if dx == False returns evaluation of the system dynamics
+        Parameters
+        ----------
+        xq : 1-D array_like
+            Augmented system state
+        pars : 1-D array_like
+            System dynamics parameters
+        dx : bool
+            * ``True``: Evaluates derivatives (Jacobian) of the system dynamics
+            * ``False``: Evaluates system dynamics
+        Returns
+        -------
+            Evaluated system dynamics or evaluated Jacobian of the system dynamics.
         """
         if self.q_additive:
             assert len(xq) == self.xD
@@ -118,18 +158,20 @@ class StateSpaceModel(object):
         return out
 
     def meas_eval(self, xr, pars, dx=False):
-        """
-        Evaluates measurement model function according to noise additivity.
+        """Evaluation of the system dynamics according to noise additivity.
 
-        :param xr: 1-D array_like
-            augmented system state
-        :param pars:
-            measurement model parameters
-        :param dx: boolean
-
-        :return:
-            if dx == True returns evaluation of the measurement model Jacobian
-            if dx == False returns evaluation of the measurement model
+        Parameters
+        ----------
+        xr : 1-D array_like
+            Augmented system state
+        pars : 1-D array_like
+            Measurement model parameters
+        dx : bool
+            * ``True``: Evaluates derivatives (Jacobian) of the measurement model
+            * ``False``: Evaluates measurement model
+        Returns
+        -------
+            Evaluated measurement model or evaluated Jacobian of the measurement model.
         """
         if self.r_additive:
             assert len(xr) == self.xD
@@ -147,12 +189,18 @@ class StateSpaceModel(object):
         return out
 
     def check_jacobians(self, h=1e-8):
-        """
-        Checks that both Jacobians are correctly implemented using numerical approximations.
-        Prints the errors, user decides whether they're acceptable.
+        """Checks implemented Jacobians.
 
-        :param h: step size in derivative approximations
-        :return: None
+        Checks that both Jacobians are correctly implemented using numerical approximations.
+
+        Parameters
+        ----------
+        h : float
+            step size in derivative approximations
+
+        Returns
+        -------
+            Prints the errors and user decides whether they're acceptable.
         """
         nq = self.xD if self.q_additive else self.xD + self.qD
         nr = self.xD if self.r_additive else self.xD + self.rD
@@ -177,16 +225,26 @@ class StateSpaceModel(object):
                                                    np.abs(jac_hx - self.meas_eval(xr, par, dx=True)))
 
     def simulate(self, steps, mc_sims=1):
-        """
-        General implementation of the SSM simulation starting from initial conditions for a given number of time steps
+        """State-space model simulation.
 
-        :param steps:
-            number of time steps in state trajectory
-        :param mc_sims:
-            number of trajectories to simulate (the initial state is drawn randomly)
-        :return:
-            arrays with simulated state trajectories and measurements
+        SSM simulation starting from initial conditions for a given number of time steps
+
+        Parameters
+        ----------
+        steps : int
+            Number of time steps in state trajectory
+        mc_sims : int
+            Number of trajectories to simulate (the initial state is drawn randomly)
+
+        Returns
+        -------
+        tuple
+            Tuple (x, z) where both element are of type numpy.ndarray and where:
+
+                * x : 3-D array of shape (self.xD, steps, mc_sims) containing the true system state trajectory
+                * z : 3-D array of shape (self.zD, steps, mc_sims) containing simulated measurements of the system state
         """
+
         x0_mean, x0_cov, q_mean, q_cov, r_mean, r_cov = self.get_pars(
                 'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov'
         )
