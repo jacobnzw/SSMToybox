@@ -28,6 +28,7 @@ usp_0 = np.zeros((ssm.xD, 1))
 usp_ut = Unscented.unit_sigma_points(ssm.xD)
 # set the RBF kernel hyperparameters
 hyp_rbf = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(ssm.xD, ), 'noise_var': 1e-8}
+hyp_rbf_ut = {'sig_var': 8.0, 'lengthscale': 0.5 * np.ones((1,)), 'noise_var': 1e-16}
 hyp_affine = {'bias': 1.0, 'variance': 1.0 * np.ones(ssm.xD, ), 'noise_var': 1e-16}
 # derivative observations only at the central point
 der_mask = np.array([0])
@@ -42,7 +43,7 @@ algorithms = (
     # UKF
     UnscentedKalman(ssm, kappa=0.0),
     # GPQ+D RBF kernel w/ UT sigma-points (derivative at the central point only)
-    GPQuadDerRBFKalman(ssm, usp_ut, usp_ut, hyp_rbf, hyp_rbf, which_der=der_mask),
+    GPQuadDerRBFKalman(ssm, usp_ut, usp_ut, hyp_rbf_ut, hyp_rbf_ut, which_der=der_mask),
     # GPQ+D Hermite kernel w/ UT sigma-points (derivative at the central point only)
     # GPQ+D affine kernel w/ UT sigma-points (could be crap)
 )

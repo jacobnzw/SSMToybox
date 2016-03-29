@@ -457,6 +457,26 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
         return np.vstack((fx.T, dfx.T.reshape(self.d * self.n, -1))).T
 
 
+class GPQuadDerHermite(BayesianQuadratureTransform):
+    def __init__(self, dim, unit_sp=None, hypers=None, which_der=None):
+        super(GPQuadDerRBF, self).__init__(dim, unit_sp, hypers)
+        # get number of sigmas (n) and dimension of sigmas (d)
+        self.d, self.n = self.unit_sp.shape
+        # assume derivatives evaluated at all sigmas if unspecified
+        self.which_der = which_der if which_der is not None else np.arange(self.n)
+        # GPy RBF kernel with given hypers
+        self.kern = RBF(self.d, variance=self.hypers['sig_var'], lengthscale=self.hypers['lengthscale'], ARD=True)
+
+    def weights_hermite(self, unit_sp, hypers):
+        pass
+
+    @staticmethod
+    def kern_hermite_der(X, hypers):
+        # TODO: implement Hermite UT kernel with derivatives
+        pass
+
+
+
 class TPQuad(BayesianQuadratureTransform):
     def __init__(self, dim, unit_sp=None, hypers=None, nu=3.0):
         super(TPQuad, self).__init__(dim, unit_sp, hypers)
