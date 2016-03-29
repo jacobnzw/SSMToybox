@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from GPy.kern import RBF
+from GPy.kern import RBF, Linear, Bias
 from numpy import newaxis as na
 from numpy.linalg import det, inv
 from scipy.linalg import cho_factor, cho_solve, solve
@@ -98,6 +98,14 @@ class GPQuad(BayesianQuadratureTransform):
         plt.legend()
         plt.show()
 
+    def default_sigma_points(self, dim):
+        # create unscented points
+        c = np.sqrt(dim)
+        return np.hstack((np.zeros((dim, 1)), c * np.eye(dim), -c * np.eye(dim)))
+
+    def default_hypers(self, dim):
+        # define default hypers
+        return {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(dim, ), 'noise_var': 1e-8}
 
     def _weights(self, sigma_points, hypers):
         return self.weights_rbf(sigma_points, hypers)
@@ -184,19 +192,131 @@ class GPQuad(BayesianQuadratureTransform):
         pass
 
 
-class GPQuadDer(BayesianQuadratureTransform):
+class GPQuadDerAffine(BayesianQuadratureTransform):
     """
-    Gaussian Process Quadrature which uses derivative observations in addition to function values.
+    Gaussian Process Quadrature with affine kernel which uses derivative observations (in addition to function values).
     """
 
     def __init__(self, dim, unit_sp=None, hypers=None, which_der=None):
-        super(GPQuadDer, self).__init__(dim, unit_sp, hypers)
+        super(GPQuadDerAffine, self).__init__(dim, unit_sp, hypers)
+        # get number of sigmas (n) and dimension of sigmas (d)
+        self.d, self.n = self.unit_sp.shape
+        # assume derivatives evaluated at all sigmas if unspecified
+        self.which_der = which_der if which_der is not None else np.arange(self.n)
+        # GPy Linear + Bias kernel with given hypers
+        self.kern = Linear(dim, variances=hypers['variance']) + Bias(dim, variance=hypers['bias'])
+
+    def weights_affine(self, unit_sp, hypers):
+        d, n = unit_sp.shape
+        # GP kernel hyper-parameters
+        alpha, el, jitter = hypers['bias'], hypers['variance'], hypers['noise_var']
+        assert len(el) == d
+        # pre-allocation for convenience
+        eye_d, eye_n, eye_y = np.eye(d), np.eye(n), np.eye(n + d * n)
+        Lam = np.diag(el ** 2)
+
+        K = self.kern_affine_der(unit_sp, hypers)  # evaluate kernel matrix BOTTLENECK
+        iK = cho_solve(cho_factor(K + jitter * eye_y), eye_y)  # invert kernel matrix BOTTLENECK
+        q_tilde = np.hstack((alpha ** 2 * np.ones(n), np.zeros(n * d)))
+        # weights for mean
+        wm = q_tilde.dot(iK)
+
+        #  quantities for cross-covariance "weights"
+        R_tilde = np.hstack((Lam.dot(unit_sp), np.tile(Lam, (1, n))))  # (D, N+N*D)
+        # input-output covariance (cross-covariance) "weights"
+        Wcc = R_tilde.dot(iK)  # (D, N+N*D)  # FIXME: weights still seem fishy, not symmetric etc.
+        # expectations of products of kernels
+        E_ff_ff = alpha ** 2 + unit_sp.T.dot(Lam).dot(Lam).dot(unit_sp)
+        E_ff_fd = np.tile(unit_sp.T.dot(Lam).dot(Lam), (1, n))
+        E_df_fd = np.tile(Lam.dot(Lam), (n, n))
+        Q_tilde = np.vstack((np.hstack((E_ff_ff, E_ff_fd)), np.hstack((E_ff_fd.T, E_df_fd))))
+
+        # weights for covariance
+        iKQ = iK.dot(Q_tilde)
+        Wc = iKQ.dot(iK)
+
+        # model variance
+        self.model_var = np.diag((alpha ** 2 + np.trace(Lam) - np.trace(iKQ)) * np.ones((d, 1)))
+        assert self.model_var >= 0
+        return wm, Wc, Wcc
+
+    @staticmethod
+    def kern_affine_der(X, hypers):
+        d, n = X.shape
+        # extract hypers
+        alpha, el, jitter = hypers['bias'], hypers['variance'], hypers['noise_var']
+        assert len(el) == d
+        Lam = np.diag(el ** 2)
+        Kff = alpha ** 2 + X.T.dot(Lam).dot(X)
+        Kfd = np.tile(X.T.dot(Lam), (1, n))
+        Kdd = np.tile(Lam, (n, n))
+        return np.vstack((np.hstack((Kff, Kfd)), np.hstack((Kfd.T, Kdd))))
+
+    def plot_gp_model(self, f, unit_sp, args, test_range=(-5, 5, 50), plot_dims=(0, 0)):
+        # TODO: modify kernel evaluations so that the GP fit accounts for derivative information
+        # plot out_dim vs. in_dim
+        in_dim, out_dim = plot_dims
+        # test input must have the same dimension as specified in kernel
+        test = np.linspace(*test_range)
+        test_pts = np.zeros((self.d, len(test)))
+        test_pts[in_dim, :] = test
+        # function value observations at training points (unit sigma-points)
+        y = np.apply_along_axis(f, 0, unit_sp, args)
+        fx = np.apply_along_axis(f, 0, test_pts, args)  # function values at test points
+        K = self.kern.K(unit_sp.T)  # covariances between sigma-points
+        k = self.kern.K(test_pts.T, unit_sp.T)  # covariance between test inputs and sigma-points
+        kxx = self.kern.Kdiag(test_pts.T)  # prior predictive variance
+        k_iK = cho_solve(cho_factor(K), k.T).T
+        gp_mean = k_iK.dot(y[out_dim, :])  # GP mean
+        gp_var = np.diag(np.diag(kxx) - k_iK.dot(k.T))  # GP predictive variance
+        # plot the GP mean, predictive variance and the true function
+        plt.figure()
+        plt.plot(test, fx[out_dim, :], color='r', ls='--', lw=2, label='true')
+        plt.plot(test, gp_mean, color='b', ls='-', lw=2, label='GP mean')
+        plt.fill_between(test, gp_mean + 2 * np.sqrt(gp_var), gp_mean - 2 * np.sqrt(gp_var),
+                         color='b', alpha=0.25, label='GP variance')
+        plt.plot(unit_sp[in_dim, :], y[out_dim, :],
+                 color='k', ls='', marker='o', ms=8, label='data')
+        plt.legend()
+        plt.show()
+
+    def default_sigma_points(self, dim):
+        # one sigma-point
+        return np.zeros((dim, 1))
+
+    def default_hypers(self, dim):
+        # define default hypers
+        return {'bias': 1.0, 'variance': 1.0 * np.ones(dim, ), 'noise_var': 1e-8}
+
+    def _weights(self, sigma_points, hypers):
+        return self.weights_affine(sigma_points, hypers)
+
+    def _fcn_eval(self, fcn, x, fcn_pars):
+        # should return as many columns as output dims, one column includes function and derivative evaluations
+        # for every sigma-point, thus it is (n + n*d,); n = # sigma-points, d = sigma-point dimensionality
+        # fx should be (n + n*d, e); e = output dimensionality
+        # evaluate function at sigmas (e, n)
+        fx = np.apply_along_axis(fcn, 0, x, fcn_pars)
+        # Jacobians evaluated only at sigmas specified by which_der array
+        dfx = np.zeros((fx.shape[0] * self.d, self.n))
+        dfx[:, self.which_der] = np.apply_along_axis(fcn, 0, x[:, self.which_der], fcn_pars, dx=True)
+        # stack function values and derivative values into one column
+        return np.vstack((fx.T, dfx.T.reshape(self.d * self.n, -1))).T
+
+
+class GPQuadDerRBF(BayesianQuadratureTransform):
+    """
+    Gaussian Process Quadrature with RBF kernel which uses derivative observations (in addition to function values).
+    """
+
+    def __init__(self, dim, unit_sp=None, hypers=None, which_der=None):
+        super(GPQuadDerRBF, self).__init__(dim, unit_sp, hypers)
         # get number of sigmas (n) and dimension of sigmas (d)
         self.d, self.n = self.unit_sp.shape
         # assume derivatives evaluated at all sigmas if unspecified
         self.which_der = which_der if which_der is not None else np.arange(self.n)
         # GPy RBF kernel with given hypers
-        # self.kern = RBF(self.d, variance=self.hypers['sig_var'], lengthscale=self.hypers['lengthscale'], ARD=True)
+        self.kern = RBF(self.d, variance=self.hypers['sig_var'], lengthscale=self.hypers['lengthscale'], ARD=True)
 
     def weights_rbf(self, unit_sp, hypers):
         d, n = unit_sp.shape
@@ -260,44 +380,9 @@ class GPQuadDer(BayesianQuadratureTransform):
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
         return wm, Wc, Wcc
 
-    # TODO: extract this to an extra class dealing with affine kernel only, use GPy's Linear + Bias for plotting
-    def weights_affine(self, unit_sp, hypers):
-        d, n = unit_sp.shape
-        # GP kernel hyper-parameters
-        alpha, el, jitter = hypers['bias'], hypers['variance'], hypers['noise_var']
-        assert len(el) == d
-        # pre-allocation for convenience
-        eye_d, eye_n, eye_y = np.eye(d), np.eye(n), np.eye(n + d * n)
-        Lam = np.diag(el ** 2)
-
-        K = self.kern_affine_der(unit_sp, hypers)  # evaluate kernel matrix BOTTLENECK
-        iK = cho_solve(cho_factor(K + jitter * eye_y), eye_y)  # invert kernel matrix BOTTLENECK
-        q_tilde = np.hstack((alpha ** 2 * np.ones(n), np.zeros(n * d)))
-        # weights for mean
-        wm = q_tilde.dot(iK)
-
-        #  quantities for cross-covariance "weights"
-        R_tilde = np.hstack((Lam.dot(unit_sp), np.tile(Lam, (1, n))))  # (D, N+N*D)
-        # input-output covariance (cross-covariance) "weights"
-        Wcc = R_tilde.dot(iK)  # (D, N+N*D)  # FIXME: weights still seem fishy, not symmetric etc.
-        # expectations of products of kernels
-        E_ff_ff = alpha ** 2 + unit_sp.T.dot(Lam).dot(Lam).dot(unit_sp)
-        E_ff_fd = np.tile(unit_sp.T.dot(Lam).dot(Lam), (1, n))
-        E_df_fd = np.tile(Lam.dot(Lam), (n, n))
-        Q_tilde = np.vstack((np.hstack((E_ff_ff, E_ff_fd)), np.hstack((E_ff_fd.T, E_df_fd))))
-
-        # weights for covariance
-        iKQ = iK.dot(Q_tilde)
-        Wc = iKQ.dot(iK)
-
-        # model variance
-        self.model_var = np.diag((alpha ** 2 + np.trace(Lam) - np.trace(iKQ)) * np.ones((d, 1)))
-        assert self.model_var >= 0
-        return wm, Wc, Wcc
-
     @staticmethod
     def kern_rbf_der(X, hypers):
-        # TODO: rewrite in Cython, get rid of double loops
+        # TODO: rewrite in Cython, try Numba @jit decorator and get rid of double loops
         D, N = X.shape
         # extract hypers
         alpha, el, jitter = hypers['sig_var'], hypers['lengthscale'], hypers['noise_var']
@@ -317,18 +402,6 @@ class GPQuadDer(BayesianQuadratureTransform):
                 Kfd[i, jstart:jend] = Kff[i, j] * XmX[:, i, j]
                 Kdd[istart:iend, jstart:jend] = Kff[i, j] * (iiLam - np.outer(XmX[:, i, j], XmX[:, i, j]))
         # Kdd = (Kdd + Kdd.T)
-        return np.vstack((np.hstack((Kff, Kfd)), np.hstack((Kfd.T, Kdd))))
-
-    @staticmethod
-    def kern_affine_der(X, hypers):
-        d, n = X.shape
-        # extract hypers
-        alpha, el, jitter = hypers['bias'], hypers['variance'], hypers['noise_var']
-        assert len(el) == d
-        Lam = np.diag(el ** 2)
-        Kff = alpha ** 2 + X.T.dot(Lam).dot(X)
-        Kfd = np.tile(X.T.dot(Lam), (1, n))
-        Kdd = np.tile(Lam, (n, n))
         return np.vstack((np.hstack((Kff, Kfd)), np.hstack((Kfd.T, Kdd))))
 
     def plot_gp_model(self, f, unit_sp, args, test_range=(-5, 5, 50), plot_dims=(0, 0)):
@@ -359,9 +432,17 @@ class GPQuadDer(BayesianQuadratureTransform):
         plt.legend()
         plt.show()
 
+    def default_sigma_points(self, dim):
+        # create unscented points
+        c = np.sqrt(dim)
+        return np.hstack((np.zeros((dim, 1)), c * np.eye(dim), -c * np.eye(dim)))
+
+    def default_hypers(self, dim):
+        # define default hypers
+        return {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(dim, ), 'noise_var': 1e-8}
+
     def _weights(self, sigma_points, hypers):
         return self.weights_rbf(sigma_points, hypers)
-        # return self.weights_affine(sigma_points, hypers)
 
     def _fcn_eval(self, fcn, x, fcn_pars):
         # should return as many columns as output dims, one column includes function and derivative evaluations
@@ -424,6 +505,15 @@ class TPQuad(BayesianQuadratureTransform):
         # this diagonal form assumes independent GP outputs (cov(f^a, f^b) = 0 for all a, b: a neq b)
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
         return wm, Wc, Wcc
+
+    def default_sigma_points(self, dim):
+        # create unscented points
+        c = np.sqrt(dim)
+        return np.hstack((np.zeros((dim, 1)), c * np.eye(dim), -c * np.eye(dim)))
+
+    def default_hypers(self, dim):
+        # define default hypers
+        return {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(dim, ), 'noise_var': 1e-8}
 
     def _weights(self, sigma_points, hypers):
         return self.weights_rbf(sigma_points, hypers)

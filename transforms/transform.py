@@ -52,13 +52,12 @@ class BayesianQuadratureTransform(MomentTransform):
         return mean_f, cov_f, cov_fx
 
     def default_sigma_points(self, dim):
-        # create unscented points
-        c = np.sqrt(dim)
-        return np.hstack((np.zeros((dim, 1)), c * np.eye(dim), -c * np.eye(dim)))
+        # set default sigma-points
+        raise NotImplementedError
 
     def default_hypers(self, dim):
         # define default hypers
-        return {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(dim, ), 'noise_var': 1e-8}
+        raise NotImplementedError
 
     def _weights(self, sigma_points, hypers):
         # implementation will differ based on kernel

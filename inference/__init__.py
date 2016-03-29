@@ -10,6 +10,6 @@ from cubature import CubatureKalman
 from extended import ExtendedKalman
 from gausshermite import GaussHermiteKalman
 from gpquad import GPQuadKalman
-from gpquadder import GPQuadDerKalman
+from gpquadder import GPQuadDerAffineKalman, GPQuadDerRBFKalman
 from tpquad import TPQuadKalman
 from unscented import UnscentedKalman
