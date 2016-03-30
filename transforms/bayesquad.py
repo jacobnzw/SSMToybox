@@ -1,8 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from numba import jit
 from GPy.kern import RBF, Linear, Bias
 from numpy import newaxis as na
 from numpy.linalg import det, inv
+from numpy.polynomial.hermite_e import hermeval
 from scipy.linalg import cho_factor, cho_solve, solve
 from scipy.optimize import minimize
 from scipy.stats import multivariate_normal
@@ -474,6 +476,95 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
     def kern_hermite_der(X, hypers):
         # TODO: implement Hermite UT kernel with derivatives
         pass
+
+    @staticmethod
+    def multihermite(x, ind):
+        """Evaluate multivariate Hermite polynomial.
+
+        Evaluate multi-index Hermite polynomial with indices ind at columns in matrix x.
+
+        Parameters
+        ----------
+        x : 2-D array_like
+
+        ind : 1-D array_like
+            multi-index specifying degree of univariate Hermite polynomials for each input dimension
+        Returns
+        -------
+        1-D array_like of shape (n,)
+
+        """
+        x, ind = np.atleast_2d(x), np.atleast_1d(ind)
+        d, n = x.shape
+        p = np.max(ind)
+        order = np.arange(p + 1)
+        y = np.ones(n)
+        for i in range(d):
+            pmask = (order == ind[i]).astype(int)
+            y = y * hermeval(x[i, :], pmask)
+        return y
+
+    @staticmethod
+    @jit
+    def ind_sum(n, p):
+        """All possible sets of size n containing positive integers summing to p.
+
+        Returns sets organized into columns of (n, n**p) matrix.
+        """
+        if p == 0:
+            iset = np.zeros((n, 1))
+        elif p == 1:
+            iset = np.eye(n)
+        else:
+            iset1 = ind_sum(n, p - 1)  # (n, n**(p-1))
+            iset2 = np.eye(n)  # (n, n)
+            iset = np.zeros((n, n ** p))
+            k = 0
+            for i in range(n ** (p - 1)):
+                for j in range(n):
+                    iset[:, k] = iset1[:, i] + iset2[:, j]
+                    k += 1
+        return iset
+
+    @jit
+    def _kernel_ut(self, x, xp, lamb=np.ones(4)):
+        d, n = x.shape
+        e, m = xp.shape
+        assert d == e
+        assert lamb.ndim == 1
+        K = np.zeros((n, m))
+        for i in range(n):
+            for j in range(m):
+                for p in range(4):
+                    iset = ind_sum(3, p)
+                    h = 0
+                    for k in range(3 ** p):
+                        h = h + lamb[p] * self.multihermite(x[:, i], iset[:, k]) * \
+                                self.multihermite(xp[:, j], iset[:, k])
+                    K[i, j] = h
+        return K
+
+    @jit
+    def _kernel_ut_dx(self, x, xp, lamb=np.ones(4)):
+        d, n = x.shape
+        e, m = xp.shape
+        assert d == e
+        assert lamb.ndim == 1
+        K = np.zeros((n, d * m))
+        I = np.eye(d)
+        kdd = np.zeros((d,))
+        for i in range(n):
+            for j in range(m):
+                for p in range(4):
+                    iset = ind_sum(3, p)
+                    h = np.zeros((d,))
+                    for k in range(3 ** p):
+                        for dim in range(d):
+                            kdd[dim] = self.multihermite(xp[:, j], iset[:, k] - I[:, dim])
+                        kdd = iset[:, k] * kdd
+                        h = h + lamb[p] * self.multihermite(x[:, i], iset[:, k]) * kdd
+                    K[i, j] = h
+        return K
 
 
 
