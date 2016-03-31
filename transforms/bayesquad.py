@@ -461,13 +461,22 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
 
 class GPQuadDerHermite(BayesianQuadratureTransform):
     def __init__(self, dim, unit_sp=None, hypers=None, which_der=None):
-        super(GPQuadDerRBF, self).__init__(dim, unit_sp, hypers)
+        super(GPQuadDerHermite, self).__init__(dim, unit_sp, hypers)
         # get number of sigmas (n) and dimension of sigmas (d)
         self.d, self.n = self.unit_sp.shape
         # assume derivatives evaluated at all sigmas if unspecified
         self.which_der = which_der if which_der is not None else np.arange(self.n)
         # GPy RBF kernel with given hypers
-        self.kern = RBF(self.d, variance=self.hypers['sig_var'], lengthscale=self.hypers['lengthscale'], ARD=True)
+        # self.kern = RBF(self.d, variance=self.hypers['sig_var'], lengthscale=self.hypers['lengthscale'], ARD=True)
+
+    def default_sigma_points(self, dim):
+        # create unscented points
+        c = np.sqrt(dim)
+        return np.hstack((np.zeros((dim, 1)), c * np.eye(dim), -c * np.eye(dim)))
+
+    def default_hypers(self, dim):
+        # define default hypers
+        return {'lambdas': np.ones(4), 'noise_var': 1e-8}
 
     def weights_hermite(self, unit_sp, hypers):
         pass
@@ -496,6 +505,7 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
         """
         x, ind = np.atleast_2d(x), np.atleast_1d(ind)
         d, n = x.shape
+        ind[ind < 0] = 0  # convert negative degrees to 0-th degree
         p = np.max(ind)
         order = np.arange(p + 1)
         y = np.ones(n)
@@ -510,13 +520,15 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
         """All possible sets of size n containing positive integers summing to p.
 
         Returns sets organized into columns of (n, n**p) matrix.
+        Original MATLAB code by Simo Sarkka
+        Python code by me.
         """
         if p == 0:
             iset = np.zeros((n, 1))
         elif p == 1:
             iset = np.eye(n)
         else:
-            iset1 = ind_sum(n, p - 1)  # (n, n**(p-1))
+            iset1 = GPQuadDerHermite.ind_sum(n, p - 1)  # (n, n**(p-1))
             iset2 = np.eye(n)  # (n, n)
             iset = np.zeros((n, n ** p))
             k = 0
@@ -526,45 +538,94 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
                     k += 1
         return iset
 
+    @staticmethod
+    def multifactorial(multi_index):
+        return np.apply_along_axis(np.math.factorial, 0, np.atleast_2d(multi_index)).prod()
+
+    def _weights(self, sigma_points, hypers):
+        return None, None, None
+
     @jit
-    def _kernel_ut(self, x, xp, lamb=np.ones(4)):
+    def _kernel_ut(self, x, xs, lamb=np.ones(4)):
+        """Unscented transform covariance function (kernel).
+
+        Unscented transform covariance function is given by
+        ..math::
+        $ k(\mathbf{x}, \mathbf{x}) = \sum_{p=0}^{3}\sum_{q=0}^{3}\sum_{|I|=p}\sum_{|J|=q}
+        (\mathcal{I}!\mathcal{J}!)^{-1} \lambda_{\mathcal{I}, \mathcal{J}}
+        H_{\mathcal{I}}(\mathbf{x})H_{\mathcal{J}}(\mathbf{x}^\prime) $,
+        where ..math:: $ \lambda_{\mathcal{I}, \mathcal{J}} $ are the function hyper-parameters. This form is impractical,
+        because there are
+        ..math:: $ \sum_{p=0}^{3}\sum_{q=0}^{3} d^{p + q} $
+        hyperparameters, .
+
+        For practical reasons, this function implements an approximation of the above UT covariance function, given as
+        ..math::
+        $ k(\mathbf{x}, \mathbf{x}) \approxeq \sum_{p=0}^{3}\sum_{|I|=p}
+        (\mathcal{I}!)^{-2} \lambda_p H_{\mathcal{I}}(\mathbf{x})H_{\mathcal{I}}(\mathbf{x}^\prime) $,
+        which reduces the number of hyper-parameters to 4.
+
+        Parameters
+        ----------
+        x: 2-D numpy.ndarray
+            Training inputs
+        xs: 2-D numpy.ndarray
+            Test inputs
+        lamb: 1-D numpy.ndarray
+            Hyper-parameters
+
+        Returns
+        -------
+
+        """
         d, n = x.shape
-        e, m = xp.shape
+        e, m = xs.shape
         assert d == e
         assert lamb.ndim == 1
         K = np.zeros((n, m))
         for i in range(n):
-            for j in range(m):
+            for j in range(m):  # TODO: no need for these because multihermite can take care of this
                 for p in range(4):
-                    iset = ind_sum(3, p)
+                    iset = self.ind_sum(d, p)
                     h = 0
-                    for k in range(3 ** p):
-                        h = h + lamb[p] * self.multihermite(x[:, i], iset[:, k]) * \
-                                self.multihermite(xp[:, j], iset[:, k])
+                    for k in range(d ** p):
+                        c = self.multifactorial(iset[:, k]) ** -2
+                        h += lamb[p] * c * \
+                             self.multihermite(x[:, i, na], iset[:, k]) * \
+                             self.multihermite(xs[:, j, na], iset[:, k])
                     K[i, j] = h
         return K
 
     @jit
-    def _kernel_ut_dx(self, x, xp, lamb=np.ones(4)):
+    def _kernel_ut_dx(self, x, xs, lamb=np.ones(4)):
         d, n = x.shape
-        e, m = xp.shape
+        e, m = xs.shape
         assert d == e
         assert lamb.ndim == 1
-        K = np.zeros((n, d * m))
+        Kfd = np.zeros((n, d * m))  # covariance between functoin value and derivative
+        Kdd = np.zeros((d * n, d * m))  # covariance between derivatives
         I = np.eye(d)
-        kdd = np.zeros((d,))
+        dHi = np.zeros((d,))  # space for gradient
+        dHj = dHi.copy()
         for i in range(n):
             for j in range(m):
-                for p in range(4):
-                    iset = ind_sum(3, p)
-                    h = np.zeros((d,))
-                    for k in range(3 ** p):
-                        for dim in range(d):
-                            kdd[dim] = self.multihermite(xp[:, j], iset[:, k] - I[:, dim])
-                        kdd = iset[:, k] * kdd
-                        h = h + lamb[p] * self.multihermite(x[:, i], iset[:, k]) * kdd
-                    K[i, j] = h
-        return K
+                # evaluate UT kernel
+                for p in range(4):  # for all degrees
+                    iset = self.ind_sum(d, p)
+                    istart, iend = i * d, i * d + d
+                    jstart, jend = j * d, j * d + d
+                    for k in range(d ** p):  # for all multi-indexes
+                        # evaluate gradient of multivariate Hermite polynomial
+                        for dim in range(d):  # for all datapoint dimensions
+                            multi_ind = iset[:, k] - I[:, dim]
+                            dHi[dim] = self.multihermite(x[:, i, na], multi_ind)
+                            dHj[dim] = self.multihermite(xs[:, j, na], multi_ind)
+                        dHi *= iset[:, k]  # element-wise product with multi-index
+                        dHj *= iset[:, k]
+                        c = self.multifactorial(iset[:, k]) ** -2
+                        Kfd[i, jstart:jend] += lamb[p] * c * self.multihermite(x[:, i, na], iset[:, k]) * dHj
+                        Kdd[istart:iend, jstart:jend] += lamb[p] * c * np.outer(dHi, dHj)
+        return Kfd, Kdd
 
 
 
