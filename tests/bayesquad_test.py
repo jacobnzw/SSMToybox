@@ -145,3 +145,24 @@ class GPQuadDerHermiteTest(TestCase):
         # plt.plot(evals, ls='-', marker='.', ms=15)
         # plt.title('Eigvals range: [{0:.2e}, {1:.2e}]'.format(evals.min(), evals.max()))
         # plt.show()
+
+    def test_kern_hermite_der(self):
+        x = np.hstack((np.zeros((2, 1)), np.eye(2), -np.eye(2)))
+        d, n = x.shape
+        hyp = {'lambda': np.ones(4)}
+        c = GPQuadDerHermite(1)
+        kmat = c.kern_hermite_der(x, hyp)
+        self.assertEqual(kmat.shape, (n + d * n, n + d * n))
+        self.assertTrue(np.array_equal(kmat, kmat.T))  # check symmetry
+        print "Cond {}".format(la.cond(kmat))
+        la.cholesky(kmat + 1e-8 * np.eye(n + d * n))  # posdef ?
+        x = np.atleast_2d(np.linspace(-3, 3, 25).T)
+        kmat = c.kern_hermite_der(x, hyp)
+        evals = la.eigvals(kmat + 1e-8 * np.eye(50))
+        plt.subplot(121)
+        plt.imshow(kmat, interpolation='none')
+        plt.colorbar()
+        plt.subplot(122)
+        plt.plot(evals, ls='-', marker='.', ms=15)
+        plt.title('Eigvals range: [{0:.2e}, {1:.2e}]'.format(evals.min(), evals.max()))
+        plt.show()

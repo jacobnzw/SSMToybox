@@ -481,10 +481,12 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
     def weights_hermite(self, unit_sp, hypers):
         pass
 
-    @staticmethod
-    def kern_hermite_der(X, hypers):
-        # TODO: implement Hermite UT kernel with derivatives
-        pass
+    def kern_hermite_der(self, X, hypers):
+        lamb = hypers['lambda']
+        kff = self._kernel_ut(X, X, lamb)
+        kfd, kdd = self._kernel_ut_dx(X, X, lamb)
+        # FIXME: returns not posdef matrix, re-derive gradients using the simplified UT kernel
+        return np.vstack((np.hstack((kff, kfd)), np.hstack((kfd.T, kdd))))
 
     @staticmethod
     def multihermite(x, ind):
@@ -545,7 +547,7 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
     def _weights(self, sigma_points, hypers):
         return None, None, None
 
-    @jit
+    # @jit
     def _kernel_ut(self, x, xs, lamb=np.ones(4)):
         """Unscented transform covariance function (kernel).
 
@@ -596,7 +598,7 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
                     K[i, j] = h
         return K
 
-    @jit
+    # @jit
     def _kernel_ut_dx(self, x, xs, lamb=np.ones(4)):
         d, n = x.shape
         e, m = xs.shape
@@ -622,9 +624,9 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
                             dHj[dim] = self.multihermite(xs[:, j, na], multi_ind)
                         dHi *= iset[:, k]  # element-wise product with multi-index
                         dHj *= iset[:, k]
-                        c = self.multifactorial(iset[:, k]) ** -2
-                        Kfd[i, jstart:jend] += lamb[p] * c * self.multihermite(x[:, i, na], iset[:, k]) * dHj
-                        Kdd[istart:iend, jstart:jend] += lamb[p] * c * np.outer(dHi, dHj)
+                        c = lamb[p] * self.multifactorial(iset[:, k]) ** -2
+                        Kfd[i, jstart:jend] += c * self.multihermite(x[:, i, na], iset[:, k]) * dHj
+                        Kdd[istart:iend, jstart:jend] += c * np.outer(dHi, dHj)
         return Kfd, Kdd
 
 
