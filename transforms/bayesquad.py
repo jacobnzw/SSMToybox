@@ -479,11 +479,51 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
         return {'lambdas': np.ones(4), 'noise_var': 1e-8}
 
     def weights_hermite(self, unit_sp, hypers):
-        pass
+        d, n = unit_sp.shape
+        lam, jitter = hypers['lambda'], hypers['jitter']
+        eye_y = np.eye(n + d * n)
+        K = self.kern_hermite_der(unit_sp, hypers)
+        iK = cho_solve(cho_factor(K + jitter * eye_y), eye_y)
+        q_tilde = np.hstack((lam.sum() * np.ones((1, n)), np.zeros((1, d * n))))
+        Eff = 0
+        Effff = np.zeros((n, n))
+        Efffd = np.zeros((n, d * n))
+        Edffd = np.zeros((d * n, d * n))
+        for i in range(n):
+            for j in range(n):
+                istart, iend = i * d, i * d + d
+                jstart, jend = j * d, j * d + d
+                for p in range(4):
+                    multi_ind = self.ind_sum(d, p)
+                    for k in range(d ** p):
+                        h_xi = GPQuadDerHermite.multihermite(unit_sp[:, i, na], multi_ind[:, k])
+                        h_xj = GPQuadDerHermite.multihermite(unit_sp[:, j, na], multi_ind[:, k])
+                        dh_xi = GPQuadDerHermite.multihermite_grad(unit_sp[:, i, na], multi_ind[:, k])
+                        dh_xj = GPQuadDerHermite.multihermite_grad(unit_sp[:, j, na], multi_ind[:, k])
+                        mf = self.multifactorial(multi_ind[:, k])
+                        Eff += mf ** -1 * lam[p]
+                        c = lam[p] * mf ** -3
+                        Effff[i, j] += c * h_xi * h_xj
+                        Efffd[i, jstart:jend] += c * h_xi * dh_xj
+                        Edffd[istart:iend, jstart:jend] += c * np.outer(dh_xi, dh_xj)
+                for q in range(4):
+                    Effff[i, j] += lam[q] * Effff[i, j]
+                    Efffd[i, jstart:jend] += lam[q] * Efffd[i, jstart:jend]
+                    Edffd[istart:iend, jstart:jend] += lam[q] * Edffd[istart:iend, jstart:jend]
+        Q = np.vstack((np.hstack((Effff, Efffd)), np.hstack((Efffd.T, Edffd))))
+        # weights for mean, covariance and cross-covariance pseudo-weights
+        wm = q_tilde.dot(iK)
+        iKQ = iK.dot(Q)
+        Wc = iKQ.dot(iK)
+        Wcc = None  # R.dot(iK)  # TODO: derive and implement expressions for R
+        self.model_var = np.diag((Eff - np.trace(iKQ)) * np.ones((d, 1)))
+        assert np.all(self.model_var >= 0)
+        return wm, Wc, Wcc
 
     def kern_hermite_der(self, X, hypers):
         lamb = hypers['lambda']
         kff = self._kernel_ut(X, X, lamb)
+        # FIXME: high condition number makes me suspicious, Simo: what's the true form of simplified UT covariance?
         kfd, kdd = self._kernel_ut_dx(X, X, lamb)
         return np.vstack((np.hstack((kff, kfd)), np.hstack((kfd.T, kdd))))
 
@@ -514,6 +554,19 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
             pmask = (order == ind[i]).astype(int)
             y = y * hermeval(x[i, :], pmask)
         return y
+
+    @staticmethod
+    def multihermite_grad(x, ind):
+        x, ind = np.atleast_2d(x), np.atleast_1d(ind)
+        d, n = x.shape
+        ind[ind < 0] = 0  # convert negative degrees to 0-th degree
+        assert len(ind) == d
+        I = np.eye(d)
+        grad = np.zeros(d)
+        for dim in range(d):
+            multind = ind - I[:, dim]
+            grad[dim] = GPQuadDerHermite.multihermite(x, multind)
+        return grad * ind
 
     @staticmethod
     @jit

@@ -155,6 +155,14 @@ class GPQuadDerHermiteTest(TestCase):
             kmat = c.kern_hermite_der(x, hyp)
             self.plot_matrix(kmat)
 
+    def test_weights_hermite(self):
+        hyp = {'lambda': np.ones(4), 'jitter': 1e-8}
+        c = GPQuadDerHermite(1, hypers=hyp)
+        d = 2
+        n = 2 * d + 1
+        usp = np.hstack((np.zeros((d, 1)), np.eye(d), -np.eye(d)))
+        wm, wc, wcc = c.weights_hermite(unit_sp=usp, hypers=hyp)
+
     def plot_matrix(self, kmat):
         evals = la.eigvals(kmat + 1e-8 * np.eye(50))
         plt.subplot(121)
