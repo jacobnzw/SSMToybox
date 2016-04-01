@@ -485,7 +485,6 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
         lamb = hypers['lambda']
         kff = self._kernel_ut(X, X, lamb)
         kfd, kdd = self._kernel_ut_dx(X, X, lamb)
-        # FIXME: returns not posdef matrix, re-derive gradients using the simplified UT kernel
         return np.vstack((np.hstack((kff, kfd)), np.hstack((kfd.T, kdd))))
 
     @staticmethod
@@ -595,7 +594,7 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
                         h += lamb[p] * c * \
                              self.multihermite(x[:, i, na], iset[:, k]) * \
                              self.multihermite(xs[:, j, na], iset[:, k])
-                    K[i, j] = h
+                    K[i, j] += h
         return K
 
     # @jit

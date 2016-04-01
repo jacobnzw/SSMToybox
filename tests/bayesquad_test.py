@@ -83,6 +83,8 @@ import time
 
 
 class GPQuadDerHermiteTest(TestCase):
+    plots = False
+
     def test_ind_sum(self):
         res = GPQuadDerHermite.ind_sum(1, 0)
         self.assertTrue(np.array_equal(res, np.zeros((1, 1))))
@@ -115,16 +117,11 @@ class GPQuadDerHermiteTest(TestCase):
         self.assertEqual(kff.shape, (5, 5))  # check shape
         self.assertTrue(np.array_equal(kff, kff.T))  # check symmetry
         la.cholesky(kff + 1e-16 * np.eye(5))  # positive definite?
-        # x = np.atleast_2d(np.linspace(-3, 3, 50).T)
-        # kff = c._kernel_ut(x, x)
-        # evals = la.eigvals(kff)
-        # plt.subplot(121)
-        # plt.imshow(kff, interpolation='none')
-        # plt.colorbar()
-        # plt.subplot(122)
-        # plt.plot(evals, ls='-', marker='.', ms=15)
-        # plt.title('Eigvals range: [{0:.2e}, {1:.2e}]'.format(evals.min(), evals.max()))
-        # plt.show()
+        print "cond(Kff): {}".format(la.cond(kff))
+        if self.plots:
+            x = np.atleast_2d(np.linspace(-3, 3, 50).T)
+            kff = c._kernel_ut(x, x)
+            self.plot_matrix(kff)
 
     def test_kernel_ut_dx(self):
         c = GPQuadDerHermite(1)
@@ -135,16 +132,12 @@ class GPQuadDerHermiteTest(TestCase):
         self.assertEqual(kdd.shape, (d * n, d * n))
         self.assertTrue(np.array_equal(kdd, kdd.T))  # check symmetry
         la.cholesky(kdd + 1e-8 * np.eye(10))  # posdef ?
-        # x = np.atleast_2d(np.linspace(-3, 3, 50).T)
-        # kfd, kdd = c._kernel_ut_dx(x, x)
-        # evals = la.eigvals(kdd + 1e-16*np.eye(50))
-        # plt.subplot(121)
-        # plt.imshow(kdd, interpolation='none')
-        # plt.colorbar()
-        # plt.subplot(122)
-        # plt.plot(evals, ls='-', marker='.', ms=15)
-        # plt.title('Eigvals range: [{0:.2e}, {1:.2e}]'.format(evals.min(), evals.max()))
-        # plt.show()
+        print "cond(Kfd): {}".format(la.cond(kfd))
+        print "cond(Kdd): {}".format(la.cond(kdd))
+        if self.plots:
+            x = np.atleast_2d(np.linspace(-3, 3, 50).T)
+            kfd, kdd = c._kernel_ut_dx(x, x)
+            self.plot_matrix(kdd)
 
     def test_kern_hermite_der(self):
         x = np.hstack((np.zeros((2, 1)), np.eye(2), -np.eye(2)))
@@ -153,11 +146,16 @@ class GPQuadDerHermiteTest(TestCase):
         c = GPQuadDerHermite(1)
         kmat = c.kern_hermite_der(x, hyp)
         self.assertEqual(kmat.shape, (n + d * n, n + d * n))
-        self.assertTrue(np.array_equal(kmat, kmat.T))  # check symmetry
-        print "Cond {}".format(la.cond(kmat))
+        self.assertTrue(np.array_equal(kmat, kmat.T))  # symmetric ?
+        print "cond(K): {}".format(la.cond(kmat))
+        la.inv(kmat + 1e-8 * np.eye(n + d * n))  # invertible ?
         la.cholesky(kmat + 1e-8 * np.eye(n + d * n))  # posdef ?
-        x = np.atleast_2d(np.linspace(-3, 3, 25).T)
-        kmat = c.kern_hermite_der(x, hyp)
+        if self.plots:
+            x = np.atleast_2d(np.linspace(-3, 3, 25).T)
+            kmat = c.kern_hermite_der(x, hyp)
+            self.plot_matrix(kmat)
+
+    def plot_matrix(self, kmat):
         evals = la.eigvals(kmat + 1e-8 * np.eye(50))
         plt.subplot(121)
         plt.imshow(kmat, interpolation='none')
