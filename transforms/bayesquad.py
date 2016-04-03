@@ -732,6 +732,35 @@ class TPQuad(BayesianQuadratureTransform):
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
         return wm, Wc, Wcc
 
+    def plot_tp_model(self, f, unit_sp, args, test_range=(-5, 5, 50), plot_dims=(0, 0)):
+        # plot out_dim vs. in_dim
+        in_dim, out_dim = plot_dims
+        d, n = unit_sp.shape
+        # test input must have the same dimension as specified in kernel
+        test = np.linspace(*test_range)
+        test_pts = np.zeros((d, len(test)))
+        test_pts[in_dim, :] = test
+        # function value observations at training points (unit sigma-points)
+        y = np.apply_along_axis(f, 0, unit_sp, args)
+        fx = np.apply_along_axis(f, 0, test_pts, args)  # function values at test points
+        K = self.kern.K(unit_sp.T)  # covariances between sigma-points
+        kx = self.kern.K(test_pts.T, unit_sp.T)  # covariance between test inputs and sigma-points
+        kxx = self.kern.Kdiag(test_pts.T)  # prior predictive variance
+        iK = cho_solve(cho_factor(K), np.eye(n))
+        tp_scale = (self.nu - 2 + y.dot(iK).dot(y.T).squeeze()) / (self.nu - 2 + n)
+        tp_mean = kx.dot(iK).dot(y[out_dim, :])  # TP mean
+        tp_var = tp_scale * np.diag(np.diag(kxx) - kx.dot(iK).dot(kx.T))  # TP predictive variance
+        # plot the TP mean, predictive variance and the true function
+        plt.figure()
+        plt.plot(test, fx[out_dim, :], color='r', ls='--', lw=2, label='true')
+        plt.plot(test, tp_mean, color='b', ls='-', lw=2, label='TP mean')
+        plt.fill_between(test, tp_mean + 2 * np.sqrt(tp_var), tp_mean - 2 * np.sqrt(tp_var),
+                         color='b', alpha=0.25, label='TP variance')
+        plt.plot(unit_sp[in_dim, :], y[out_dim, :],
+                 color='k', ls='', marker='o', ms=8, label='data')
+        plt.legend()
+        plt.show()
+
     def default_sigma_points(self, dim):
         # create unscented points
         c = np.sqrt(dim)
