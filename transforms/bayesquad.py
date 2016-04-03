@@ -476,15 +476,15 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
 
     def default_hypers(self, dim):
         # define default hypers
-        return {'lambdas': np.ones(4), 'noise_var': 1e-8}
+        return {'lambda': np.ones(4), 'noise_var': 1e-8}
 
     def weights_hermite(self, unit_sp, hypers):
         d, n = unit_sp.shape
-        lam, jitter = hypers['lambda'], hypers['jitter']
+        lam, jitter = hypers['lambda'], hypers['noise_var']
         eye_y = np.eye(n + d * n)
         K = self.kern_hermite_der(unit_sp, hypers)
         iK = cho_solve(cho_factor(K + jitter * eye_y), eye_y)
-        q_tilde = np.hstack((lam.sum() * np.ones((1, n)), np.zeros((1, d * n))))
+        q_tilde = np.hstack((lam.sum() * np.ones((1, n)), np.zeros((1, d * n)))).squeeze()
         Eff = 0
         Effff = np.zeros((n, n))
         Efffd = np.zeros((n, d * n))
@@ -494,29 +494,31 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
                 istart, iend = i * d, i * d + d
                 jstart, jend = j * d, j * d + d
                 for p in range(4):
-                    multi_ind = self.ind_sum(d, p)
-                    for k in range(d ** p):
-                        h_xi = GPQuadDerHermite.multihermite(unit_sp[:, i, na], multi_ind[:, k])
-                        h_xj = GPQuadDerHermite.multihermite(unit_sp[:, j, na], multi_ind[:, k])
-                        dh_xi = GPQuadDerHermite.multihermite_grad(unit_sp[:, i, na], multi_ind[:, k])
-                        dh_xj = GPQuadDerHermite.multihermite_grad(unit_sp[:, j, na], multi_ind[:, k])
-                        mf = self.multifactorial(multi_ind[:, k])
-                        Eff += mf ** -1 * lam[p]
-                        c = lam[p] * mf ** -3
-                        Effff[i, j] += c * h_xi * h_xj
-                        Efffd[i, jstart:jend] += c * h_xi * dh_xj
-                        Edffd[istart:iend, jstart:jend] += c * np.outer(dh_xi, dh_xj)
-                for q in range(4):
-                    Effff[i, j] += lam[q] * Effff[i, j]
-                    Efffd[i, jstart:jend] += lam[q] * Efffd[i, jstart:jend]
-                    Edffd[istart:iend, jstart:jend] += lam[q] * Edffd[istart:iend, jstart:jend]
+                    for q in range(4):
+                        multi_ind = self.ind_sum(d, p)
+                        for k in range(d ** p):
+                            h_xi = GPQuadDerHermite.multihermite(unit_sp[:, i, na], multi_ind[:, k])
+                            h_xj = GPQuadDerHermite.multihermite(unit_sp[:, j, na], multi_ind[:, k])
+                            dh_xi = GPQuadDerHermite.multihermite_grad(unit_sp[:, i, na], multi_ind[:, k])
+                            dh_xj = GPQuadDerHermite.multihermite_grad(unit_sp[:, j, na], multi_ind[:, k])
+                            mf = self.multifactorial(multi_ind[:, k])
+                            Eff += mf ** -1 * lam[p]
+                            c = lam[p] * lam[q] * mf ** -3
+                            Effff[i, j] += c * h_xi * h_xj
+                            Efffd[i, jstart:jend] += c * h_xi * dh_xj
+                            Edffd[istart:iend, jstart:jend] += c * np.outer(dh_xi, dh_xj)
+                            # for q in range(4):
+                            #     Effff[i, j] += lam[q] * Effff[i, j]
+                            #     Efffd[i, jstart:jend] += lam[q] * Efffd[i, jstart:jend]
+                            #     Edffd[istart:iend, jstart:jend] += lam[q] * Edffd[istart:iend, jstart:jend]
         Q = np.vstack((np.hstack((Effff, Efffd)), np.hstack((Efffd.T, Edffd))))
+        R = lam.sum() * np.hstack((unit_sp, np.tile(np.eye(d), (1, n))))
         # weights for mean, covariance and cross-covariance pseudo-weights
         wm = q_tilde.dot(iK)
         iKQ = iK.dot(Q)
         Wc = iKQ.dot(iK)
-        Wcc = None  # R.dot(iK)  # TODO: derive and implement expressions for R
-        self.model_var = np.diag((Eff - np.trace(iKQ)) * np.ones((d, 1)))
+        Wcc = R.dot(iK)
+        self.model_var = np.diag((Eff - np.trace(iKQ)) * np.ones((d, 1)))  # FIXME: negative average model var
         assert np.all(self.model_var >= 0)
         return wm, Wc, Wcc
 
@@ -596,8 +598,20 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
     def multifactorial(multi_index):
         return np.apply_along_axis(np.math.factorial, 0, np.atleast_2d(multi_index)).prod()
 
+    def _fcn_eval(self, fcn, x, fcn_pars):
+        # should return as many columns as output dims, one column includes function and derivative evaluations
+        # for every sigma-point, thus it is (n + n*d,); n = # sigma-points, d = sigma-point dimensionality
+        # fx should be (n + n*d, e); e = output dimensionality
+        # evaluate function at sigmas (e, n)
+        fx = np.apply_along_axis(fcn, 0, x, fcn_pars)
+        # Jacobians evaluated only at sigmas specified by which_der array
+        dfx = np.zeros((fx.shape[0] * self.d, self.n))
+        dfx[:, self.which_der] = np.apply_along_axis(fcn, 0, x[:, self.which_der], fcn_pars, dx=True)
+        # stack function values and derivative values into one column
+        return np.vstack((fx.T, dfx.T.reshape(self.d * self.n, -1))).T
+
     def _weights(self, sigma_points, hypers):
-        return None, None, None
+        return self.weights_hermite(sigma_points, hypers)
 
     # @jit
     def _kernel_ut(self, x, xs, lamb=np.ones(4)):
