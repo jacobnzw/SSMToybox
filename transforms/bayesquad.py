@@ -194,6 +194,11 @@ class GPQuad(BayesianQuadratureTransform):
         pass
 
 
+class GPQuadHermiteUT(BayesianQuadratureTransform):
+    """Gaussian Process Quadrature transform using UT Hermite polynomial kernel."""
+    pass
+
+
 class GPQuadDerAffine(BayesianQuadratureTransform):
     """
     Gaussian Process Quadrature with affine kernel which uses derivative observations (in addition to function values).
@@ -494,26 +499,21 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
             for j in range(n):
                 istart, iend = i * d, i * d + d
                 jstart, jend = j * d, j * d + d
-                for p in range(4):
-                    for q in range(4):
-                        multi_ind = self.ind_sum(d, p)
-                        for k in range(d ** p):  # for all multi-indexes
-                            mf = self.multifactorial(multi_ind[:, k])
-                            Eff += mf ** -1 * lam[p]
-                            c = lam[p] * lam[q] * mf ** -3
-                            h_xi = GPQuadDerHermite.multihermite(unit_sp[:, i, na], multi_ind[:, k])
-                            h_xj = GPQuadDerHermite.multihermite(unit_sp[:, j, na], multi_ind[:, k])
-                            dh_xi = GPQuadDerHermite.multihermite_grad(unit_sp[:, i, na], multi_ind[:, k])
-                            dh_xj = GPQuadDerHermite.multihermite_grad(unit_sp[:, j, na], multi_ind[:, k])
-                            Effff[i, j] += c * h_xi * h_xj
-                            Efffd[i, jstart:jend] += c * h_xi * dh_xj
-                            Edffd[istart:iend, jstart:jend] += c * np.outer(dh_xi, dh_xj)
-                            # for q in range(4):
-                            #     Effff[i, j] += lam[q] * Effff[i, j]
-                            #     Efffd[i, jstart:jend] += lam[q] * Efffd[i, jstart:jend]
-                            #     Edffd[istart:iend, jstart:jend] += lam[q] * Edffd[istart:iend, jstart:jend]
+                for p in range(4):  # for all orders
+                    multi_ind = self.ind_sum(d, p)
+                    for k in range(d ** p):  # for all multi-indexes
+                        mf = self.multifactorial(multi_ind[:, k])
+                        c = lam[p] ** 2 * mf ** -3
+                        h_xi = GPQuadDerHermite.multihermite(unit_sp[:, i, na], multi_ind[:, k])
+                        h_xj = GPQuadDerHermite.multihermite(unit_sp[:, j, na], multi_ind[:, k])
+                        dh_xi = GPQuadDerHermite.multihermite_grad(unit_sp[:, i, na], multi_ind[:, k])
+                        dh_xj = GPQuadDerHermite.multihermite_grad(unit_sp[:, j, na], multi_ind[:, k])
+                        Eff += mf ** -1 * lam[p]
+                        Effff[i, j] += c * h_xi * h_xj
+                        Efffd[i, jstart:jend] += c * h_xi * dh_xj
+                        Edffd[istart:iend, jstart:jend] += c * np.outer(dh_xi, dh_xj)
         Q = np.vstack((np.hstack((Effff, Efffd)), np.hstack((Efffd.T, Edffd))))  # * d**4
-        R = lam.sum() * np.hstack((unit_sp, np.tile(np.eye(d), (1, n))))
+        R = lam[0] * np.hstack((unit_sp, np.tile(np.eye(d), (1, n))))
         # weights for mean, covariance and cross-covariance pseudo-weights
         wm = q_tilde.dot(iK)
         iKQ = iK.dot(Q)
