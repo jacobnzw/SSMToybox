@@ -485,7 +485,7 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
         K = self.kern_hermite_der(unit_sp, hypers)
         iK = cho_solve(cho_factor(K + jitter * eye_y), eye_y)
         # print "cond(K): {}, cond(iK): {}".format(np.linalg.cond(K), np.linalg.cond(iK))
-        q_tilde = np.hstack((lam.sum() * np.ones((1, n)), np.zeros((1, d * n)))).squeeze()
+        q_tilde = np.hstack((lam[0] * np.ones((1, n)), np.zeros((1, d * n)))).squeeze()
         Eff = 0
         Effff = np.zeros((n, n))
         Efffd = np.zeros((n, d * n))

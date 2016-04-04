@@ -89,6 +89,7 @@ def main():
     # hyp = {'bias': 1.0, 'variance': 1.0 * np.ones((1,)), 'noise_var': 1e-16}
     # hyp_rbf_ut = {'sig_var': 8.0, 'lengthscale': 0.5 * np.ones((1,)), 'noise_var': 1e-16}
     hyp_hermite_ut = {'lambda': 1.0 * np.ones(4), 'noise_var': 1e-16}
+    # hyp_hermite_ut = {'lambda': np.array([0.25, 0.25, 0.25, 0.25]), 'noise_var': 1e-16}
     # usp = np.zeros((1, 1))  # central sigma, GPQuadDerKalman ~= EKF)
     usp = Unscented.unit_sigma_points(1)
     # ungm_filter_demo(GPQuadDerRBFKalman,

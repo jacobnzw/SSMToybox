@@ -156,7 +156,8 @@ class GPQuadDerHermiteTest(TestCase):
         self.assertEqual(kff.shape, (5, 5))  # check shape
         self.assertTrue(np.array_equal(kff, kff.T))  # check symmetry
         la.cholesky(kff + 1e-16 * np.eye(5))  # positive definite?
-        print "cond(Kff): {}".format(la.cond(kff))
+        print "cond(Kff): {0:.2e}, cond(Kff_norm): {1:.2e}".format(la.cond(kff),
+                                                                   la.cond(self.normalize_kernel_matrix(kff)))
         if self.plots:
             x = np.atleast_2d(np.linspace(-3, 3, 50).T)
             kff = c._kernel_ut(x, x)
@@ -172,30 +173,32 @@ class GPQuadDerHermiteTest(TestCase):
         self.assertEqual(kfd.shape, (n, d * n))  # check shapes
         self.assertEqual(kdd.shape, (d * n, d * n))
         self.assertTrue(np.array_equal(kdd, kdd.T))  # check symmetry
-        print "{}D: cond(Kfd): {}, cond(Kdd): {}".format(d, la.cond(kfd), la.cond(kdd))
+        print "{}D: cond(Kfd): {:.2e}, cond(Kdd): {:.2e}".format(d, la.cond(kfd), la.cond(kdd))
         # test multi-dimensional inputs
-        x = np.hstack((np.zeros((2, 1)), np.eye(2), -np.eye(2)))
+        # x = np.hstack((np.zeros((2, 1)), np.eye(2), -np.eye(2)))
+        x = Unscented.unit_sigma_points(2)
         d, n = x.shape
         kfd, kdd = c._kernel_ut_dx(x, x)
         self.assertEqual(kfd.shape, (n, d * n))  # check shapes
         self.assertEqual(kdd.shape, (d * n, d * n))
         self.assertTrue(np.array_equal(kdd, kdd.T))  # check symmetry
         la.cholesky(kdd + 1e-8 * np.eye(d * n))  # posdef ?
-        print "{}D: cond(Kfd): {}, cond(Kdd): {}".format(d, la.cond(kfd), la.cond(kdd))
+        print "{}D: cond(Kfd): {:.2e}, cond(Kdd): {:.2e}".format(d, la.cond(kfd), la.cond(kdd))
         if self.plots:
             x = np.atleast_2d(np.linspace(-3, 3, 50).T)
             kfd, kdd = c._kernel_ut_dx(x, x)
             self.plot_matrix(kdd)
 
     def test_kern_hermite_der(self):
-        x = np.hstack((np.zeros((2, 1)), np.eye(2), -np.eye(2)))
+        x = Unscented.unit_sigma_points(2)
+        # x = np.hstack((np.zeros((2, 1)), np.eye(2), -np.eye(2)))
         d, n = x.shape
         hyp = {'lambda': np.ones(4)}
         c = GPQuadDerHermite(1)
         kmat = c.kern_hermite_der(x, hyp)
         self.assertEqual(kmat.shape, (n + d * n, n + d * n))
         self.assertTrue(np.array_equal(kmat, kmat.T))  # symmetric ?
-        print "cond(K): {}".format(la.cond(kmat))
+        print "cond(K): {:.2e}, cond(K_norm): {:.2e}".format(la.cond(kmat), la.cond(self.normalize_kernel_matrix(kmat)))
         la.inv(kmat + 1e-8 * np.eye(n + d * n))  # invertible ?
         la.cholesky(kmat + 1e-8 * np.eye(n + d * n))  # posdef ?
         if self.plots:
@@ -220,3 +223,7 @@ class GPQuadDerHermiteTest(TestCase):
         plt.plot(evals, ls='-', marker='.', ms=15)
         plt.title('Eigvals range: [{0:.2e}, {1:.2e}]'.format(evals.min(), evals.max()))
         plt.show()
+
+    def normalize_kernel_matrix(self, kmat):
+        kmat_diag = np.diag(kmat)
+        return kmat * (1.0 / (np.sqrt(np.outer(kmat_diag, kmat_diag))))
