@@ -38,10 +38,10 @@ class Unscented(SigmaPointTransform):
         self.Wm = np.diag(self.wm)
         self.Wc = np.diag(self.wc)
         # UT unit sigma-points
-        self.unit_sp = self.unit_sigma_points(dim, kappa=kappa, alpha=alpha, beta=beta)
+        self.unit_sp = self.unit_sigma_points(dim, kappa=kappa, alpha=alpha)
 
     @staticmethod
-    def unit_sigma_points(dim, kappa=None, alpha=1.0, beta=2.0):
+    def unit_sigma_points(dim, kappa=None, alpha=1.0):
         kappa = np.max([3.0 - dim, 0.0]) if kappa is None else kappa
         lam = alpha ** 2 * (dim + kappa) - dim
         c = np.sqrt(dim + lam)

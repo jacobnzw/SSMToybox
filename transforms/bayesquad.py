@@ -484,6 +484,7 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
         eye_y = np.eye(n + d * n)
         K = self.kern_hermite_der(unit_sp, hypers)
         iK = cho_solve(cho_factor(K + jitter * eye_y), eye_y)
+        # print "cond(K): {}, cond(iK): {}".format(np.linalg.cond(K), np.linalg.cond(iK))
         q_tilde = np.hstack((lam.sum() * np.ones((1, n)), np.zeros((1, d * n)))).squeeze()
         Eff = 0
         Effff = np.zeros((n, n))
@@ -496,14 +497,14 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
                 for p in range(4):
                     for q in range(4):
                         multi_ind = self.ind_sum(d, p)
-                        for k in range(d ** p):
+                        for k in range(d ** p):  # for all multi-indexes
+                            mf = self.multifactorial(multi_ind[:, k])
+                            Eff += mf ** -1 * lam[p]
+                            c = lam[p] * lam[q] * mf ** -3
                             h_xi = GPQuadDerHermite.multihermite(unit_sp[:, i, na], multi_ind[:, k])
                             h_xj = GPQuadDerHermite.multihermite(unit_sp[:, j, na], multi_ind[:, k])
                             dh_xi = GPQuadDerHermite.multihermite_grad(unit_sp[:, i, na], multi_ind[:, k])
                             dh_xj = GPQuadDerHermite.multihermite_grad(unit_sp[:, j, na], multi_ind[:, k])
-                            mf = self.multifactorial(multi_ind[:, k])
-                            Eff += mf ** -1 * lam[p]
-                            c = lam[p] * lam[q] * mf ** -3
                             Effff[i, j] += c * h_xi * h_xj
                             Efffd[i, jstart:jend] += c * h_xi * dh_xj
                             Edffd[istart:iend, jstart:jend] += c * np.outer(dh_xi, dh_xj)
@@ -511,14 +512,14 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
                             #     Effff[i, j] += lam[q] * Effff[i, j]
                             #     Efffd[i, jstart:jend] += lam[q] * Efffd[i, jstart:jend]
                             #     Edffd[istart:iend, jstart:jend] += lam[q] * Edffd[istart:iend, jstart:jend]
-        Q = np.vstack((np.hstack((Effff, Efffd)), np.hstack((Efffd.T, Edffd))))
+        Q = np.vstack((np.hstack((Effff, Efffd)), np.hstack((Efffd.T, Edffd))))  # * d**4
         R = lam.sum() * np.hstack((unit_sp, np.tile(np.eye(d), (1, n))))
         # weights for mean, covariance and cross-covariance pseudo-weights
         wm = q_tilde.dot(iK)
         iKQ = iK.dot(Q)
         Wc = iKQ.dot(iK)
         Wcc = R.dot(iK)
-        self.model_var = np.diag((Eff - np.trace(iKQ)) * np.ones((d, 1)))  # FIXME: negative average model var
+        self.model_var = np.diag((Eff - np.trace(iKQ)) * np.ones((d, 1)))
         assert np.all(self.model_var >= 0)
         return wm, Wc, Wcc
 
@@ -655,26 +656,23 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
             for j in range(m):  # TODO: no need for these because multihermite can take care of this
                 for p in range(4):
                     iset = self.ind_sum(d, p)
-                    h = 0
                     for k in range(d ** p):
-                        c = self.multifactorial(iset[:, k]) ** -2
-                        h += lamb[p] * c * \
-                             self.multihermite(x[:, i, na], iset[:, k]) * \
-                             self.multihermite(xs[:, j, na], iset[:, k])
-                    K[i, j] += h
+                        c = lamb[p] * self.multifactorial(iset[:, k]) ** -2
+                        K[i, j] += c * self.multihermite(x[:, i, na], iset[:, k]) * \
+                                   self.multihermite(xs[:, j, na], iset[:, k])
         return K
 
     # @jit
     def _kernel_ut_dx(self, x, xs, lamb=np.ones(4)):
         d, n = x.shape
         e, m = xs.shape
-        assert d == e
-        assert lamb.ndim == 1
+        assert d == e  # make sure dimensionality of both inputs is the same
+        assert lamb.ndim == 1  # make sure lambda is 1-D array
         Kfd = np.zeros((n, d * m))  # covariance between functoin value and derivative
         Kdd = np.zeros((d * n, d * m))  # covariance between derivatives
         I = np.eye(d)
-        dHi = np.zeros((d,))  # space for gradient
-        dHj = dHi.copy()
+        # dh_xi = np.zeros((d,))  # space for gradient
+        # dh_xj = dh_xi.copy()
         for i in range(n):
             for j in range(m):
                 # evaluate UT kernel
@@ -684,15 +682,17 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
                     jstart, jend = j * d, j * d + d
                     for k in range(d ** p):  # for all multi-indexes
                         # evaluate gradient of multivariate Hermite polynomial
-                        for dim in range(d):  # for all datapoint dimensions
-                            multi_ind = iset[:, k] - I[:, dim]
-                            dHi[dim] = self.multihermite(x[:, i, na], multi_ind)
-                            dHj[dim] = self.multihermite(xs[:, j, na], multi_ind)
-                        dHi *= iset[:, k]  # element-wise product with multi-index
-                        dHj *= iset[:, k]
+                        dh_xi = self.multihermite_grad(x[:, i, na], iset[:, k])
+                        dh_xj = self.multihermite_grad(xs[:, j, na], iset[:, k])
+                        # for dim in range(d):  # for all datapoint dimensions
+                        #     multi_ind = iset[:, k] - I[:, dim]
+                        #     dHi[dim] = self.multihermite(x[:, i, na], multi_ind)
+                        #     dHj[dim] = self.multihermite(xs[:, j, na], multi_ind)
+                        # dh_xi *= iset[:, k]  # element-wise product with multi-index
+                        # dh_xj *= iset[:, k]
                         c = lamb[p] * self.multifactorial(iset[:, k]) ** -2
-                        Kfd[i, jstart:jend] += c * self.multihermite(x[:, i, na], iset[:, k]) * dHj
-                        Kdd[istart:iend, jstart:jend] += c * np.outer(dHi, dHj)
+                        Kfd[i, jstart:jend] += c * self.multihermite(x[:, i, na], iset[:, k]) * dh_xj
+                        Kdd[istart:iend, jstart:jend] += c * np.outer(dh_xi, dh_xj)
         return Kfd, Kdd
 
 

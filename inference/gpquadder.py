@@ -27,8 +27,8 @@ class GPQuadDerRBFKalman(StateSpaceInference):
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
         kappa, alpha, beta = 0.0, 1.0, 2.0
-        self.usp_dyn = Unscented.unit_sigma_points(nq, kappa, alpha, beta)
-        self.usp_meas = Unscented.unit_sigma_points(nr, kappa, alpha, beta)
+        self.usp_dyn = Unscented.unit_sigma_points(nq, kappa, alpha)
+        self.usp_meas = Unscented.unit_sigma_points(nr, kappa, alpha)
         self.hyp_dyn = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones((nq,)), 'noise_var': 1e-8}
         self.hyp_meas = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones((nr,)), 'noise_var': 1e-8}
 
@@ -88,7 +88,7 @@ def main():
     # der_mask = np.array([0, 1, 2])
     # hyp = {'bias': 1.0, 'variance': 1.0 * np.ones((1,)), 'noise_var': 1e-16}
     # hyp_rbf_ut = {'sig_var': 8.0, 'lengthscale': 0.5 * np.ones((1,)), 'noise_var': 1e-16}
-    hyp_hermite_ut = {'lambda': np.ones(4), 'noise_var': 1e-8}
+    hyp_hermite_ut = {'lambda': 1.0 * np.ones(4), 'noise_var': 1e-16}
     # usp = np.zeros((1, 1))  # central sigma, GPQuadDerKalman ~= EKF)
     usp = Unscented.unit_sigma_points(1)
     # ungm_filter_demo(GPQuadDerRBFKalman,
