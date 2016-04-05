@@ -3,7 +3,7 @@ import numpy as np
 from inference.ssinfer import StateSpaceInference
 from models.ssmodel import StateSpaceModel
 from transforms.bayesquad import GPQuadDerRBF, GPQuadDerAffine, GPQuadDerHermite
-from transforms.quad import Unscented
+from transforms.quad import Unscented, SphericalRadial
 
 
 class GPQuadDerRBFKalman(StateSpaceInference):
@@ -87,19 +87,20 @@ def main():
     der_mask = np.array([0])
     # der_mask = np.array([0, 1, 2])
     # hyp = {'bias': 1.0, 'variance': 1.0 * np.ones((1,)), 'noise_var': 1e-16}
-    # hyp_rbf_ut = {'sig_var': 8.0, 'lengthscale': 0.5 * np.ones((1,)), 'noise_var': 1e-16}
-    hyp_hermite_ut = {'lambda': 1.0 * np.ones(4), 'noise_var': 1e-16}
-    # hyp_hermite_ut = {'lambda': np.array([0.25, 0.25, 0.25, 0.25]), 'noise_var': 1e-16}
+    hyp_rbf_ut = {'sig_var': 8.0, 'lengthscale': 0.5 * np.ones((1,)), 'noise_var': 1e-16}
+    # hyp_hermite_ut = {'lambda': 1.0 * np.ones(4), 'noise_var': 1e-16}
+    # hyp_hermite_ut = {'lambda': np.array([0.5, 0.25, 0.15, 0.10]), 'noise_var': 1e-16}
     # usp = np.zeros((1, 1))  # central sigma, GPQuadDerKalman ~= EKF)
+    # usp = SphericalRadial.unit_sigma_points(1)
     usp = Unscented.unit_sigma_points(1)
-    # ungm_filter_demo(GPQuadDerRBFKalman,
-    #                  usp_dyn=usp, usp_meas=usp,
-    #                  hyp_dyn=hyp_rbf_ut, hyp_meas=hyp_rbf_ut,
-    #                  which_der=der_mask)
-    ungm_filter_demo(GPQuadDerHermiteKalman,
+    ungm_filter_demo(GPQuadDerRBFKalman,
                      usp_dyn=usp, usp_meas=usp,
-                     hyp_dyn=hyp_hermite_ut, hyp_meas=hyp_hermite_ut,
+                     hyp_dyn=hyp_rbf_ut, hyp_meas=hyp_rbf_ut,
                      which_der=der_mask)
+    # ungm_filter_demo(GPQuadDerHermiteKalman,
+    #                  usp_dyn=usp, usp_meas=usp,
+    #                  hyp_dyn=hyp_hermite_ut, hyp_meas=hyp_hermite_ut,
+    #                  which_der=der_mask)
     # pendulum_filter_demo(GPQuadDerRBFKalman,
     #                      usp_dyn=usp, usp_meas=usp,
     #                      hyp_dyn=hyp, hyp_meas=hyp,

@@ -199,6 +199,10 @@ class GPQuadHermiteUT(BayesianQuadratureTransform):
     pass
 
 
+# TODO: plot GP model with derivatives, make sure I got the regression equations right in the first place!!!
+# TODO: don't think the derivative mask on function evaluations is going to cut it, because weights depend on kernel
+# matrix which contains covariances between oll sigma points, what if the derivatives are available only for some
+# points and not others?
 class GPQuadDerAffine(BayesianQuadratureTransform):
     """
     Gaussian Process Quadrature with affine kernel which uses derivative observations (in addition to function values).
@@ -465,6 +469,12 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
 
 
 class GPQuadDerHermite(BayesianQuadratureTransform):
+    """Gaussian Process quadrature with UT covariance and derivative observations.
+
+    GPQ with UT covariance and UT sigma-points already has zero integral variance, therefore it makes no sense to use
+    UT points with this class. (Because adding derivative observations will change nothing - it will make things
+    worse in fact).
+    """
     def __init__(self, dim, unit_sp=None, hypers=None, which_der=None):
         super(GPQuadDerHermite, self).__init__(dim, unit_sp, hypers)
         # get number of sigmas (n) and dimension of sigmas (d)
@@ -526,8 +536,7 @@ class GPQuadDerHermite(BayesianQuadratureTransform):
     def kern_hermite_der(self, X, hypers):
         lamb = hypers['lambda']
         kff = self._kernel_ut(X, X, lamb)
-        # FIXME: high condition number makes me suspicious, Simo: what's the true form of simplified UT covariance?
-        kfd, kdd = self._kernel_ut_dx(X, X, lamb)
+        kfd, kdd = self._kernel_ut_dx(X, X, lamb)  # ill conditioned for UT points
         return np.vstack((np.hstack((kff, kfd)), np.hstack((kfd.T, kdd))))
 
     @staticmethod
