@@ -11,7 +11,7 @@
 #       * AFFINE: This variant should be closest to the EKF
 #       * HERMITE:
 
-from inference import ExtendedKalman, UnscentedKalman, GPQuadDerRBFKalman, GPQuadDerAffineKalman
+from inference import ExtendedKalman, UnscentedKalman, GPQuadDerRBFKalman, GPQuadDerAffineKalman, GPQuadKalman
 from transforms import Unscented
 from models.ungm import UNGM
 import numpy as np
@@ -36,12 +36,15 @@ der_mask = np.array([0])
 algorithms = (
     # EKF
     ExtendedKalman(ssm),
-    # GPQ+D RBF kernel w/ single sigma-point
-    GPQuadDerRBFKalman(ssm, usp_0, usp_0, hyp_rbf, hyp_rbf, which_der=der_mask),
     # GPQ+D affine kernel w/ single sigma-point, an EKF-like algorithm
     GPQuadDerAffineKalman(ssm, usp_0, usp_0, hyp_affine, hyp_affine, which_der=der_mask),
+    # GPQ+D RBF kernel w/ single sigma-point
+    GPQuadDerRBFKalman(ssm, usp_0, usp_0, hyp_rbf, hyp_rbf, which_der=der_mask),
     # UKF
     UnscentedKalman(ssm, kappa=0.0),
+    # GPQ-UT w/ UT sigma-points, should be same as UKF
+    # GPQ-RBF w/ UT sigma-points
+    GPQuadKalman(ssm, usp_ut, usp_ut, hyp_rbf_ut, hyp_rbf_ut),
     # GPQ+D RBF kernel w/ UT sigma-points (derivative at the central point only)
     GPQuadDerRBFKalman(ssm, usp_ut, usp_ut, hyp_rbf_ut, hyp_rbf_ut, which_der=der_mask),
     # GPQ+D Hermite kernel w/ UT sigma-points (derivative at the central point only)
