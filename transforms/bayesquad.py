@@ -321,15 +321,16 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
     """
 
     def __init__(self, dim, unit_sp=None, hypers=None, which_der=None):
+        # assume derivatives evaluated at all sigmas if unspecified
+        self.which_der = which_der if which_der is not None else np.arange(self.n)
         super(GPQuadDerRBF, self).__init__(dim, unit_sp, hypers)
         # get number of sigmas (n) and dimension of sigmas (d)
         self.d, self.n = self.unit_sp.shape
-        # assume derivatives evaluated at all sigmas if unspecified
-        self.which_der = which_der if which_der is not None else np.arange(self.n)
         # GPy RBF kernel with given hypers
         self.kern = RBF(self.d, variance=self.hypers['sig_var'], lengthscale=self.hypers['lengthscale'], ARD=True)
 
     def weights_rbf(self, unit_sp, hypers):
+        """GPQ+D weights, assumes that all points have derivatives."""
         d, n = unit_sp.shape
         # GP kernel hyper-parameters
         alpha, el, jitter = hypers['sig_var'], hypers['lengthscale'], hypers['noise_var']
@@ -391,10 +392,88 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
         return wm, Wc, Wcc
 
+    def weights_rbf_der(self, unit_sp, hypers):
+        d, n = unit_sp.shape
+        # GP kernel hyper-parameters
+        alpha, el, jitter = hypers['sig_var'], hypers['lengthscale'], hypers['noise_var']
+        assert len(el) == d
+        i_der = self.which_der  # shorthand for indexes of points with derivatives
+        n_der = len(i_der)  # # points w/ derivatives
+        assert n_der <= n  # # points w/ derivatives must be <= # points
+        # pre-allocation for convenience
+        eye_d, eye_n, eye_y = np.eye(d), np.eye(n), np.eye(n + d * n_der)
+
+        K = GPQuadDerRBF.kern_rbf_der(unit_sp, hypers, i_der)
+        iK = cho_solve(cho_factor(K + jitter * eye_y), eye_y)  # invert kernel matrix BOTTLENECK
+        Lam = np.diag(el ** 2)
+        iLam = np.diag(el ** -1)  # sqrt(Lambda^-1)
+        iiLam = np.diag(el ** -2)  # Lambda^-1
+        inn = iLam.dot(unit_sp)  # (x-m)^T*iLam  # (N, D)
+        B = iiLam + eye_d  # P*Lambda^-1+I, (P+Lam)^-1 = Lam^-1*(P*Lam^-1+I)^-1 # (D, D)
+        cho_B = cho_factor(B)
+        t = cho_solve(cho_B, inn)  # dot(inn, inv(B)) # (x-m)^T*iLam*(P+Lambda)^-1  # (D, N)
+        l = np.exp(-0.5 * np.sum(inn * t, 0))  # (N, 1)
+        q = (alpha ** 2 / np.sqrt(det(B))) * l  # (N, 1)
+        Sig_q = cho_solve(cho_B, eye_d)  # B^-1*I
+        eta = Sig_q.dot(unit_sp)  # (D,N) Sig_q*x
+        mu_q = iiLam.dot(eta)  # (D,N)
+        r = q[na, i_der] * iiLam.dot(mu_q[:, i_der] - unit_sp[:, i_der])  # -t.dot(iLam) * q  # (D, N)
+        q_tilde = np.hstack((q.T, r.T.ravel()))  # (1, N + n_der*D)
+
+        # weights for mean
+        wm = q_tilde.dot(iK)
+
+        #  quantities for cross-covariance "weights"
+        iLamSig = iiLam.dot(Sig_q)  # (D,D)
+        r_tilde = np.empty((d, n_der * d))
+        for i in range(n_der):
+            i_d = i_der[i]
+            r_tilde[:, i * d:i * d + d] = q[i_d] * iLamSig + np.outer(mu_q[:, i_d], r[:, i].T)
+        R_tilde = np.hstack((q[na, :] * mu_q, r_tilde))  # (D, N+N*D)
+
+        # input-output covariance (cross-covariance) "weights"
+        Wcc = R_tilde.dot(iK)  # (D, N+N*D)
+
+        # quantities for covariance weights
+        zet = 2 * np.log(alpha) - 0.5 * np.sum(inn * inn, 0)  # (D,N) 2log(alpha) - 0.5*(x-m)^T*Lambda^-1*(x-m)
+        inn = iiLam.dot(unit_sp)  # inp / el[:, na]**2
+        R = 2 * iiLam + eye_d  # 2P*Lambda^-1 + I
+        Q = (1.0 / np.sqrt(det(R))) * np.exp((zet[:, na] + zet[:, na].T) +
+                                             maha(inn.T, -inn.T, V=0.5 * solve(R, eye_d)))  # (N,N)
+        cho_LamSig = cho_factor(Lam + Sig_q)
+        Sig_Q = cho_solve(cho_LamSig, Sig_q).dot(iiLam)  # (D,D) Lambda^-1 (Lambda*(Lambda+Sig_q)^-1*Sig_q) Lambda^-1
+        eta_tilde = iiLam.dot(cho_solve(cho_LamSig, eta))  # Lambda^-1(Lambda+Sig_q)^-1*eta
+        mu_Q = eta_tilde[..., na] + eta_tilde[:, na, :]  # (D,N_der,N) pairwise sum of pre-multiplied eta's
+        E_dfff = np.empty((n_der * d, n))
+        E_dffd = np.empty((n_der * d, n_der * d))
+        for i in range(n_der):
+            for j in range(n):
+                istart, iend = i * d, i * d + d
+                i_d = i_der[i]
+                E_dfff[istart:iend, j] = Q[i_d, j] * iiLam.dot(mu_Q[:, i_d, j] - unit_sp[:, i_d])
+        for i in range(n_der):
+            for j in range(n_der):
+                istart, iend = i * d, i * d + d
+                jstart, jend = j * d, j * d + d
+                i_d, j_d = i_der[i], i_der[j]
+                T = np.outer((unit_sp[:, i_d] - mu_Q[:, i_d, j_d]), (unit_sp[:, j_d] - mu_Q[:, i_d, j_d]).T) + Sig_Q
+                E_dffd[istart:iend, jstart:jend] = Q[i_d, j_d] * iiLam.dot(T).dot(iiLam)
+        Q_tilde = np.vstack((np.hstack((Q, E_dfff.T)), np.hstack((E_dfff, E_dffd))))  # (N + N_der*D, N + N_der*D)
+
+        # weights for covariance
+        iKQ = iK.dot(Q_tilde)
+        Wc = iKQ.dot(iK)
+        # model variance
+        self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
+        assert self.model_var >= 0  # average model variance >= 0 ?
+        return wm, Wc, Wcc
+
     @staticmethod
-    def kern_rbf_der(X, hypers):
+    def kern_rbf_der(X, hypers, which_der=None):
         # TODO: rewrite in Cython, try Numba @jit decorator and get rid of double loops
         D, N = X.shape
+        which_der = np.arange(N) if which_der is None else which_der
+        Nd = len(which_der)  # points w/ derivative observations
         # extract hypers
         alpha, el, jitter = hypers['sig_var'], hypers['lengthscale'], hypers['noise_var']
         iLam = np.diag(el ** -1 * np.ones(D))
@@ -402,16 +481,26 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
 
         X = iLam.dot(X)  # sqrt(Lambda^-1) * X
         Kff = np.exp(2 * np.log(alpha) - 0.5 * maha(X.T, X.T))  # cov(f(xi), f(xj))
-        X = iLam.dot(X)  # Lambda^1 * X
-        XmX = X[..., na] - X[:, na, :]
-        Kfd = np.zeros((N, D * N))  # cov(f(xi), df(xj))
-        Kdd = np.zeros((D * N, D * N))  # cov(df(xi), df(xj))
+        X = iLam.dot(X)  # Lambda^-1 * X
+        XmX = X[..., na] - X[:, na, :]  # pair-wise differences
+        Kfd = np.zeros((N, D * Nd))  # cov(f(xi), df(xj))
+        Kdd = np.zeros((D * Nd, D * Nd))  # cov(df(xi), df(xj))
         for i in range(N):
-            for j in range(N):
+            for j in range(Nd):
                 istart, iend = i * D, i * D + D
                 jstart, jend = j * D, j * D + D
                 Kfd[i, jstart:jend] = Kff[i, j] * XmX[:, i, j]
-                Kdd[istart:iend, jstart:jend] = Kff[i, j] * (iiLam - np.outer(XmX[:, i, j], XmX[:, i, j]))
+        for i in range(Nd):
+            for j in range(Nd):
+                istart, iend = i * D, i * D + D
+                jstart, jend = j * D, j * D + D
+
+                i_d, j_d = which_der[i], which_der[j]  # indices of points with derivatives
+                Kdd[istart:iend, jstart:jend] = Kff[i_d, j_d] * (iiLam - np.outer(XmX[:, i_d, j_d], XmX[:, i_d, j_d]))
+                # verification that this == [I + Lambda^-1(x-x')(x-x')^T]Lambda^-1 k(x, x')
+                dZ = np.diag(el ** 2).dot(X[:, i_d] - X[:, j_d])
+                assert np.allclose((np.eye(D) - iiLam.dot(np.outer(dZ, dZ))).dot(iiLam) * Kff[i_d, j_d],
+                                   Kdd[istart:iend, jstart:jend])
         # Kdd = (Kdd + Kdd.T)
         return np.vstack((np.hstack((Kff, Kfd)), np.hstack((Kfd.T, Kdd))))
 
@@ -453,19 +542,18 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
         return {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(dim, ), 'noise_var': 1e-8}
 
     def _weights(self, sigma_points, hypers):
-        return self.weights_rbf(sigma_points, hypers)
+        return self.weights_rbf_der(sigma_points, hypers)
 
     def _fcn_eval(self, fcn, x, fcn_pars):
         # should return as many columns as output dims, one column includes function and derivative evaluations
         # for every sigma-point, thus it is (n + n*d,); n = # sigma-points, d = sigma-point dimensionality
-        # fx should be (n + n*d, e); e = output dimensionality
+        # returned array should be (n + n*d, e); e = output dimensionality
         # evaluate function at sigmas (e, n)
         fx = np.apply_along_axis(fcn, 0, x, fcn_pars)
-        # Jacobians evaluated only at sigmas specified by which_der array
-        dfx = np.zeros((fx.shape[0] * self.d, self.n))
-        dfx[:, self.which_der] = np.apply_along_axis(fcn, 0, x[:, self.which_der], fcn_pars, dx=True)
+        # Jacobians evaluated only at sigmas specified by which_der array (e * d, n)
+        dfx = np.apply_along_axis(fcn, 0, x[:, self.which_der], fcn_pars, dx=True)
         # stack function values and derivative values into one column
-        return np.vstack((fx.T, dfx.T.reshape(self.d * self.n, -1))).T
+        return np.vstack((fx.T, dfx.T.reshape(self.d * len(self.which_der), -1))).T
 
 
 class GPQuadDerHermite(BayesianQuadratureTransform):
