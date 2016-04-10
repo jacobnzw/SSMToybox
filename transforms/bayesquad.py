@@ -487,21 +487,19 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
         Kdd = np.zeros((D * Nd, D * Nd))  # cov(df(xi), df(xj))
         for i in range(N):
             for j in range(Nd):
-                istart, iend = i * D, i * D + D
                 jstart, jend = j * D, j * D + D
-                Kfd[i, jstart:jend] = Kff[i, j] * XmX[:, i, j]
+                j_d = which_der[j]
+                Kfd[i, jstart:jend] = Kff[i, j_d] * XmX[:, i, j_d]
         for i in range(Nd):
             for j in range(Nd):
                 istart, iend = i * D, i * D + D
                 jstart, jend = j * D, j * D + D
-
                 i_d, j_d = which_der[i], which_der[j]  # indices of points with derivatives
                 Kdd[istart:iend, jstart:jend] = Kff[i_d, j_d] * (iiLam - np.outer(XmX[:, i_d, j_d], XmX[:, i_d, j_d]))
                 # verification that this == [I + Lambda^-1(x-x')(x-x')^T]Lambda^-1 k(x, x')
                 dZ = np.diag(el ** 2).dot(X[:, i_d] - X[:, j_d])
                 assert np.allclose((np.eye(D) - iiLam.dot(np.outer(dZ, dZ))).dot(iiLam) * Kff[i_d, j_d],
                                    Kdd[istart:iend, jstart:jend])
-        # Kdd = (Kdd + Kdd.T)
         return np.vstack((np.hstack((Kff, Kfd)), np.hstack((Kfd.T, Kdd))))
 
     def plot_gp_model(self, f, unit_sp, args, test_range=(-5, 5, 50), plot_dims=(0, 0)):
