@@ -7,7 +7,28 @@ from transforms.transform import SigmaPointTransform
 
 
 # TODO: add higher-order fully symmetric rules from [McNamee, Stenger]
-# TODO: MCquad for Gaussian Monte Carlo filter [Djuric]
+# TODO: Monte Carlo transform discussed in [Gustafsson, 2012] might serve as baseline for all Gaussian filters
+#  Gaussian Particle filter [Djuric] appears to be different from MCT
+
+
+class MonteCarlo(SigmaPointTransform):
+    """Monte Carlo transform.
+
+    Serves as baseline for comparing all other moment transforms.
+    """
+
+    def __init__(self, dim, n=100):
+        self.wm, wc = self.weights(n)
+        self.Wc = np.diag(wc * np.ones(n))
+        self.unit_sp = self.unit_sigma_points(dim, n)
+
+    @staticmethod
+    def weights(n):
+        return 1.0 / n, 1.0 / (n - 1)
+
+    @staticmethod
+    def unit_sigma_points(dim, n):
+        return np.random.multivariate_normal(np.zeros(dim), np.eye(dim), size=n).T
 
 
 class SphericalRadial(SigmaPointTransform):
