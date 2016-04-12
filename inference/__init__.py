@@ -7,7 +7,7 @@
 #     'TPQuadKalman'
 # ]
 from cubature import CubatureKalman
-from extended import ExtendedKalman
+from extended import ExtendedKalman, ExtendedKalmanGPQD
 from gausshermite import GaussHermiteKalman
 from gpquad import GPQuadKalman
 from gpquadder import GPQuadDerAffineKalman, GPQuadDerRBFKalman

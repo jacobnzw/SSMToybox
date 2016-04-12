@@ -11,7 +11,8 @@
 #       * AFFINE: This variant should be closest to the EKF
 #       * HERMITE:
 
-from inference import ExtendedKalman, UnscentedKalman, GPQuadDerRBFKalman, GPQuadDerAffineKalman, GPQuadKalman
+from inference import ExtendedKalman, ExtendedKalmanGPQD, UnscentedKalman, GPQuadDerRBFKalman, GPQuadDerAffineKalman, \
+    GPQuadKalman
 from transforms import Unscented
 from models.ungm import UNGM
 import numpy as np
@@ -19,7 +20,7 @@ import pandas as pd
 import time
 from icinco_demo import rmse, nci, nll, bootstrap_var
 
-steps, mc = 500, 100  # time steps, mc simulations
+steps, mc = 500, 10  # time steps, mc simulations
 # initialize SSM and generate some data
 ssm = UNGM()
 x, z = ssm.simulate(steps, mc)
@@ -36,18 +37,19 @@ der_mask = np.array([0])
 algorithms = (
     # EKF, GPQ+D w/ affine kernel, GPQ+D w/ RBF kernel (el --> infty)
     ExtendedKalman(ssm),
-    # TODO: code the GPQ+D w/ RBF kernel for any el, compare performance for el --> infty w/ EKF
-    # GPQ+D affine kernel w/ single sigma-point, an EKF-like algorithm
-    GPQuadDerAffineKalman(ssm, usp_0, usp_0, hyp_affine, hyp_affine, which_der=der_mask),
+    # GPQ+D RBF kernel w/ single sigma-point, becomes EKF for el --> infinity
+    ExtendedKalmanGPQD(ssm, el=5.0),
+    # GPQ+D affine kernel w/ single sigma-point,
+    # GPQuadDerAffineKalman(ssm, usp_0, usp_0, hyp_affine, hyp_affine, which_der=der_mask),
     # GPQ+D RBF kernel w/ single sigma-point
-    GPQuadDerRBFKalman(ssm, usp_0, usp_0, hyp_rbf, hyp_rbf, which_der=der_mask),
+    # GPQuadDerRBFKalman(ssm, usp_0, usp_0, hyp_rbf, hyp_rbf, which_der=der_mask),
     # UKF
-    UnscentedKalman(ssm, kappa=0.0),
+    # UnscentedKalman(ssm, kappa=0.0),
     # GPQ-UT w/ UT sigma-points, should be same as UKF
     # GPQ-RBF w/ UT sigma-points
-    GPQuadKalman(ssm, usp_ut, usp_ut, hyp_rbf_ut, hyp_rbf_ut),
+    # GPQuadKalman(ssm, usp_ut, usp_ut, hyp_rbf_ut, hyp_rbf_ut),
     # GPQ+D RBF kernel w/ UT sigma-points (derivative at the central point only)
-    GPQuadDerRBFKalman(ssm, usp_ut, usp_ut, hyp_rbf_ut, hyp_rbf_ut, which_der=der_mask),
+    # GPQuadDerRBFKalman(ssm, usp_ut, usp_ut, hyp_rbf_ut, hyp_rbf_ut, which_der=der_mask),
     # GPQ+D Hermite kernel w/ UT sigma-points (derivative at the central point only)
     # GPQ+D affine kernel w/ UT sigma-points (could be crap)
 )
@@ -88,7 +90,7 @@ for f in range(num_alg):
     nllStd_s[f, :] = bootstrap_var(nllData_s[..., f], samples=1e4)
 
 # put data into Pandas DataFrame for fancy printing and latex export
-row_labels = ['EKF', 'GPQD-RBF', 'GPQD-AFFINE', 'UKF', 'GPQD-UT-RBF']
+row_labels = None  # ['EKF', 'GPQD-RBF', 'GPQD-AFFINE', 'UKF', 'GPQD-UT-RBF']
 col_labels = ['RMSE', '2STD', 'NCI', '2STD', 'NLL', '2STD']
 pd.set_option('precision', 4)
 table_f = pd.DataFrame(np.hstack((rmseMean_f, rmseStd_f, nciMean_f, nciStd_f, nllMean_f, nllStd_f)),
