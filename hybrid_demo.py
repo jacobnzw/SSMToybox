@@ -34,8 +34,9 @@ hyp_affine = {'bias': 1.0, 'variance': 1.0 * np.ones(ssm.xD, ), 'noise_var': 1e-
 der_mask = np.array([0])
 # filters/smoothers to test
 algorithms = (
-    # EKF
+    # EKF, GPQ+D w/ affine kernel, GPQ+D w/ RBF kernel (el --> infty)
     ExtendedKalman(ssm),
+    # TODO: code the GPQ+D w/ RBF kernel for any el, compare performance for el --> infty w/ EKF
     # GPQ+D affine kernel w/ single sigma-point, an EKF-like algorithm
     GPQuadDerAffineKalman(ssm, usp_0, usp_0, hyp_affine, hyp_affine, which_der=der_mask),
     # GPQ+D RBF kernel w/ single sigma-point

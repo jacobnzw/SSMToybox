@@ -199,10 +199,6 @@ class GPQuadHermiteUT(BayesianQuadratureTransform):
     pass
 
 
-# TODO: plot GP model with derivatives, make sure I got the regression equations right in the first place!!!
-# TODO: don't think the derivative mask on function evaluations is going to cut it, because weights depend on kernel
-# matrix which contains covariances between oll sigma points, what if the derivatives are available only for some
-# points and not others?
 class GPQuadDerAffine(BayesianQuadratureTransform):
     """
     Gaussian Process Quadrature with affine kernel which uses derivative observations (in addition to function values).
