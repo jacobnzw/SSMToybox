@@ -18,12 +18,12 @@ class ExtendedKalman(StateSpaceInference):
 
 
 class ExtendedKalmanGPQD(StateSpaceInference):
-    def __init__(self, sys, alpha=1.0, ell=1.0):
+    def __init__(self, sys, alpha=1.0, el=1.0):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        tf = TaylorGPQD(nq, alpha, ell)
-        th = TaylorGPQD(nr, alpha, ell)
+        tf = TaylorGPQD(nq, alpha, el)
+        th = TaylorGPQD(nr, alpha, el)
         super(ExtendedKalmanGPQD, self).__init__(tf, th, sys)
 
 

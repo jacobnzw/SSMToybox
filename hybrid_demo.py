@@ -20,7 +20,7 @@ import pandas as pd
 import time
 from icinco_demo import rmse, nci, nll, bootstrap_var
 
-steps, mc = 500, 10  # time steps, mc simulations
+steps, mc = 500, 100  # time steps, mc simulations
 # initialize SSM and generate some data
 ssm = UNGM()
 x, z = ssm.simulate(steps, mc)
@@ -38,10 +38,10 @@ algorithms = (
     # EKF, GPQ+D w/ affine kernel, GPQ+D w/ RBF kernel (el --> infty)
     ExtendedKalman(ssm),
     # GPQ+D RBF kernel w/ single sigma-point, becomes EKF for el --> infinity
-    ExtendedKalmanGPQD(ssm, el=5.0),
-    # GPQ+D affine kernel w/ single sigma-point,
+    ExtendedKalmanGPQD(ssm, el=1.0),
+    # GPQ+D affine kernel w/ single sigma-point, x = m + L*xi
     # GPQuadDerAffineKalman(ssm, usp_0, usp_0, hyp_affine, hyp_affine, which_der=der_mask),
-    # GPQ+D RBF kernel w/ single sigma-point
+    # GPQ+D RBF kernel w/ single sigma-point, x = m + L*xi
     # GPQuadDerRBFKalman(ssm, usp_0, usp_0, hyp_rbf, hyp_rbf, which_der=der_mask),
     # UKF
     # UnscentedKalman(ssm, kappa=0.0),

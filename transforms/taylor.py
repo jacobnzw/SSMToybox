@@ -39,12 +39,14 @@ class TaylorGPQD(MomentTransform):
 
     def apply(self, f, mean, cov, pars):
         # TODO: equations can be optimized further
-        wm = la.det(cov.dot(self.iLam) + self.eye_d) ** -0.5
+        # wm = la.det(cov.dot(self.iLam) + self.eye_d) ** -0.5
+        wm = la.det(self.iLam.dot(cov) + self.eye_d) ** -0.5
         fm = f(mean, pars)
         mean_f = wm * fm
         jacobian_f = f(mean, pars, dx=True)
         jacobian_f = jacobian_f.reshape(len(mean_f), self.dim)
-        wc = la.det(cov.dot(2 * self.iLam) + self.eye_d) ** -0.5
+        # wc = la.det(cov.dot(2 * self.iLam) + self.eye_d) ** -0.5
+        wc = la.det(2 * self.iLam.dot(cov) + self.eye_d) ** -0.5
         Wc = 0.5 * self.Lam.dot(la.inv(0.5 * self.Lam + cov)).dot(cov)
         model_var = self.alpha ** 2 - self.alpha ** 2 * wc * (1 + np.trace(Wc.dot(self.iLam)))
         integ_var = self.alpha ** 2 * wc - wm ** 2
