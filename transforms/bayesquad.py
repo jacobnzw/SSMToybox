@@ -399,7 +399,8 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
         # pre-allocation for convenience
         eye_d, eye_n, eye_y = np.eye(d), np.eye(n), np.eye(n + d * n_der)
 
-        K = GPQuadDerRBF.kern_rbf_der(unit_sp, hypers, i_der)
+        # K = GPQuadDerRBF.kern_rbf_der(unit_sp, hypers, i_der)
+        K = GPQuadDerRBF.kern_rbf_der(unit_sp, unit_sp, alpha=alpha, el=el, which_der=i_der)
         iK = cho_solve(cho_factor(K + jitter * eye_y), eye_y)  # invert kernel matrix BOTTLENECK
         Lam = np.diag(el ** 2)
         iLam = np.diag(el ** -1)  # sqrt(Lambda^-1)
@@ -464,24 +465,62 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
         assert self.model_var >= 0  # average model variance >= 0 ?
         return wm, Wc, Wcc
 
+    # @staticmethod
+    # def kern_rbf_der(X, hypers, which_der=None):
+    #     D, N = X.shape
+    #     which_der = np.arange(N) if which_der is None else which_der
+    #     Nd = len(which_der)  # points w/ derivative observations
+    #     # extract hypers
+    #     alpha, el, jitter = hypers['sig_var'], hypers['lengthscale'], hypers['noise_var']
+    #     iLam = np.diag(el ** -1 * np.ones(D))
+    #     iiLam = np.diag(el ** -2 * np.ones(D))
+    #
+    #     X = iLam.dot(X)  # sqrt(Lambda^-1) * X
+    #     Kff = np.exp(2 * np.log(alpha) - 0.5 * maha(X.T, X.T))  # cov(f(xi), f(xj))
+    #     X = iLam.dot(X)  # Lambda^-1 * X
+    #     XmX = X[..., na] - X[:, na, :]  # pair-wise differences
+    #     Kfd = np.zeros((N, D * Nd))  # cov(f(xi), df(xj))
+    #     Kdd = np.zeros((D * Nd, D * Nd))  # cov(df(xi), df(xj))
+    #     for i in range(N):
+    #         for j in range(Nd):
+    #             jstart, jend = j * D, j * D + D
+    #             j_d = which_der[j]
+    #             Kfd[i, jstart:jend] = Kff[i, j_d] * XmX[:, i, j_d]
+    #     for i in range(Nd):
+    #         for j in range(Nd):
+    #             istart, iend = i * D, i * D + D
+    #             jstart, jend = j * D, j * D + D
+    #             i_d, j_d = which_der[i], which_der[j]  # indices of points with derivatives
+    #             Kdd[istart:iend, jstart:jend] = Kff[i_d, j_d] * (iiLam - np.outer(XmX[:, i_d, j_d], XmX[:, i_d, j_d]))
+    #             # verification that this == [I + Lambda^-1(x-x')(x-x')^T]Lambda^-1 k(x, x')
+    #             dZ = np.diag(el ** 2).dot(X[:, i_d] - X[:, j_d])
+    #             assert np.allclose((np.eye(D) - iiLam.dot(np.outer(dZ, dZ))).dot(iiLam) * Kff[i_d, j_d],
+    #                                Kdd[istart:iend, jstart:jend])
+    #     return np.vstack((np.hstack((Kff, Kfd)), np.hstack((Kfd.T, Kdd))))
+
     @staticmethod
-    def kern_rbf_der(X, hypers, which_der=None):
-        # TODO: rewrite in Cython, try Numba @jit decorator and get rid of double loops
-        D, N = X.shape
+    def kern_rbf_der(xs, x, alpha=10.0, el=0.7, which_der=None):
+        """RBF kernel w/ derivatives."""
+        x, xs = np.atleast_2d(x), np.atleast_2d(xs)
+        D, N = x.shape
+        Ds, Ns = xs.shape
+        assert Ds == D
         which_der = np.arange(N) if which_der is None else which_der
         Nd = len(which_der)  # points w/ derivative observations
         # extract hypers
-        alpha, el, jitter = hypers['sig_var'], hypers['lengthscale'], hypers['noise_var']
+        # alpha, el, jitter = hypers['sig_var'], hypers['lengthscale'], hypers['noise_var']
         iLam = np.diag(el ** -1 * np.ones(D))
         iiLam = np.diag(el ** -2 * np.ones(D))
 
-        X = iLam.dot(X)  # sqrt(Lambda^-1) * X
-        Kff = np.exp(2 * np.log(alpha) - 0.5 * maha(X.T, X.T))  # cov(f(xi), f(xj))
-        X = iLam.dot(X)  # Lambda^-1 * X
-        XmX = X[..., na] - X[:, na, :]  # pair-wise differences
-        Kfd = np.zeros((N, D * Nd))  # cov(f(xi), df(xj))
+        x = iLam.dot(x)  # sqrt(Lambda^-1) * X
+        xs = iLam.dot(xs)
+        Kff = np.exp(2 * np.log(alpha) - 0.5 * maha(xs.T, x.T))  # cov(f(xi), f(xj))
+        x = iLam.dot(x)  # Lambda^-1 * X
+        xs = iLam.dot(xs)
+        XmX = xs[..., na] - x[:, na, :]  # pair-wise differences
+        Kfd = np.zeros((Ns, D * Nd))  # cov(f(xi), df(xj))
         Kdd = np.zeros((D * Nd, D * Nd))  # cov(df(xi), df(xj))
-        for i in range(N):
+        for i in range(Ns):
             for j in range(Nd):
                 jstart, jend = j * D, j * D + D
                 j_d = which_der[j]
@@ -492,37 +531,40 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
                 jstart, jend = j * D, j * D + D
                 i_d, j_d = which_der[i], which_der[j]  # indices of points with derivatives
                 Kdd[istart:iend, jstart:jend] = Kff[i_d, j_d] * (iiLam - np.outer(XmX[:, i_d, j_d], XmX[:, i_d, j_d]))
-                # verification that this == [I + Lambda^-1(x-x')(x-x')^T]Lambda^-1 k(x, x')
-                dZ = np.diag(el ** 2).dot(X[:, i_d] - X[:, j_d])
-                assert np.allclose((np.eye(D) - iiLam.dot(np.outer(dZ, dZ))).dot(iiLam) * Kff[i_d, j_d],
-                                   Kdd[istart:iend, jstart:jend])
         return np.vstack((np.hstack((Kff, Kfd)), np.hstack((Kfd.T, Kdd))))
 
     def plot_gp_model(self, f, unit_sp, args, test_range=(-5, 5, 50), plot_dims=(0, 0)):
-        # TODO: modify kernel evaluations so that the GP fit accounts for derivative information
         # plot out_dim vs. in_dim
         in_dim, out_dim = plot_dims
         # test input must have the same dimension as specified in kernel
         test = np.linspace(*test_range)
         test_pts = np.zeros((self.d, len(test)))
         test_pts[in_dim, :] = test
+        # shorthand for kernel function
+        kernel = GPQuadDerRBF.kern_rbf_der
+        # kernel hypers
+        s2, ell = self.hypers['sig_var'], self.hypers['lengthscale']
         # function value observations at training points (unit sigma-points)
         y = np.apply_along_axis(f, 0, unit_sp, args)
+        dy = np.apply_along_axis(f, 0, unit_sp, args, dx=True)
         fx = np.apply_along_axis(f, 0, test_pts, args)  # function values at test points
-        K = self.kern.K(unit_sp.T)  # covariances between sigma-points
-        k = self.kern.K(test_pts.T, unit_sp.T)  # covariance between test inputs and sigma-points
-        kxx = self.kern.Kdiag(test_pts.T)  # prior predictive variance
+        # covariances between training and test points
+        K = kernel(unit_sp, unit_sp, alpha=s2, el=ell, which_der=self.which_der)
+        k = kernel(test_pts, unit_sp, alpha=s2, el=ell, which_der=self.which_der)
+        kxx = np.diag(kernel(test_pts, alpha=s2, el=ell, which_der=self.which_der))  # prior predictive variance
         k_iK = cho_solve(cho_factor(K), k.T).T
-        gp_mean = k_iK.dot(y[out_dim, :])  # GP mean
-        gp_var = np.diag(np.diag(kxx) - k_iK.dot(k.T))  # GP predictive variance
+        # GP mean and predictive variance
+        gp_mean = k_iK.dot(y[out_dim, :])
+        gp_var = np.diag(kxx - k_iK.dot(k.T))
         # plot the GP mean, predictive variance and the true function
         plt.figure()
+
         plt.plot(test, fx[out_dim, :], color='r', ls='--', lw=2, label='true')
         plt.plot(test, gp_mean, color='b', ls='-', lw=2, label='GP mean')
         plt.fill_between(test, gp_mean + 2 * np.sqrt(gp_var), gp_mean - 2 * np.sqrt(gp_var),
                          color='b', alpha=0.25, label='GP variance')
-        plt.plot(unit_sp[in_dim, :], y[out_dim, :],
-                 color='k', ls='', marker='o', ms=8, label='data')
+        plt.plot(unit_sp[in_dim, :], y[out_dim, :], color='k', ls='', marker='o', ms=8, label='data')
+        # TODO: plot line segment to indicate derivative observations
         plt.legend()
         plt.show()
 
