@@ -495,14 +495,14 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
             for j in range(n):
                 istart, iend = i * d, i * d + d
                 i_d = i_der[i]
-                E_dfff[istart:iend, j] = Q[i_d, j] * iiLam.dot(mu_Q[:, i_d, j] - unit_sp[:, i_d])
+                E_dfff[istart:iend, j] = Q[i_d, j] * (mu_Q[:, i_d, j] - inn[:, i_d])
         for i in range(n_der):
             for j in range(n_der):
                 istart, iend = i * d, i * d + d
                 jstart, jend = j * d, j * d + d
                 i_d, j_d = i_der[i], i_der[j]
-                T = np.outer((unit_sp[:, i_d] - mu_Q[:, i_d, j_d]), (unit_sp[:, j_d] - mu_Q[:, i_d, j_d]).T) + Sig_Q
-                E_dffd[istart:iend, jstart:jend] = Q[i_d, j_d] * iiLam.dot(T).dot(iiLam)
+                T = np.outer((inn[:, i_d] - mu_Q[:, i_d, j_d]), (inn[:, j_d] - mu_Q[:, i_d, j_d]).T) + Sig_Q
+                E_dffd[istart:iend, jstart:jend] = Q[i_d, j_d] * T
         Q_tilde = np.vstack((np.hstack((Q, E_dfff.T)), np.hstack((E_dfff, E_dffd))))  # (N + N_der*D, N + N_der*D)
 
         # weights for covariance

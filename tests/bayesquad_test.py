@@ -93,6 +93,21 @@ class GPQuadTest(TestCase):
 
 
 class GPQuadDerRBFTest(TestCase):
+    def test_weights(self):
+        n = 1
+        kappa, alpha, beta = 0, 1.0, 2.0
+        lam = alpha ** 2 * (n + kappa) - n
+        unit_sp = Unscented.unit_sigma_points(n, np.sqrt(n + lam))
+        # unit_sp = GaussHermite.unit_sigma_points(n, 10)
+        hypers = {'sig_var': 10.0, 'lengthscale': 0.7 * np.ones((n,)), 'noise_var': 1e-8}
+        sys = UNGM()
+        tf = GPQuadDerRBF(n, unit_sp, hypers, which_der=np.arange(unit_sp.shape[1]))
+        wm, wc, wcc = tf.weights_rbf(unit_sp, hypers)
+        wmd, wcd, wccd = tf.weights_rbf_der(unit_sp, hypers)
+        self.assertTrue(np.array_equal(wm, wmd))
+        self.assertTrue(np.array_equal(wc, wcd))
+        self.assertTrue(np.array_equal(wcc, wccd))
+
     def test_plot_gp_model(self):
         n = 1
         kappa, alpha, beta = 0, 1.0, 2.0
