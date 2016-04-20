@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import warnings
 from numba import jit
 from GPy.kern import RBF, Linear, Bias
 from numpy import newaxis as na
@@ -71,6 +72,13 @@ class GPQuad(BayesianQuadratureTransform):
         # model variance; to be added to the covariance
         # this diagonal form assumes independent GP outputs (cov(f^a, f^b) = 0 for all a, b: a neq b)
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
+        # variance of the mean integral
+        self.integral_var = alpha ** 2 * det(2 * iLam2 + eye_d) ** -0.5 - q.T.dot(iK).dot(q)
+        # print warnings in case of negative model variance
+        if self.model_var[0] < 0:
+            warnings.warn("Expected GP predictive variance < 0 [{:.4e}].".format(self.model_var[0]))
+        if self.integral_var < 0:
+            warnings.warn("Variance of the mean integral < 0 [{:.4e}].".format(self.integral_var))
         return wm, Wc, Wcc
 
     def plot_gp_model(self, f, unit_sp, args, test_range=(-5, 5, 50), plot_dims=(0, 0)):
@@ -108,6 +116,39 @@ class GPQuad(BayesianQuadratureTransform):
     def default_hypers(self, dim):
         # define default hypers
         return {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(dim, ), 'noise_var': 1e-8}
+
+    @staticmethod
+    def expected_gp_var(x, alpha=1.0, el=1.0, jitter=1e-16):
+        d, n = x.shape
+        # GP kernel hyper-parameters
+        # alpha, el, jitter = hypers['sig_var'], hypers['lengthscale'], hypers['noise_var']
+        el = el * np.ones(d)
+        assert len(el) == d
+        # pre-allocation for convenience
+        eye_d, eye_n = np.eye(d), np.eye(n)
+        iLam1 = np.atleast_2d(np.diag(el ** -1))  # sqrt(Lambda^-1)
+        iLam2 = np.atleast_2d(np.diag(el ** -2))
+
+        inp = x.T.dot(iLam1)  # sigmas / el[:, na] (x - m)^T*sqrt(Lambda^-1) # (numSP, xdim)
+        K = np.exp(2 * np.log(alpha) - 0.5 * maha(inp, inp))
+        iK = cho_solve(cho_factor(K + jitter * eye_n), eye_n)
+        zet = 2 * np.log(alpha) - 0.5 * np.sum(inp * inp, 1)
+        inp = inp.dot(iLam1)
+        R = 2 * iLam2 + eye_d
+        t = 1 / np.sqrt(det(R))
+        L = np.exp((zet[:, na] + zet[:, na].T) + maha(inp, -inp, V=0.5 * inv(R)))
+        iKQ = iK.dot(t * L)
+        return alpha ** 2 - np.trace(iKQ)
+
+    @staticmethod
+    def gp_var(xs, x, alpha=1.0, el=1.0):
+        d, n = x.shape
+        kern = RBF(d, variance=alpha, lengthscale=el)
+        K = kern.K(x.T)  # covariances between sigma-points
+        k = kern.K(xs.T, x.T)  # covariance between test inputs and sigma-points
+        kxx = kern.Kdiag(xs.T)  # prior predictive variance
+        k_iK = cho_solve(cho_factor(K), k.T).T
+        return kxx - np.diag(k_iK.dot(k.T))  # GP predictive variance
 
     def _weights(self, sigma_points, hypers):
         return self.weights_rbf(sigma_points, hypers)
@@ -334,7 +375,8 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
         # pre-allocation for convenience
         eye_d, eye_n, eye_y = np.eye(d), np.eye(n), np.eye(n + d * n)
 
-        K = self.kern_rbf_der(unit_sp, hypers)  # evaluate kernel matrix BOTTLENECK
+        # K = GPQuadDerRBF.kern_rbf_der(unit_sp, hypers)  # evaluate kernel matrix BOTTLENECK
+        K = GPQuadDerRBF.kern_rbf_der(unit_sp, unit_sp, alpha=alpha, el=el, which_der=self.which_der)
         iK = cho_solve(cho_factor(K + jitter * eye_y), eye_y)  # invert kernel matrix BOTTLENECK
         Lam = np.diag(el ** 2)
         iLam = np.diag(el ** -1)  # sqrt(Lambda^-1)
@@ -386,6 +428,13 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
         Wc = iKQ.dot(iK)
         # model variance
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
+        self.integral_var = alpha ** 2 * det(2 * iiLam + eye_d) ** -0.5 - q_tilde.T.dot(iK).dot(q_tilde)
+        if self.model_var[0] < 0:
+            # BTW: expected model GP var. should always be positive,
+            # negative value indicates numerical trouble or errors in the implementation of Q or iK
+            warnings.warn("Expected GP predictive variance < 0 [{:.4e}].".format(self.model_var[0]))
+        if self.integral_var < 0:
+            warnings.warn("Variance of the mean integral < 0 [{:.4e}].".format(self.integral_var))
         return wm, Wc, Wcc
 
     def weights_rbf_der(self, unit_sp, hypers):
@@ -399,7 +448,6 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
         # pre-allocation for convenience
         eye_d, eye_n, eye_y = np.eye(d), np.eye(n), np.eye(n + d * n_der)
 
-        # K = GPQuadDerRBF.kern_rbf_der(unit_sp, hypers, i_der)
         K = GPQuadDerRBF.kern_rbf_der(unit_sp, unit_sp, alpha=alpha, el=el, which_der=i_der)
         iK = cho_solve(cho_factor(K + jitter * eye_y), eye_y)  # invert kernel matrix BOTTLENECK
         Lam = np.diag(el ** 2)
@@ -462,7 +510,14 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
         Wc = iKQ.dot(iK)
         # model variance
         self.model_var = np.diag((alpha ** 2 - np.trace(iKQ)) * np.ones((d, 1)))
-        assert self.model_var >= 0  # average model variance >= 0 ?
+        # variance of the mean integral
+        self.integral_var = alpha ** 2 * det(2 * iiLam + eye_d) ** -0.5 - q_tilde.T.dot(iK).dot(q_tilde)
+        # assert self.model_var >= 0, "Average model variance is < 0!"
+        # print warnings in case of negative model variance
+        if self.model_var[0] < 0:  # FIXME: negative values caused by wrong E_dffd
+            warnings.warn("Expected GP predictive variance < 0 [{:.4e}].".format(self.model_var[0]))
+        if self.integral_var < 0:
+            warnings.warn("Variance of the mean integral < 0 [{:.4e}].".format(self.integral_var))
         return wm, Wc, Wcc
 
     # @staticmethod
@@ -531,42 +586,52 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
                 jstart, jend = j * D, j * D + D
                 i_d, j_d = which_der[i], which_der[j]  # indices of points with derivatives
                 Kdd[istart:iend, jstart:jend] = Kff[i_d, j_d] * (iiLam - np.outer(XmX[:, i_d, j_d], XmX[:, i_d, j_d]))
-        return np.vstack((np.hstack((Kff, Kfd)), np.hstack((Kfd.T, Kdd))))
+        if Ns == Nd:
+            return np.vstack((np.hstack((Kff, Kfd)), np.hstack((Kfd.T, Kdd))))
+        else:
+            return np.hstack((Kff, Kfd))
 
     def plot_gp_model(self, f, unit_sp, args, test_range=(-5, 5, 50), plot_dims=(0, 0)):
         # plot out_dim vs. in_dim
         in_dim, out_dim = plot_dims
         # test input must have the same dimension as specified in kernel
         test = np.linspace(*test_range)
-        test_pts = np.zeros((self.d, len(test)))
+        test_pts = np.zeros((self.d, len(test)))  # FIXME: test_pts needs to be a grid in n-D case
         test_pts[in_dim, :] = test
         # shorthand for kernel function
         kernel = GPQuadDerRBF.kern_rbf_der
         # kernel hypers
         s2, ell = self.hypers['sig_var'], self.hypers['lengthscale']
         # function value observations at training points (unit sigma-points)
-        y = np.apply_along_axis(f, 0, unit_sp, args)
-        dy = np.apply_along_axis(f, 0, unit_sp, args, dx=True)
-        fx = np.apply_along_axis(f, 0, test_pts, args)  # function values at test points
+        fx = np.apply_along_axis(f, 0, unit_sp, args)
+        dfx = np.apply_along_axis(f, 0, unit_sp, args, dx=True)
+        y = np.hstack((fx, dfx)).T
+        fxs = np.apply_along_axis(f, 0, test_pts, args)  # function values at test points
         # covariances between training and test points
         K = kernel(unit_sp, unit_sp, alpha=s2, el=ell, which_der=self.which_der)
         k = kernel(test_pts, unit_sp, alpha=s2, el=ell, which_der=self.which_der)
-        kxx = np.diag(kernel(test_pts, alpha=s2, el=ell, which_der=self.which_der))  # prior predictive variance
+        kxx = np.diag(kernel(test_pts, test_pts, alpha=s2, el=ell, which_der=self.which_der))
         k_iK = cho_solve(cho_factor(K), k.T).T
         # GP mean and predictive variance
-        gp_mean = k_iK.dot(y[out_dim, :])
+        gp_mean = k_iK.dot(y[:, out_dim])
         gp_var = np.diag(kxx - k_iK.dot(k.T))
+        gp_std = np.sqrt(gp_var)
         # plot the GP mean, predictive variance and the true function
+        fmin, fmax, fp2p = np.min(fxs), np.max(fxs), np.ptp(fxs)
+        cpad = 0.2
+        xmin, xmax = test_range[:2]
         plt.figure()
-
-        plt.plot(test, fx[out_dim, :], color='r', ls='--', lw=2, label='true')
-        plt.plot(test, gp_mean, color='b', ls='-', lw=2, label='GP mean')
-        plt.fill_between(test, gp_mean + 2 * np.sqrt(gp_var), gp_mean - 2 * np.sqrt(gp_var),
-                         color='b', alpha=0.25, label='GP variance')
-        plt.plot(unit_sp[in_dim, :], y[out_dim, :], color='k', ls='', marker='o', ms=8, label='data')
+        plt.title('GP fit w/ derivative observations')
+        plt.axis([xmin, xmax, fmin - cpad * fp2p, fmax + cpad * fp2p])
+        plt.plot(test, fxs[out_dim, :], 'r--', lw=2, label='true')
+        plt.plot(test, gp_mean, 'k-', lw=2, label='mean')
+        plt.fill_between(test, gp_mean + 2 * gp_std, gp_mean - 2 * gp_std, color='k', alpha=0.15, label='pred. var.')
+        plt.plot(unit_sp[in_dim, :], fx[out_dim, :], color='k', ls='', marker='o', ms=8, label='data')
         # TODO: plot line segment to indicate derivative observations
         plt.legend()
         plt.show()
+        # TODO: could return the whole figure for saving and viewing (instead of directly viewing)
+
 
     def default_sigma_points(self, dim):
         # create unscented points
@@ -577,8 +642,65 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
         # define default hypers
         return {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(dim, ), 'noise_var': 1e-8}
 
+    @staticmethod
+    def expected_gp_var(x, alpha=1.0, el=1.0, jitter=1e-8):
+        d, n = x.shape
+        el = el * np.ones(d)
+        assert len(el) == d
+        # pre-allocation for convenience
+        eye_d, eye_n, eye_y = np.eye(d), np.eye(n), np.eye(n + d * n)
+
+        K = GPQuadDerRBF.kern_rbf_der(x, x, alpha=alpha, el=el)  # evaluate kernel matrix BOTTLENECK
+        iK = cho_solve(cho_factor(K + jitter * eye_y), eye_y)  # invert kernel matrix BOTTLENECK
+        Lam = np.diag(el ** 2)
+        iLam = np.diag(el ** -1)  # sqrt(Lambda^-1)
+        iiLam = np.diag(el ** -2)  # Lambda^-1
+        inn = iLam.dot(x)  # (x-m)^T*iLam  # (N, D)
+        B = iiLam + eye_d  # P*Lambda^-1+I, (P+Lam)^-1 = Lam^-1*(P*Lam^-1+I)^-1 # (D, D)
+        cho_B = cho_factor(B)
+        t = cho_solve(cho_B, inn)  # dot(inn, inv(B)) # (x-m)^T*iLam*(P+Lambda)^-1  # (D, N)
+        l = np.exp(-0.5 * np.sum(inn * t, 0))  # (N, 1)
+        q = (alpha ** 2 / np.sqrt(det(B))) * l  # (N, 1)
+        Sig_q = cho_solve(cho_B, eye_d)  # B^-1*I
+        eta = Sig_q.dot(x)  # (D,N) Sig_q*x
+        mu_q = iiLam.dot(eta)  # (D,N)
+        r = q[na, :] * iiLam.dot(mu_q - x)  # -t.dot(iLam) * q  # (D, N)
+        q_tilde = np.hstack((q.T, r.T.ravel()))  # (1, N+N*D)
+
+        # quantities for covariance weights
+        zet = 2 * np.log(alpha) - 0.5 * np.sum(inn * inn, 0)  # (D,N) 2log(alpha) - 0.5*(x-m)^T*Lambda^-1*(x-m)
+        inn = iiLam.dot(x)  # inp / el[:, na]**2
+        R = 2 * iiLam + eye_d  # 2P*Lambda^-1 + I
+        # (N,N)
+        Q = (1.0 / np.sqrt(det(R))) * np.exp((zet[:, na] + zet[:, na].T) + maha(inn.T, -inn.T, V=0.5 * solve(R, eye_d)))
+        cho_LamSig = cho_factor(Lam + Sig_q)
+        Sig_Q = cho_solve(cho_LamSig, Sig_q).dot(iiLam)  # (D,D) Lambda^-1 (Lambda*(Lambda+Sig_q)^-1*Sig_q) Lambda^-1
+        eta_tilde = iiLam.dot(cho_solve(cho_LamSig, eta))  # Lambda^-1(Lambda+Sig_q)^-1*eta
+        ETA = eta_tilde[..., na] + eta_tilde[:, na, :]  # (D,N,N) pairwise sum of pre-multiplied eta's (D,N,N)
+        # mu_Q = ETA + in_mean[:, na]  # (D,N,N)
+        xnmu = inn[..., na] - ETA  # (D,N,N) x_n - mu^Q_nm
+        # xmmu = sigmas[:, na, :] - mu_Q  # x_m - mu^Q_nm
+        E_dff = (-Q[na, ...] * xnmu).swapaxes(0, 1).reshape(d * n, n)
+        # (D,D,N,N) (x_n - mu^Q_nm)(x_m - mu^Q_nm)^T + Sig_Q
+        T = xnmu[:, na, ...] * xnmu.swapaxes(1, 2)[na, ...] + Sig_Q[..., na, na]
+        E_dffd = (Q[na, na, ...] * T).swapaxes(0, 3).reshape(d * n, -1)  # (N*D, N*D)
+        Q_tilde = np.vstack((np.hstack((Q, E_dff.T)), np.hstack((E_dff, E_dffd))))  # (N+N*D, N+N*D)
+
+        return alpha ** 2 - np.trace(iK.dot(Q_tilde))
+
+    @staticmethod
+    def gp_var(xs, x, alpha=1.0, el=1.0, jitter=1e-16):
+        d, n = x.shape
+        kernel = GPQuadDerRBF.kern_rbf_der
+        which_der = np.arange(n)
+        K = kernel(x, x, alpha=alpha, el=el, which_der=which_der)
+        k = kernel(xs, x, alpha=alpha, el=el, which_der=which_der)
+        kxx = np.diag(kernel(xs, xs, alpha=alpha, el=el, which_der=which_der))
+        k_iK = cho_solve(cho_factor(K + jitter * np.eye(n + n * d)), k.T).T
+        return kxx - np.diag(k_iK.dot(k.T))
+
     def _weights(self, sigma_points, hypers):
-        return self.weights_rbf_der(sigma_points, hypers)
+        return self.weights_rbf(sigma_points, hypers)
 
     def _fcn_eval(self, fcn, x, fcn_pars):
         # should return as many columns as output dims, one column includes function and derivative evaluations

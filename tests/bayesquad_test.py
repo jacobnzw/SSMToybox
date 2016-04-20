@@ -1,13 +1,15 @@
 from unittest import TestCase
 
 import matplotlib.pyplot as plt
+import scipy as sp
 import numpy as np
 import numpy.linalg as la
 from numpy import newaxis as na
+from scipy.stats import multivariate_normal
 
 from models.ungm import UNGM
 from models.pendulum import Pendulum
-from transforms.bayesquad import GPQuad, TPQuad, GPQuadDerAffine, GPQuadDerHermite
+from transforms.bayesquad import GPQuad, TPQuad, GPQuadDerAffine, GPQuadDerHermite, GPQuadDerRBF
 from transforms.quad import Unscented, GaussHermite
 import time
 
@@ -61,7 +63,70 @@ class GPQuadTest(TestCase):
         tf = GPQuad(n, unit_sp, hypers)
         sys = UNGM()
         tf.plot_gp_model(sys.dyn_eval, unit_sp, np.atleast_1d(1.0), test_range=(-5, 5, 50), plot_dims=(0, 0))
+        print "Expected model variance: {}".format(tf.model_var[0])
         # tf.plot_gp_model(sys.meas_eval, unit_sp, np.atleast_1d(1.0), test_range=(-5, 5, 50), plot_dims=(0, 0))
+
+    def test_expected_gp_var(self):
+        # compares expected gp variance computed numerically with the closed form expression
+        n = 1
+        kappa, alpha, beta = 0, 1.0, 2.0
+        lam = alpha ** 2 * (n + kappa) - n
+        unit_sp = Unscented.unit_sigma_points(n, np.sqrt(n + lam))
+        # unit_sp = GaussHermite.unit_sigma_points(n, 10)
+        hypers = {'sig_var': 1.0, 'lengthscale': 1.0 * np.ones((n,)), 'noise_var': 1e-8}
+        tf = GPQuad
+        al, el = 1.0, 100.0
+        res_cf = tf.expected_gp_var(unit_sp, alpha=al, el=el)
+        # MC approximation of the expected gp var
+        samples = 1e4
+        x_mc = np.random.multivariate_normal(np.zeros(n), np.eye(n), size=int(samples)).T
+        f_mc = tf.gp_var(x_mc, unit_sp, alpha=al, el=el)
+        res_mc = f_mc.sum() / samples
+        # Gauss-Hermite quadrature approximation
+        order_gh = 50
+        x_gh, w_gh = sp.special.he_roots(order_gh)
+        f_gh = tf.gp_var(x_gh[na, :], unit_sp, alpha=al, el=el)
+        res_gh = w_gh.dot(f_gh)
+        print "Closed-form: {:.4e} (RE: {:.2f}%)".format(res_cf, 100 * np.abs(1 - (res_mc / res_cf)))
+        print "Monte Carlo: {:.4e} (RE: {:.2f}%)".format(res_mc, 100 * np.abs(1 - (res_cf / res_mc)))
+        print "Gauss-Hermi: {:.4e} (RE: {:.2f}%)".format(res_gh, 100 * np.abs(1 - (res_cf / res_gh)))
+
+
+class GPQuadDerRBFTest(TestCase):
+    def test_plot_gp_model(self):
+        n = 1
+        kappa, alpha, beta = 0, 1.0, 2.0
+        lam = alpha ** 2 * (n + kappa) - n
+        unit_sp = Unscented.unit_sigma_points(n, np.sqrt(n + lam))
+        # unit_sp = GaussHermite.unit_sigma_points(n, 10)
+        hypers = {'sig_var': 10.0, 'lengthscale': 0.7 * np.ones((n,)), 'noise_var': 1e-8}
+        sys = UNGM()
+        tf = GPQuadDerRBF(n, unit_sp, hypers, which_der=np.arange(unit_sp.shape[1]))
+        tf.plot_gp_model(sys.dyn_eval, unit_sp, np.atleast_1d(1.0), test_range=(-5, 5, 50), plot_dims=(0, 0))
+
+    def test_expected_gp_var(self):
+        # compares expected gp variance computed numerically with the closed form expression
+        n = 1
+        kappa, alpha, beta = 0, 1.0, 2.0
+        lam = alpha ** 2 * (n + kappa) - n
+        unit_sp = Unscented.unit_sigma_points(n, np.sqrt(n + lam))
+        # unit_sp = GaussHermite.unit_sigma_points(n, 10)
+        tf = GPQuadDerRBF
+        al, el = 10.0, 0.7
+        res_cf = tf.expected_gp_var(unit_sp, alpha=al, el=el, jitter=1e-8)
+        # MC approximation of the expected gp var
+        samples = 1e4
+        x_mc = np.random.multivariate_normal(np.zeros(n), np.eye(n), size=int(samples)).T
+        f_mc = tf.gp_var(x_mc, unit_sp, alpha=al, el=el)
+        res_mc = f_mc.sum() / samples
+        # Gauss-Hermite quadrature approximation
+        order_gh = 50
+        x_gh, w_gh = sp.special.he_roots(order_gh)
+        f_gh = tf.gp_var(x_gh[na, :], unit_sp, alpha=al, el=el)
+        res_gh = w_gh.dot(f_gh)
+        print "Closed-form: {:.4e} (RE: {:.2f}%)".format(res_cf, 100 * np.abs(1 - (res_mc / res_cf)))
+        print "Monte Carlo: {:.4e} (RE: {:.2f}%)".format(res_mc, 100 * np.abs(1 - (res_cf / res_mc)))
+        print "Gauss-Hermi: {:.4e} (RE: {:.2f}%)".format(res_gh, 100 * np.abs(1 - (res_cf / res_gh)))
 
 
 class TPQuadTest(TestCase):
