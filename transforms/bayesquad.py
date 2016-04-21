@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import numpy as np
 import warnings
 from numba import jit
@@ -586,51 +587,61 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
                 jstart, jend = j * D, j * D + D
                 i_d, j_d = which_der[i], which_der[j]  # indices of points with derivatives
                 Kdd[istart:iend, jstart:jend] = Kff[i_d, j_d] * (iiLam - np.outer(XmX[:, i_d, j_d], XmX[:, i_d, j_d]))
-        if Ns == Nd:
+        if Ns == N:  # TODO: xs should be kwarg just like in GPy to properly recognize if test points are used
             return np.vstack((np.hstack((Kff, Kfd)), np.hstack((Kfd.T, Kdd))))
         else:
             return np.hstack((Kff, Kfd))
 
-    def plot_gp_model(self, f, unit_sp, args, test_range=(-5, 5, 50), plot_dims=(0, 0)):
+    def plot_gp_model(self, f, x, args, test_range=(-5, 5, 50), plot_dims=(0, 0)):
         # plot out_dim vs. in_dim
         in_dim, out_dim = plot_dims
         # test input must have the same dimension as specified in kernel
-        test = np.linspace(*test_range)
-        test_pts = np.zeros((self.d, len(test)))  # FIXME: test_pts needs to be a grid in n-D case
-        test_pts[in_dim, :] = test
+        xs = np.linspace(*test_range)
+        test_pts = np.zeros((self.d, len(xs)))  # FIXME: test_pts needs to be a grid in n-D case
+        test_pts[in_dim, :] = xs
         # shorthand for kernel function
         kernel = GPQuadDerRBF.kern_rbf_der
         # kernel hypers
         s2, ell = self.hypers['sig_var'], self.hypers['lengthscale']
         # function value observations at training points (unit sigma-points)
-        fx = np.apply_along_axis(f, 0, unit_sp, args)
-        dfx = np.apply_along_axis(f, 0, unit_sp, args, dx=True)
+        fx = np.apply_along_axis(f, 0, x, args)[out_dim, :]
+        dfx = np.apply_along_axis(f, 0, x[:, self.which_der], args, dx=True)[out_dim, :]
         y = np.hstack((fx, dfx)).T
-        fxs = np.apply_along_axis(f, 0, test_pts, args)  # function values at test points
+        fxs = np.apply_along_axis(f, 0, test_pts, args)[out_dim, :]  # function values at test points
         # covariances between training and test points
-        K = kernel(unit_sp, unit_sp, alpha=s2, el=ell, which_der=self.which_der)
-        k = kernel(test_pts, unit_sp, alpha=s2, el=ell, which_der=self.which_der)
+        K = kernel(x, x, alpha=s2, el=ell, which_der=self.which_der)
+        k = kernel(test_pts, x, alpha=s2, el=ell, which_der=self.which_der)
         kxx = np.diag(kernel(test_pts, test_pts, alpha=s2, el=ell, which_der=self.which_der))
         k_iK = cho_solve(cho_factor(K), k.T).T
         # GP mean and predictive variance
-        gp_mean = k_iK.dot(y[:, out_dim])
-        gp_var = np.diag(kxx - k_iK.dot(k.T))
+        gp_mean = k_iK.dot(y)
+        gp_var = kxx[:len(xs)] - np.diag(k_iK.dot(k.T))
         gp_std = np.sqrt(gp_var)
         # plot the GP mean, predictive variance and the true function
         fmin, fmax, fp2p = np.min(fxs), np.max(fxs), np.ptp(fxs)
         cpad = 0.2
         xmin, xmax = test_range[:2]
-        plt.figure()
+        x = x[in_dim, :]
+        fig = plt.figure()
         plt.title('GP fit w/ derivative observations')
         plt.axis([xmin, xmax, fmin - cpad * fp2p, fmax + cpad * fp2p])
-        plt.plot(test, fxs[out_dim, :], 'r--', lw=2, label='true')
-        plt.plot(test, gp_mean, 'k-', lw=2, label='mean')
-        plt.fill_between(test, gp_mean + 2 * gp_std, gp_mean - 2 * gp_std, color='k', alpha=0.15, label='pred. var.')
-        plt.plot(unit_sp[in_dim, :], fx[out_dim, :], color='k', ls='', marker='o', ms=8, label='data')
-        # TODO: plot line segment to indicate derivative observations
+        plt.plot(xs, fxs, 'r--', lw=2, label='true')
+        plt.plot(xs, gp_mean, 'k-', lw=2, label='mean')
+        plt.fill_between(xs, gp_mean + 2 * gp_std, gp_mean - 2 * gp_std, color='k', alpha=0.15, label='pred. var.')
+        plt.plot(x, fx, color='k', ls='', marker='o', ms=8, label='data')
+        # plot line segments to indicate derivative observations
+        h = 0.15
+        for i in range(len(dfx)):
+            # attempt @ keeping the length of line segment equal
+            # h = np.cos(np.arctan(dfx[i])) * 0.25*np.abs((fmin-fmax)/(xmin-xmax))
+            i_d = self.which_der[i]
+            x0, x1 = x[i_d] - h, x[i_d] + h
+            y0 = dfx[i] * (x0 - x[i_d]) + fx[i_d]
+            y1 = dfx[i] * (x1 - x[i_d]) + fx[i_d]
+            plt.gca().add_line(Line2D([x0, x1], [y0, y1], linewidth=6, color='k'))
         plt.legend()
         plt.show()
-        # TODO: could return the whole figure for saving and viewing (instead of directly viewing)
+        return fig
 
 
     def default_sigma_points(self, dim):
@@ -700,7 +711,7 @@ class GPQuadDerRBF(BayesianQuadratureTransform):
         return kxx - np.diag(k_iK.dot(k.T))
 
     def _weights(self, sigma_points, hypers):
-        return self.weights_rbf(sigma_points, hypers)
+        return self.weights_rbf_der(sigma_points, hypers)
 
     def _fcn_eval(self, fcn, x, fcn_pars):
         # should return as many columns as output dims, one column includes function and derivative evaluations

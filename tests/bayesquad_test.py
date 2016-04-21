@@ -113,11 +113,11 @@ class GPQuadDerRBFTest(TestCase):
         kappa, alpha, beta = 0, 1.0, 2.0
         lam = alpha ** 2 * (n + kappa) - n
         unit_sp = Unscented.unit_sigma_points(n, np.sqrt(n + lam))
-        # unit_sp = GaussHermite.unit_sigma_points(n, 10)
-        hypers = {'sig_var': 10.0, 'lengthscale': 0.7 * np.ones((n,)), 'noise_var': 1e-8}
+        dmask = np.array([0, 1, 2])
+        hypers = {'sig_var': 10.0, 'lengthscale': 1.0 * np.ones((n,)), 'noise_var': 1e-8}
         sys = UNGM()
-        tf = GPQuadDerRBF(n, unit_sp, hypers, which_der=np.arange(unit_sp.shape[1]))
-        tf.plot_gp_model(sys.dyn_eval, unit_sp, np.atleast_1d(1.0), test_range=(-5, 5, 50), plot_dims=(0, 0))
+        tf = GPQuadDerRBF(n, unit_sp, hypers, which_der=dmask)
+        fig = tf.plot_gp_model(sys.meas_eval, unit_sp, np.atleast_1d(1.0))
 
     def test_expected_gp_var(self):
         # compares expected gp variance computed numerically with the closed form expression

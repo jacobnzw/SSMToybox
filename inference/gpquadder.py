@@ -85,13 +85,12 @@ class GPQuadDerHermiteKalman(StateSpaceInference):
 def main():
     from models.ungm import ungm_filter_demo
     from models.pendulum import pendulum_filter_demo
-    der_mask = np.array([0])
+    der_mask = np.array([0, 1, 2])
     # der_mask = np.array([1, 2])
     hyp_affine = {'bias': 1.0, 'variance': 1.0 * np.ones((1,)), 'noise_var': 1e-16}
     # hyp_rbf_ut = {'sig_var': 8.0, 'lengthscale': 0.5 * np.ones((1,)), 'noise_var': 1e-16}
-    hyp_rbf_ut_der = {'sig_var': 1.0,
-                      'lengthscale': 1.0 * np.ones((1,)),
-                      'noise_var': 1e-8}
+    hyp_rbf_ut_der = {'sig_var': 8.0, 'lengthscale': 0.7 * np.ones((1,)), 'noise_var': 1e-8}
+    hyp_rbf_ut_der_m = {'sig_var': 10.0, 'lengthscale': 6.0 * np.ones((1,)), 'noise_var': 1e-8}
     # hyp_hermite_ut = {'lambda': 1.0 * np.ones(4), 'noise_var': 1e-16}
     # hyp_hermite_ut = {'lambda': np.array([0.5, 0.25, 0.15, 0.10]), 'noise_var': 1e-16}
     # usp = np.zeros((1, 1))  # central sigma, GPQuadDerKalman ~= EKF)
@@ -106,7 +105,7 @@ def main():
     #                  hyp_dyn=hyp_affine, hyp_meas=hyp_affine, which_der=der_mask)
     # GPQ+D-RBF, xi=0, el=1000 : RMSE 21.1 | 15.99
     ungm_filter_demo(GPQuadDerRBFKalman, usp_dyn=usp, usp_meas=usp,
-                     hyp_dyn=hyp_rbf_ut_der, hyp_meas=hyp_rbf_ut_der, which_der=der_mask)
+                     hyp_dyn=hyp_rbf_ut_der, hyp_meas=hyp_rbf_ut_der_m, which_der=der_mask)
     # pendulum_filter_demo(GPQuadDerRBFKalman, usp_dyn=usp, usp_meas=usp,
     #                  hyp_dyn=hyp_rbf_ut_der, hyp_meas=hyp_rbf_ut_der, which_der=der_mask)
     # GPQ+D-RBF, xi=UT,
