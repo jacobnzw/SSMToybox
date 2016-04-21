@@ -1,9 +1,11 @@
 import numpy as np
+import numpy.linalg as la
+from numpy import newaxis as na
 from numpy.polynomial.hermite_e import hermegauss, hermeval
 from scipy.special import factorial
 from sklearn.utils.extmath import cartesian
 
-from transforms.transform import SigmaPointTransform
+from transforms.transform import MomentTransform, SigmaPointTransform
 
 
 # TODO: add higher-order fully symmetric rules from [McNamee, Stenger]
@@ -11,16 +13,31 @@ from transforms.transform import SigmaPointTransform
 #  Gaussian Particle filter [Djuric] appears to be different from MCT
 
 
-class MonteCarlo(SigmaPointTransform):
+class MonteCarlo(MomentTransform):
     """Monte Carlo transform.
 
     Serves as baseline for comparing all other moment transforms.
     """
 
     def __init__(self, dim, n=100):
-        self.wm, wc = self.weights(n)
-        self.Wc = np.diag(wc * np.ones(n))
+        n = int(n)
+        self.wm, self.Wc = self.weights(n)
         self.unit_sp = self.unit_sigma_points(dim, n)
+
+    def apply(self, f, mean, cov, pars):
+        mean = mean[:, na]
+        # form sigma-points from unit sigma-points
+        x = mean + la.cholesky(cov).dot(self.unit_sp)
+        # push sigma-points through non-linearity
+        fx = np.apply_along_axis(f, 0, x, pars)
+        # output mean
+        mean_f = (self.wm * fx).sum(axis=1)
+        # output covariance
+        dfx = fx - mean_f[:, na]
+        cov_f = self.Wc * (dfx.dot(dfx.T))
+        # input-output covariance
+        cov_fx = self.Wc * dfx.dot((x - mean).T)
+        return mean_f, cov_f, cov_fx
 
     @staticmethod
     def weights(n):
