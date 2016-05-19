@@ -4,14 +4,34 @@ import matplotlib.pyplot as plt
 from ssmodel import *
 
 
-class BearingsOnlyTracking(StateSpaceModel):
+class CoordinatedTurn(StateSpaceModel):
     """
-    Bearings only target tracking in 2D using 4 sensors.
+    Bearings only target tracking in 2D using multiple sensors as in [3]_.
 
-    State: x = [x_1, v_1, x_2, v_2, omega]
+    TODO:
+    Coordinated turn model [1]_ assumes constant turn rate (not implemented).
+    Model in [2]_ is implemented here, where the turn rate can change in time and measurements are range and bearing.
+    [3]_ considers only bearing measurements.
+
+    State
+    -----
+    x = [x_1, v_1, x_2, v_2, omega]
         x_1, x_2 - target position [m]
         v_1, v_2 - target velocity [m/s]
         omega - target turn rate [deg/s]
+
+    Measurements
+    ------------
+
+
+    References
+    ----------
+    .. [1] Bar-Shalom, Y., Li, X. R. and Kirubarajan, T. (2001).
+           Estimation with applications to tracking and navigation. Wiley-Blackwell.
+    .. [2] Arasaratnam, I., and Haykin, S. (2009). Cubature Kalman Filters.
+           IEEE Transactions on Automatic Control, 54(6), 1254-1269.
+    .. [3] Sarkka, S., Hartikainen, J., Svensson, L., & Sandblom, F. (2015).
+           On the relation between Gaussian process quadratures and sigma-point methods.
     """
 
     xD = 5
@@ -44,9 +64,24 @@ class BearingsOnlyTracking(StateSpaceModel):
             'r_mean': np.zeros(self.rD),
             'r_cov': 5.0 * np.eye(self.rD)
         }
-        super(BearingsOnlyTracking, self).__init__(**kwargs)
+        super(CoordinatedTurn, self).__init__(**kwargs)
 
     def dyn_fcn(self, x, q, *args):
+        """
+        Model describing an object in 2D plane moving with constant speed (magnitude of the velocity vector) and
+        turning with a constant angular rate (executing a coordinated turn).
+
+        Parameters
+        ----------
+        x
+        q
+        args
+
+
+        Returns
+        -------
+
+        """
         om = x[4]
         a = np.sin(om * self.dt)
         b = np.cos(om * self.dt)
@@ -60,6 +95,19 @@ class BearingsOnlyTracking(StateSpaceModel):
         return mdyn.dot(x) + q
 
     def meas_fcn(self, x, r, *args):
+        """
+        Bearing measurement from the sensor to the moving object.
+
+        Parameters
+        ----------
+        x
+        r
+        args
+
+        Returns
+        -------
+
+        """
         a = x[2] - self.sensor_pos[:, 1]
         b = x[0] - self.sensor_pos[:, 0]
         return np.arctan(a / b) + r
@@ -67,11 +115,17 @@ class BearingsOnlyTracking(StateSpaceModel):
     def par_fcn(self, time):
         pass
 
+    def dyn_fcn_dx(self, x, q, pars):
+        pass
+
+    def meas_fcn_dx(self, x, r, pars):
+        pass
+
 
 def bot_demo():
     steps = 100
     mc_simulations = 1
-    ssm = BearingsOnlyTracking(dt=0.1)
+    ssm = CoordinatedTurn(dt=0.1)
     x, z = ssm.simulate(steps, mc_sims=mc_simulations)
     # plt.plot(x[0, ...], color='b', alpha=0.15, label='state trajectory')
     # plt.plot(z[0, ...], color='k', alpha=0.25, ls='None', marker='.', label='measurements')
