@@ -2,6 +2,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 
 from ssmodel import *
+from inference.ssinfer import StateSpaceInference
 
 
 class CoordinatedTurn(StateSpaceModel):
@@ -45,9 +46,12 @@ class CoordinatedTurn(StateSpaceModel):
     def __init__(self, dt=1.0, sensor_pos=np.vstack((np.eye(2), -np.eye(2)))):
         """
 
-        :param dt: time interval between two consecutive measurements
-        :param sensor_pos: sensor [x, y] positions in rows
-        :return:
+        Parameters
+        ----------
+        dt :
+            time interval between two consecutive measurements
+        sensor_pos :
+            sensor [x, y] positions in rows
         """
         self.dt = dt
         self.sensor_pos = sensor_pos  # np.vstack((np.eye(2), -np.eye(2)))
@@ -123,9 +127,9 @@ class CoordinatedTurn(StateSpaceModel):
 
 
 def bot_demo():
-    steps = 100
+    steps = 200
     mc_simulations = 1
-    ssm = CoordinatedTurn(dt=0.1)
+    ssm = CoordinatedTurn(dt=0.01)
     x, z = ssm.simulate(steps, mc_sims=mc_simulations)
     # plt.plot(x[0, ...], color='b', alpha=0.15, label='state trajectory')
     # plt.plot(z[0, ...], color='k', alpha=0.25, ls='None', marker='.', label='measurements')
@@ -138,6 +142,46 @@ def bot_demo():
     plt.plot(x[0, :, 0])
     plt.subplot(g[3, 0])
     plt.plot(x[2, :, 0])
+    plt.show()
+
+
+def bot_filter_demo(filt_class, **kwargs):
+    assert issubclass(filt_class, StateSpaceInference)
+    system = CoordinatedTurn(dt=0.01)
+    # create filter object, pass in additional kwargs
+    filt = filt_class(system, **kwargs)
+    # simulate dynamic system for given number of steps and mc simulations
+    time_steps, mc = 150, 10
+    x, z = system.simulate(time_steps, mc_sims=mc)
+    print "Running {} filter/smoother ({} time steps, {} MC simulations) ...".format(filt_class.__name__,
+                                                                                     time_steps, mc)
+    rmse_filter = np.zeros((system.xD, mc))
+    rmse_smoother = np.zeros((system.xD, mc))
+    for imc in range(mc):
+        mean_f, cov_f = filt.forward_pass(z[..., imc])
+        mean_s, cov_s = filt.backward_pass()
+        rmse_filter[:, imc] = np.sqrt(np.mean((x[..., imc] - mean_f) ** 2, axis=1))
+        rmse_smoother[:, imc] = np.sqrt(np.mean((x[..., imc] - mean_s) ** 2, axis=1))
+        filt.reset()
+    # print average filter/smoother RMSE
+    print "Filter RMSE: {}".format((rmse_filter.mean(axis=1)))
+    print "Smoother RMSE: {}".format((rmse_smoother.mean(axis=1)))
+    # plot one realization of the system trajectory, measurements and filtered/smoothed state estimate
+    plt.figure()
+    time = range(1, time_steps)
+    plt.plot(x[0, :, imc], x[2, :, imc], color='r', ls='--', label='true state')
+    # plt.plot(z[0, :, 0], color='k', ls='None', marker='o')
+    plt.plot(mean_f[0, ...], mean_f[2, ...], color='b', label='filtered estimate')
+    # plt.fill_between(time,
+    #                  mean_f[0, 1:] - 2 * np.sqrt(cov_f[0, 0, 1:]),
+    #                  mean_f[0, 1:] + 2 * np.sqrt(cov_f[0, 0, 1:]),
+    #                  color='b', alpha=0.15)
+    plt.plot(mean_s[0, ...], mean_s[2, ...], color='g', label='smoothed estimate')
+    # plt.fill_between(time,
+    #                  mean_s[0, 1:] - 2 * np.sqrt(cov_s[0, 0, 1:]),
+    #                  mean_s[0, 1:] + 2 * np.sqrt(cov_s[0, 0, 1:]),
+    #                  color='g', alpha=0.25)
+    plt.legend()
     plt.show()
 
 

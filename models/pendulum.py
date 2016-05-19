@@ -45,17 +45,17 @@ class Pendulum(StateSpaceModel):
 
 
 def pendulum_demo():
-    steps = 250
+    steps = 500
     mc_simulations = 100
     ssm = Pendulum()
     x, z = ssm.simulate(steps, mc_sims=mc_simulations)
 
     plt.figure()
-    plt.plot(x[0, ...], color='b', alpha=0.15, label='state trajectory')
-    plt.plot(z[0, ...], color='k', alpha=0.25, ls='None', marker='.', label='measurements')
+    plt.plot(x[0, ...], color='b', lw=2, alpha=0.15, label='state trajectory')
+    # plt.plot(z[0, ...], color='k', alpha=0.25, ls='None', marker='.', label='measurements')
 
-    plt.figure()
-    plt.plot(x[0, :, 0], x[1, :, 0])
+    # plt.figure()
+    # plt.plot(x[0, :, 0], x[1, :, 0])
     plt.show()
 
 
