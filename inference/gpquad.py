@@ -23,7 +23,7 @@ class GPQuadKalman(StateSpaceInference):
 def main():
     from models.ungm import ungm_filter_demo
     from models.pendulum import pendulum_filter_demo
-    from models.bot import bot_filter_demo
+    from models.tracking import bot_filter_demo
     hdyn = {'sig_var': 1.0, 'lengthscale': 10.0 * np.ones(5, ), 'noise_var': 1e-16}
     hmeas = {'sig_var': 1.0, 'lengthscale': 10.0 * np.ones(5, ), 'noise_var': 1e-16}
     # hdyn, hmeas = None, None

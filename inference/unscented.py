@@ -22,7 +22,7 @@ def main():
     # ungm_filter_demo(UnscentedKalman, kappa=0.0)
     # from models.pendulum import pendulum_filter_demo
     # pendulum_filter_demo(UnscentedKalman)
-    from models.bot import bot_filter_demo
+    from models.tracking import bot_filter_demo
     bot_filter_demo(UnscentedKalman)
 
 if __name__ == '__main__':
