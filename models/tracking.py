@@ -326,10 +326,10 @@ class ReentryRadar(StateSpaceModel):
 
     def meas_fcn(self, x, r, pars):
         # range
-        r = np.sqrt((x[0] - self.sx) ** 2 + (x[1] - self.sy) ** 2)
+        rng = np.sqrt((x[0] - self.sx) ** 2 + (x[1] - self.sy) ** 2)
         # bearing
-        theta = np.arctan((x[1] - self.sy) / (x[0] - self.sx))
-        return np.array([r, theta]) + r
+        theta = np.arctan2((x[1] - self.sy), (x[0] - self.sx))
+        return np.array([rng, theta]) + r
 
     def par_fcn(self, time):
         pass
@@ -364,18 +364,16 @@ def reentry_demo(steps=100, mc_sims=1):
     # plt.plot(x[0, ...], color='b', alpha=0.15, label='state trajectory')
     # plt.plot(z[0, ...], color='k', alpha=0.25, ls='None', marker='.', label='measurements')
     plt.figure()
-    g = gridspec.GridSpec(4, 1)
-    plt.subplot(g[:2, 0])
+    g = gridspec.GridSpec(2, 4)
+    plt.subplot(g[:, :2])
     # Earth surface w/ radar position
     t = 0.02 * np.arange(-1, 4, 0.1)
     plt.plot(ssm.R0 * np.cos(t), ssm.R0 * np.sin(t), 'r', ssm.sx, ssm.sy, 'ko')
     # vehicle trajectory
     for i in range(mc_sims):
         plt.plot(x[0, :, i], x[1, :, i], alpha=0.35, color='b')
-    plt.subplot(g[2, 0])
-    plt.plot(x[0, :, :], 'b', alpha=0.25)
-    plt.subplot(g[3, 0])
-    plt.plot(x[1, :, :], 'b', alpha=0.25)
+    plt.subplot(g[:, 2:], polar=True)
+    plt.plot((z[1, :, 0]), z[0, :, 0], 'ko')
     plt.show()
 
 
@@ -419,4 +417,4 @@ def bot_filter_demo(filt_class, **kwargs):
 
 
 if __name__ == '__main__':
-    reentry_demo(steps=1500, mc_sims=10)
+    reentry_demo(steps=1200, mc_sims=1)
