@@ -254,7 +254,10 @@ class ReentryRadar(StateSpaceModel):
 
     State
     -----
-    position, velocity, aerodynamic parameter
+    [px, py, vx, vy, x5]
+    (px, py) - position,
+    (vx, vy) - velocity,
+    x5 - aerodynamic parameter
 
     Measurements
     ------------
@@ -263,15 +266,70 @@ class ReentryRadar(StateSpaceModel):
 
     References
     ----------
-    .. [1] Julier, S. J. and Uhlman, J. K. (2004)
+    .. [1] Julier, S. J., & Uhlmann, J. K. (2004). Unscented Filtering and Nonlinear Estimation.
+           Proceedings of the IEEE, 92(3), 401-422
 
     """
 
+    xD = 5
+    zD = 2  # measurement dimension
+    qD = 3
+    rD = 2  # measurement noise dimension
+    q_additive = True
+    r_additive = True
+
+    R0 = 6374  # Earth's radius
+    H0 = 13.406
+    Gm0 = 3.9860e5
+    b0 = -0.59783  # balistic coefficient of a typical vehicle
+    sx, sy = R0, 0  # radar location
+
+    def __init__(self, dt=0.1):
+        """
+
+        Parameters
+        ----------
+        dt :
+            time interval between two consecutive measurements
+        """
+        self.dt = dt
+        kwargs = {
+            'x0_mean': np.array([6500.4, 349.14, -1.8093, -6.7967, 0.6932]),  # m, m/s, m m/s, rad/s
+            'x0_cov': np.diag([1e-6, 1e-6, 1e-6, 1e-6, 0]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
+            'q_mean': np.zeros(self.qD),
+            'q_cov': self.dt ** -1 * np.array(
+                [[2.4064e-5, 0, 0],
+                 [0, 2.4064e-5, 0],
+                 [0, 0, 0]]),
+            'r_mean': np.zeros(self.rD),
+            'r_cov': np.array([[1e-6, 0],
+                               [0, 0.17e-3 ** 2]])
+        }
+        super(ReentryRadar, self).__init__(**kwargs)
+
     def dyn_fcn(self, x, q, pars):
-        pass
+        # scaled balistic coefficient
+        b = self.b0 * np.exp(x[4])
+        # distance from center of the Earth
+        R = np.sqrt(x[0] ** 2 + x[1] ** 2)
+        # speed
+        V = np.sqrt(x[2] ** 2 + x[3] ** 2)
+        # drag force
+        D = b * np.exp((self.R0 - R) / self.H0) * V
+        # gravity force
+        G = -self.Gm0 / R ** 3
+        return np.array([x[0] + self.dt * x[2],
+                         x[1] + self.dt * x[3],
+                         x[2] + self.dt * (D * x[2] + G * x[0]) + q[0],
+                         x[3] + self.dt * (D * x[3] + G * x[1]) + q[1],
+                         x[4] + q[2]])
 
     def meas_fcn(self, x, r, pars):
-        pass
+        # range
+        r = np.sqrt((x[0] - self.sx) ** 2 + (x[1] - self.sy) ** 2)
+        # bearing
+        theta = np.arctan((x[1] - self.sy) / (x[0] - self.sx))
+        return np.array([r, theta]) + r
 
     def par_fcn(self, time):
         pass
@@ -297,6 +355,27 @@ def bot_demo(steps=100, mc_sims=1):
     plt.plot(x[0, :, :], 'b', alpha=0.25)
     plt.subplot(g[3, 0])
     plt.plot(x[2, :, :], 'b', alpha=0.25)
+    plt.show()
+
+
+def reentry_demo(steps=100, mc_sims=1):
+    ssm = ReentryRadar()
+    x, z = ssm.simulate(steps, mc_sims=mc_sims)
+    # plt.plot(x[0, ...], color='b', alpha=0.15, label='state trajectory')
+    # plt.plot(z[0, ...], color='k', alpha=0.25, ls='None', marker='.', label='measurements')
+    plt.figure()
+    g = gridspec.GridSpec(4, 1)
+    plt.subplot(g[:2, 0])
+    # Earth surface w/ radar position
+    t = 0.02 * np.arange(-1, 4, 0.1)
+    plt.plot(ssm.R0 * np.cos(t), ssm.R0 * np.sin(t), 'r', ssm.sx, ssm.sy, 'ko')
+    # vehicle trajectory
+    for i in range(mc_sims):
+        plt.plot(x[0, :, i], x[1, :, i], alpha=0.35, color='b')
+    plt.subplot(g[2, 0])
+    plt.plot(x[0, :, :], 'b', alpha=0.25)
+    plt.subplot(g[3, 0])
+    plt.plot(x[1, :, :], 'b', alpha=0.25)
     plt.show()
 
 
@@ -340,4 +419,4 @@ def bot_filter_demo(filt_class, **kwargs):
 
 
 if __name__ == '__main__':
-    bot_demo(mc_sims=1)
+    reentry_demo(steps=1500, mc_sims=10)
