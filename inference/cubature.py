@@ -22,8 +22,8 @@ def main():
     # ungm_filter_demo(CubatureKalman)
     # from models.pendulum import pendulum_filter_demo
     # pendulum_filter_demo(CubatureKalman)
-    from models.tracking import bot_filter_demo
-    bot_filter_demo(CubatureKalman)
+    from models.tracking import bot_filter_demo, reentry_filter_demo
+    reentry_filter_demo(CubatureKalman)
 
 
 if __name__ == '__main__':

@@ -295,15 +295,16 @@ class ReentryRadar(StateSpaceModel):
         self.dt = dt
         kwargs = {
             'x0_mean': np.array([6500.4, 349.14, -1.8093, -6.7967, 0.6932]),  # m, m/s, m m/s, rad/s
-            'x0_cov': np.diag([1e-6, 1e-6, 1e-6, 1e-6, 0]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
+            'x0_cov': np.diag([1e-6, 1e-6, 1e-6, 1e-6, 1]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
             'q_mean': np.zeros(self.qD),
             'q_cov': self.dt ** -1 * np.array(
                 [[2.4064e-5, 0, 0],
                  [0, 2.4064e-5, 0],
-                 [0, 0, 0]]),
+                 [0, 0, 1e-6]]),
             'r_mean': np.zeros(self.rD),
             'r_cov': np.array([[1e-6, 0],
-                               [0, 0.17e-3 ** 2]])
+                               [0, 0.17e-3 ** 2]]),
+            'q_factor': np.vstack((np.zeros((2, 3)), np.eye(3)))
         }
         super(ReentryRadar, self).__init__(**kwargs)
 
@@ -416,5 +417,67 @@ def bot_filter_demo(filt_class, **kwargs):
     plt.show()
 
 
+def reentry_filter_demo(filt_class, **kwargs):
+    assert issubclass(filt_class, StateSpaceInference)
+    system = ReentryRadar()
+    # create filter object, pass in additional kwargs
+    filt = filt_class(system, **kwargs)
+    # simulate dynamic system for given number of steps and mc simulations
+    time_steps, mc = 750, 100
+    x, z = system.simulate(time_steps, mc_sims=mc)
+    print "Running {} filter/smoother ({} time steps, {} MC simulations) ...".format(filt_class.__name__,
+                                                                                     time_steps, mc)
+    mse_filter = np.zeros((system.xD, time_steps, mc))
+    mse_smoother = np.zeros((system.xD, time_steps, mc))
+    for imc in range(mc):
+        mean_f, cov_f = filt.forward_pass(z[..., imc])
+        mean_s, cov_s = filt.backward_pass()
+        mse_filter[..., imc] = (x[..., imc] - mean_f) ** 2
+        mse_smoother[..., imc] = (x[..., imc] - mean_s) ** 2
+        filt.reset()
+    # position and velocity RMSE (time_steps, MC)
+    rmse_filter_pos = np.sqrt(mse_filter[:2, ...].sum(axis=0))
+    rmse_filter_vel = np.sqrt(mse_filter[2:4, ...].sum(axis=0))
+    rmse_smoother_pos = np.sqrt(mse_smoother[:2, ...].sum(axis=0))
+    rmse_smoother_vel = np.sqrt(mse_smoother[2:4, ...].sum(axis=0))
+    # print average filter/smoother RMSE
+    print "Filter stats:\n============="
+    print "Time-averaged RMSE (position): {}".format((rmse_filter_pos.mean()))
+    print "Time-averaged RMSE (velocity): {}".format((rmse_filter_vel.mean()))
+    print "Smoother stats:\n==============="
+    print "Time-averaged RMSE (position): {}".format((rmse_smoother_pos.mean()))
+    print "Time-averaged RMSE (velocity): {}".format((rmse_smoother_vel.mean()))
+    # plot filter and smoother RMSE of position/velocity in time (MC averages)
+    time = np.linspace(0, time_steps * system.dt, time_steps)
+    g = gridspec.GridSpec(4, 2)
+    plt.figure('Position and velocity RMSE (averaged over {} MC simulations)'.format(mc))
+    ax = plt.subplot(g[1, 0])
+    ax.set_title('Position: x[k]')
+    ax.plot(time, mse_filter[0, ...].mean(axis=1))
+    ax.plot(time, mse_smoother[0, ...].mean(axis=1))
+    ax = plt.subplot(g[1, 1])
+    ax.set_title('Position: y[k]')
+    ax.plot(time, mse_filter[1, ...].mean(axis=1))
+    ax.plot(time, mse_smoother[1, ...].mean(axis=1))
+    ax = plt.subplot(g[0, :])
+    ax.set_title('Position: \sqrt{x[k]^2 + y[k]^2}')
+    ax.plot(time, rmse_filter_pos.mean(axis=1))
+    ax.plot(time, rmse_smoother_pos.mean(axis=1))
+    ax = plt.subplot(g[3, 0])
+    ax.set_title('Velocity: \dot{x}[k]')
+    ax.plot(time, mse_filter[2, ...].mean(axis=1))
+    ax.plot(time, mse_smoother[2, ...].mean(axis=1))
+    ax = plt.subplot(g[3, 1])
+    ax.set_title('Velocity: \dot{y}[k]')
+    ax.plot(time, mse_filter[3, ...].mean(axis=1))
+    ax.plot(time, mse_smoother[3, ...].mean(axis=1))
+    ax = plt.subplot(g[2, :])
+    ax.set_title('Speed: \sqrt{\dot{x}[k]^2 + \dot{y}[k]^2}')
+    ax.plot(time, rmse_filter_vel.mean(axis=1))
+    ax.plot(time, rmse_smoother_vel.mean(axis=1))
+    # plt.legend()
+    plt.show()
+
+
 if __name__ == '__main__':
-    reentry_demo(steps=1200, mc_sims=1)
+    reentry_demo(steps=750, mc_sims=100)

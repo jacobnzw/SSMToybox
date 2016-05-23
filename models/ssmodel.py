@@ -12,10 +12,12 @@ class StateSpaceModel(object):
     q_additive = None  # True = state noise is additive, False = non-additive
     r_additive = None
     # lists the keyword arguments currently required by the StateSpaceModel class
-    _required_kwargs_ = 'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov'
+    _required_kwargs_ = 'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov', 'q_factor'
 
     def __init__(self, **kwargs):
         self.pars = kwargs
+        self.zero_q = np.zeros((self.qD))
+        self.zero_r = np.zeros((self.rD))
 
     def dyn_fcn(self, x, q, pars):
         """ System dynamics.
@@ -144,10 +146,10 @@ class StateSpaceModel(object):
         """
         if self.q_additive:
             assert len(xq) == self.xD
-            if dx:
-                out = (self.dyn_fcn_dx(xq, 0, pars).T.flatten())
+            if dx:  # TODO: put in zero vector, not int
+                out = (self.dyn_fcn_dx(xq, self.zero_q, pars).T.flatten())
             else:
-                out = self.dyn_fcn(xq, 0, pars)
+                out = self.dyn_fcn(xq, self.zero_q, pars)
         else:
             assert len(xq) == self.xD + self.qD
             x, q = xq[:self.xD], xq[-self.qD:]
@@ -176,9 +178,9 @@ class StateSpaceModel(object):
         if self.r_additive:
             assert len(xr) == self.xD
             if dx:
-                out = (self.meas_fcn_dx(xr, 0, pars).T.flatten())
+                out = (self.meas_fcn_dx(xr, self.zero_r, pars).T.flatten())
             else:
-                out = self.meas_fcn(xr, 0, pars)
+                out = self.meas_fcn(xr, self.zero_r, pars)
         else:
             assert len(xr) == self.xD + self.rD
             x, r = xr[:self.xD], xr[-self.rD:]

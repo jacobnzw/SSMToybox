@@ -23,13 +23,14 @@ class GPQuadKalman(StateSpaceInference):
 def main():
     from models.ungm import ungm_filter_demo
     from models.pendulum import pendulum_filter_demo
-    from models.tracking import bot_filter_demo
-    hdyn = {'sig_var': 1.0, 'lengthscale': 10.0 * np.ones(5, ), 'noise_var': 1e-16}
-    hmeas = {'sig_var': 1.0, 'lengthscale': 10.0 * np.ones(5, ), 'noise_var': 1e-16}
+    from models.tracking import bot_filter_demo, reentry_filter_demo
     # hdyn, hmeas = None, None
     # ungm_filter_demo(GPQuadKalman, hyp_dyn=hdyn, hyp_meas=hmeas)
     # pendulum_filter_demo(GPQuadKalman, hyp_dyn=hdyn, hyp_meas=hmeas)
-    bot_filter_demo(GPQuadKalman, hyp_dyn=hdyn, hyp_meas=hmeas)
+    # best hypers so far the reentry example
+    hdyn = {'sig_var': 0.15, 'lengthscale': 20.0 * np.ones(5, ), 'noise_var': 1e-8}
+    hmeas = {'sig_var': 0.15, 'lengthscale': 20.0 * np.ones(5, ), 'noise_var': 1e-8}
+    reentry_filter_demo(GPQuadKalman, hyp_dyn=hdyn, hyp_meas=hmeas)
 
 
 if __name__ == '__main__':

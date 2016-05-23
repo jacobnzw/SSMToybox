@@ -16,8 +16,8 @@ class StateSpaceInference(object):
         assert isinstance(sys, StateSpaceModel)
         self.sys = sys
         # set initial condition mean and covariance, and noise covariances
-        self.x_mean_filt, self.x_cov_filt, self.q_mean, self.q_cov, self.r_mean, self.r_cov = sys.get_pars(
-                'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov'
+        self.x_mean_filt, self.x_cov_filt, self.q_mean, self.q_cov, self.r_mean, self.r_cov, self.G = sys.get_pars(
+            'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov', 'q_factor'
         )
         self.flags = {'filtered': False, 'smoothed': False}
         self.x_mean_pred, self.x_cov_pred, = None, None
@@ -90,7 +90,8 @@ class StateSpaceInference(object):
         # apply moment transform to compute predicted state mean, covariance
         self.x_mean_pred, self.x_cov_pred, self.xx_cov = self.transf_dyn.apply(self.sys.dyn_eval, mean, cov,
                                                                                self.sys.par_fcn(time))
-        if self.sys.q_additive: self.x_cov_pred += self.q_cov
+        if self.sys.q_additive:
+            self.x_cov_pred += self.G.dot(self.q_cov).dot(self.G.T)
         # in non-additive case, augment mean and covariance
         mean = self.x_mean_pred if self.sys.r_additive else np.hstack((self.x_mean_pred, self.r_mean))
         cov = self.x_cov_pred if self.sys.r_additive else block_diag(self.x_cov_pred, self.r_cov)
@@ -99,7 +100,8 @@ class StateSpaceInference(object):
         self.z_mean_pred, self.z_cov_pred, self.xz_cov = self.transf_meas.apply(self.sys.meas_eval, mean, cov,
                                                                                 self.sys.par_fcn(time))
         # in additive case, noise covariances need to be added
-        if self.sys.r_additive: self.z_cov_pred += self.r_cov
+        if self.sys.r_additive:
+            self.z_cov_pred += self.r_cov
         # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)
         self.xz_cov = self.xz_cov[:, :self.sys.xD]
         self.xx_cov = self.xx_cov[:, :self.sys.xD]
