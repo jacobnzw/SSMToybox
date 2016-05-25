@@ -111,7 +111,7 @@ class GPQuad(BayesianQuadratureTransform):
 
     def default_sigma_points(self, dim):
         # create unscented points
-        c = np.sqrt(dim)
+        c = np.sqrt(dim + np.max(0, 3 - dim))
         return np.hstack((np.zeros((dim, 1)), c * np.eye(dim), -c * np.eye(dim)))
 
     def default_hypers(self, dim):

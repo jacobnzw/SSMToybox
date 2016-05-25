@@ -27,10 +27,13 @@ def main():
     # hdyn, hmeas = None, None
     # ungm_filter_demo(GPQuadKalman, hyp_dyn=hdyn, hyp_meas=hmeas)
     # pendulum_filter_demo(GPQuadKalman, hyp_dyn=hdyn, hyp_meas=hmeas)
-    # best hypers so far the reentry example
-    hdyn = {'sig_var': 0.15, 'lengthscale': 20.0 * np.ones(5, ), 'noise_var': 1e-8}
-    hmeas = {'sig_var': 0.15, 'lengthscale': 20.0 * np.ones(5, ), 'noise_var': 1e-8}
-    reentry_filter_demo(GPQuadKalman, hyp_dyn=hdyn, hyp_meas=hmeas)
+    # reentry hypers
+    d = 5
+    hdyn = {'sig_var': 1.0, 'lengthscale': 25.0 * np.ones(d, ), 'noise_var': 1e-8}
+    hmeas = {'sig_var': 1.0, 'lengthscale': 25.0 * np.ones(d, ), 'noise_var': 1e-8}
+    usp = Unscented.unit_sigma_points(d, kappa=0.0)  # kappa=3-d, alpha=1.0
+    # usp = None
+    reentry_filter_demo(GPQuadKalman, usp_dyn=usp, usp_meas=usp, hyp_dyn=hdyn, hyp_meas=hmeas)
 
 
 if __name__ == '__main__':
