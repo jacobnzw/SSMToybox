@@ -22,8 +22,10 @@ def main():
     # ungm_filter_demo(UnscentedKalman, kappa=0.0)
     # from models.pendulum import pendulum_filter_demo
     # pendulum_filter_demo(UnscentedKalman)
-    from models.tracking import bot_filter_demo, reentry_filter_demo
-    reentry_filter_demo(UnscentedKalman)
+    # from models.tracking import bot_filter_demo, reentry_filter_demo
+    # reentry_filter_demo(UnscentedKalman)
+    from models.demodulation import frequency_demodulation_filter_demo
+    frequency_demodulation_filter_demo(UnscentedKalman)
 
 if __name__ == '__main__':
     main()

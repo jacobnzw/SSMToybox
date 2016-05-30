@@ -29,7 +29,7 @@ class FrequencyDemodulation(StateSpaceModel):
 
     def __init__(self):
         kwargs = {
-            'x0_mean': np.zeros(self.xD),
+            'x0_mean': np.zeros(self.xD),  # strange to have zero initial frequency
             'x0_cov': np.eye(self.xD),
             'q_mean': np.zeros(self.qD),
             'q_cov': np.eye(self.qD),
@@ -77,34 +77,43 @@ def frequency_demodulation_filter_demo(filt_class, *args, **kwargs):
     x, z = system.simulate(time_steps, mc_sims=mc)
     print "Running {} filter/smoother ({} time steps, {} MC simulations) ...".format(filt_class.__name__,
                                                                                      time_steps, mc)
-    rmse_filter = np.zeros(mc)
-    rmse_smoother = np.zeros(mc)
+    mse_filter = np.zeros((system.xD, time_steps, mc))
+    mse_smoother = np.zeros((system.xD, time_steps, mc))
     for imc in range(mc):
         mean_f, cov_f = filt.forward_pass(z[..., imc])
         mean_s, cov_s = filt.backward_pass()
-        rmse_filter[imc] = np.sqrt(np.mean((x[..., imc] - mean_f) ** 2, axis=1))
-        rmse_smoother[imc] = np.sqrt(np.mean((x[..., imc] - mean_s) ** 2, axis=1))
+        mse_filter[..., imc] = (x[..., imc] - mean_f) ** 2
+        mse_smoother[..., imc] = (x[..., imc] - mean_s) ** 2
         filt.reset()
+    # position and velocity RMSE (time_steps, MC)
+    rmse_filter = np.sqrt(mse_filter)
+    rmse_smoother = np.sqrt(mse_smoother)
     # print average filter/smoother RMSE
-    print "Filter RMSE: {:.4f}".format(np.asscalar(rmse_filter.mean()))
-    print "Smoother RMSE: {:.4f}".format(np.asscalar(rmse_smoother.mean()))
+    print "Filter stats:\n============="
+    print "Time-averaged RMSE: {}".format((rmse_filter.mean(axis=(1, 2))))
+    print "Smoother stats:\n==============="
+    print "Time-averaged RMSE: {}".format((rmse_smoother.mean(axis=(1, 2))))
     # plot one realization of the system trajectory, measurements and filtered/smoothed state estimate
+    time = range(0, time_steps)
+    rmse_time_f = rmse_filter.mean(axis=2)
     plt.figure()
-    time = range(1, time_steps)
-    plt.plot(x[0, :, 0], color='r', ls='--', label='true state')
-    plt.plot(z[0, :, 0], color='k', ls='None', marker='o')
-    plt.plot(mean_f[0, ...], color='b', label='filtered estimate')
-    plt.fill_between(time,
-                     mean_f[0, 1:] - 2 * np.sqrt(cov_f[0, 0, 1:]),
-                     mean_f[0, 1:] + 2 * np.sqrt(cov_f[0, 0, 1:]),
-                     color='b', alpha=0.15)
-    plt.plot(mean_s[0, ...], color='g', label='smoothed estimate')
-    plt.fill_between(time,
-                     mean_s[0, 1:] - 2 * np.sqrt(cov_s[0, 0, 1:]),
-                     mean_s[0, 1:] + 2 * np.sqrt(cov_s[0, 0, 1:]),
-                     color='g', alpha=0.25)
-    plt.legend()
+    plt.plot(time, rmse_time_f[0, :], time, rmse_time_f[1, :])
     plt.show()
+    # time = range(1, time_steps)
+    # plt.plot(x[0, :, 0], color='r', ls='--', label='true state')
+    # plt.plot(z[0, :, 0], color='k', ls='None', marker='o')
+    # plt.plot(mean_f[0, ...], color='b', label='filtered estimate')
+    # plt.fill_between(time,
+    #                  mean_f[0, 1:] - 2 * np.sqrt(cov_f[0, 0, 1:]),
+    #                  mean_f[0, 1:] + 2 * np.sqrt(cov_f[0, 0, 1:]),
+    #                  color='b', alpha=0.15)
+    # plt.plot(mean_s[0, ...], color='g', label='smoothed estimate')
+    # plt.fill_between(time,
+    #                  mean_s[0, 1:] - 2 * np.sqrt(cov_s[0, 0, 1:]),
+    #                  mean_s[0, 1:] + 2 * np.sqrt(cov_s[0, 0, 1:]),
+    #                  color='g', alpha=0.25)
+    # plt.legend()
+    # plt.show()
 
 
 if __name__ == '__main__':

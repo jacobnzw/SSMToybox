@@ -21,19 +21,31 @@ class GPQuadKalman(StateSpaceInference):
 
 
 def main():
-    from models.ungm import ungm_filter_demo
-    from models.pendulum import pendulum_filter_demo
-    from models.tracking import bot_filter_demo, reentry_filter_demo
-    # hdyn, hmeas = None, None
+    # UNGM demo
+    # from models.ungm import ungm_filter_demo
     # ungm_filter_demo(GPQuadKalman, hyp_dyn=hdyn, hyp_meas=hmeas)
+
+    # Pendulum demo
+    # from models.pendulum import pendulum_filter_demo
+    # hdyn, hmeas = None, None
     # pendulum_filter_demo(GPQuadKalman, hyp_dyn=hdyn, hyp_meas=hmeas)
-    # reentry hypers
-    d = 5
-    hdyn = {'sig_var': 1.0, 'lengthscale': 25.0 * np.ones(d, ), 'noise_var': 1e-8}
-    hmeas = {'sig_var': 1.0, 'lengthscale': 25.0 * np.ones(d, ), 'noise_var': 1e-8}
+
+    # Reentry vehicle tracking demo
+    # from models.tracking import bot_filter_demo, reentry_filter_demo
+    # d = 5
+    # hdyn = {'sig_var': 1.0, 'lengthscale': 25.0 * np.ones(d, ), 'noise_var': 1e-8}
+    # hmeas = {'sig_var': 1.0, 'lengthscale': 25.0 * np.ones(d, ), 'noise_var': 1e-8}
+    # usp = Unscented.unit_sigma_points(d, kappa=0.0)  # kappa=3-d, alpha=1.0
+    # # usp = None
+    # reentry_filter_demo(GPQuadKalman, usp_dyn=usp, usp_meas=usp, hyp_dyn=hdyn, hyp_meas=hmeas)
+
+    # Frequency demodulation demo
+    d = 2
+    hdyn = {'sig_var': 10.0, 'lengthscale': 30.0 * np.ones(d, ), 'noise_var': 1e-8}
+    hmeas = {'sig_var': 10.0, 'lengthscale': 30.0 * np.ones(d, ), 'noise_var': 1e-8}
     usp = Unscented.unit_sigma_points(d, kappa=0.0)  # kappa=3-d, alpha=1.0
-    # usp = None
-    reentry_filter_demo(GPQuadKalman, usp_dyn=usp, usp_meas=usp, hyp_dyn=hdyn, hyp_meas=hmeas)
+    from models.demodulation import frequency_demodulation_filter_demo
+    frequency_demodulation_filter_demo(GPQuadKalman, usp_dyn=usp, usp_meas=usp, hyp_dyn=hdyn, hyp_meas=hmeas)
 
 
 if __name__ == '__main__':
