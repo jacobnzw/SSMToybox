@@ -1059,6 +1059,3 @@ class TPQuad(BayesianQuadratureTransform):
     def _covariance(self, weights, fcn_evals, mean_out):
         scale = (self.nu - 2 + fcn_evals.dot(self.iK).dot(fcn_evals.T)) / (self.nu - 2 + self.n)
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + scale * self.model_var
-
-# TODO: add GPQ+TD (total derivative observations)
-# TODO: add GPQ+DIV (divergence observations)
