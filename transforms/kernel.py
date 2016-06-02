@@ -9,7 +9,7 @@ class Kernel:
     def __init__(self, dim, hypers):
         self.dim = dim
         # use default hypers if unspecified
-        self.hypers = self._default_hyperparameters_ if hypers is None else hypers
+        self.hypers = self._get_default_hyperparameters(dim) if hypers is None else hypers
 
     # evaluation
     def eval(self, x1, x2=None):
@@ -17,6 +17,9 @@ class Kernel:
 
     # expectations
     def exp_x_kx(self):
+        raise NotImplementedError
+
+    def exp_x_xkx(self):
         raise NotImplementedError
 
     def exp_x_kxx(self):
@@ -27,7 +30,8 @@ class Kernel:
 
     def exp_x_kxkx(self):
         raise NotImplementedError
-        # derivatives
+
+    # derivatives
 
     def _get_default_hyperparameters(self, dim):
         raise NotImplementedError
@@ -47,12 +51,16 @@ class RBF(Kernel):
         self.sqrtInvLam = np.diag(self.el)
 
     def eval(self, x1, x2=None):
+        # ensure correct dimensions of x1, x2
         if x2 is None:
-            x1 = x2
+            x2 = x1
         x1 = x1.dot(self.sqrtInvLam)
-        return np.exp(2 * np.log(self.alpha) - 0.5 * self._maha(x1, x1))
+        return np.exp(2 * np.log(self.alpha) - 0.5 * self._maha(x2, x1))
 
     def exp_x_kx(self):
+        pass
+
+    def exp_x_xkx(self):
         pass
 
     def exp_x_kxx(self):
@@ -90,6 +98,9 @@ class Affine(Kernel):
         pass
 
     def exp_x_kx(self):
+        pass
+
+    def exp_x_xkx(self):
         pass
 
     def exp_x_kxx(self):
