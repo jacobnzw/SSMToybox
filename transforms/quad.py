@@ -104,7 +104,7 @@ class GaussHermite(SigmaPointTransform):
         self.unit_sp = self.unit_sigma_points(dim, degree)
 
     @staticmethod
-    def weights(dim, degree):
+    def weights(dim, degree=3):
         # 1D sigma-points (x) and weights (w)
         x, w = hermegauss(degree)
         # hermegauss() provides weights that cause posdef errors
@@ -112,7 +112,7 @@ class GaussHermite(SigmaPointTransform):
         return np.prod(cartesian([w] * dim), axis=1)
 
     @staticmethod
-    def unit_sigma_points(dim, degree):
+    def unit_sigma_points(dim, degree=3):
         # 1D sigma-points (x) and weights (w)
         x, w = hermegauss(degree)
         # nD sigma-points by cartesian product
