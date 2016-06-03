@@ -9,7 +9,11 @@ class Kernel(object):
 
     def __init__(self, dim, hypers):
         self.dim = dim
-        # use default hypers if unspecified
+        # check if supplied hypers are all supported by the kernel
+        if hypers is not None:
+            if not np.alltrue([hyp in hypers.keys() for hyp in self._hyperparameters_]):
+                hypers = None
+        # use default hypers if unspecified or if given some unsupported hyperparameter
         self.hypers = self._get_default_hyperparameters(dim) if hypers is None else hypers
 
     # evaluation
@@ -41,11 +45,10 @@ class Kernel(object):
 class RBF(Kernel):
     _hyperparameters_ = ['alpha', 'el']
 
-    def __init__(self, dim, hypers=None, jitter=1e-8):
+    def __init__(self, dim, hypers=None):
         super(RBF, self).__init__(dim, hypers)
         self.alpha = hypers['alpha']
-        self.el = hypers['el']
-        self.jitter = jitter
+        self.el = hypers['el']  # TODO: if scalar, no ARD; if 1d-array/list/tuple, do ARD
         # pre-computation for convenience
         self.lam = np.diag(self.el ** 2)
         self.inv_lam = np.diag(self.el ** -2)
