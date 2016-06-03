@@ -63,19 +63,27 @@ class RBF(Kernel):
     def exp_x_kx(self, x):
         # a.k.a. kernel mean map w.r.t. standard Gaussian PDF
         c = self.alpha ** 2 * (la.det(self.inv_lam + self.eye_d)) ** -0.5
-        return c * self._maha(x, x, V=0.5 * la.inv(self.lam + self.eye_d))
+        xl = la.inv(self.lam + self.eye_d).dot(x)
+        return c * np.exp(-0.5 * np.sum(x * xl, axis=0))
 
     def exp_x_xkx(self, x):
-        pass
+        mu_q = la.inv(self.lam + self.eye_d).dot(x)
+        q = self.exp_x_kx(x)
+        return q[na, :] * mu_q
 
     def exp_x_kxx(self):
-        pass
+        return self.alpha ** 2
 
     def exp_xy_kxy(self):
-        pass
+        return self.alpha ** 2 * la.det(2 * self.inv_lam + self.eye_d) ** -0.5
 
     def exp_x_kxkx(self, x):
-        pass
+        inv_r = la.inv(2 * self.inv_lam + self.eye_d)
+        xi = self.sqrt_inv_lam.dot(x)
+        xi = 2 * np.log(self.alpha) - 0.5 * np.sum(xi * xi, axis=0)
+        x = self.inv_lam.dot(x)
+        n = (xi[:, na] + xi[na, :]) + 0.5 * self._maha(x.T, -x.T, V=inv_r)
+        return la.det(inv_r) ** 0.5 * np.exp(n)
 
     def _get_default_hyperparameters(self, dim):
         return {'alpha': 1.0, 'el': 1.0 * np.ones(dim, )}
@@ -96,16 +104,16 @@ class RBF(Kernel):
 
 
 class Affine(Kernel):
-    def __init__(self, dim):
+    def __init__(self, dim, hypers):
+        super(Affine, self).__init__(dim, hypers)
+
+    def eval(self, x1, x2=None):
         pass
 
-    def eval(self):
+    def exp_x_kx(self, x):
         pass
 
-    def exp_x_kx(self):
-        pass
-
-    def exp_x_xkx(self):
+    def exp_x_xkx(self, x):
         pass
 
     def exp_x_kxx(self):
@@ -114,5 +122,8 @@ class Affine(Kernel):
     def exp_xy_kxy(self):
         pass
 
-    def exp_x_kxkx(self):
+    def exp_x_kxkx(self, x):
+        pass
+
+    def _get_default_hyperparameters(self, dim):
         pass
