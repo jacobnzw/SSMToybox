@@ -1,8 +1,9 @@
 import numpy as np
+import numpy.linalg as la
 from numpy import newaxis as na
 
 
-class Kernel:
+class Kernel(object):
     # list of strings of supported hyperparameters
     _hyperparameters_ = None
 
@@ -16,10 +17,10 @@ class Kernel:
         raise NotImplementedError
 
     # expectations
-    def exp_x_kx(self):
+    def exp_x_kx(self, x):
         raise NotImplementedError
 
-    def exp_x_xkx(self):
+    def exp_x_xkx(self, x):
         raise NotImplementedError
 
     def exp_x_kxx(self):
@@ -28,7 +29,7 @@ class Kernel:
     def exp_xy_kxy(self):
         raise NotImplementedError
 
-    def exp_x_kxkx(self):
+    def exp_x_kxkx(self, x):
         raise NotImplementedError
 
     # derivatives
@@ -38,29 +39,33 @@ class Kernel:
 
 
 class RBF(Kernel):
-    _hyperparameters_ = ['alpha', 'el', 'jitter']
+    _hyperparameters_ = ['alpha', 'el']
 
-    def __init__(self, dim, hypers=None):
+    def __init__(self, dim, hypers=None, jitter=1e-8):
         super(RBF, self).__init__(dim, hypers)
         self.alpha = hypers['alpha']
         self.el = hypers['el']
-        self.jitter = hypers['jitter']
+        self.jitter = jitter
         # pre-computation for convenience
-        self.Lam = np.diag(self.el ** 2)
-        self.invLam = np.diag(self.el ** -2)
-        self.sqrtInvLam = np.diag(self.el)
+        self.lam = np.diag(self.el ** 2)
+        self.inv_lam = np.diag(self.el ** -2)
+        self.sqrt_inv_lam = np.diag(np.sqrt(self.el ** -1))
+        self.eye_d = np.eye(dim)
 
     def eval(self, x1, x2=None):
         # ensure correct dimensions of x1, x2
         if x2 is None:
             x2 = x1
-        x1 = x1.dot(self.sqrtInvLam)
-        return np.exp(2 * np.log(self.alpha) - 0.5 * self._maha(x2, x1))
+        x1 = self.sqrt_inv_lam.dot(x1)
+        x2 = self.sqrt_inv_lam.dot(x2)
+        return np.exp(2 * np.log(self.alpha) - 0.5 * self._maha(x2.T, x1.T))
 
-    def exp_x_kx(self):
-        pass
+    def exp_x_kx(self, x):
+        # a.k.a. kernel mean map w.r.t. standard Gaussian PDF
+        c = self.alpha ** 2 * (la.det(self.inv_lam + self.eye_d)) ** -0.5
+        return c * self._maha(x, x, V=0.5 * la.inv(self.lam + self.eye_d))
 
-    def exp_x_xkx(self):
+    def exp_x_xkx(self, x):
         pass
 
     def exp_x_kxx(self):
@@ -69,11 +74,11 @@ class RBF(Kernel):
     def exp_xy_kxy(self):
         pass
 
-    def exp_x_kxkx(self):
+    def exp_x_kxkx(self, x):
         pass
 
     def _get_default_hyperparameters(self, dim):
-        return {'alpha': 1.0, 'el': 1.0 * np.ones(dim, ), 'jitter': 1e-8}
+        return {'alpha': 1.0, 'el': 1.0 * np.ones(dim, )}
 
     def _maha(self, x, y, V=None):
         """
