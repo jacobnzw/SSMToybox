@@ -72,9 +72,10 @@ class RBF(Kernel):
         x2 = self.sqrt_inv_lam.dot(x2)
         if diag:  # only diagonal of kernel matrix
             assert x1.shape == x2.shape
-            return np.exp(2 * np.log(self.alpha) - 0.5 * np.sum(x1 * x2, axis=0))
+            dx = x1 - x2
+            return np.exp(2 * np.log(self.alpha) - 0.5 * np.sum(dx * dx, axis=0))
         else:
-            return np.exp(2 * np.log(self.alpha) - 0.5 * self._maha(x2.T, x1.T))
+            return np.exp(2 * np.log(self.alpha) - 0.5 * self._maha(x1.T, x2.T))
 
     def exp_x_kx(self, x):
         # a.k.a. kernel mean map w.r.t. standard Gaussian PDF

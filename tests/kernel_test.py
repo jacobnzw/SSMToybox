@@ -19,17 +19,30 @@ class RBFKernelTest(TestCase):
 
     def test_eval(self):
         # check dimension, shape, symmetry and positive definiteness
-        K_1d = self.kern_rbf_1d.eval(self.data_1d)
-        self.assertTrue(K_1d.ndim == 2)
-        self.assertTrue(K_1d.shape == (3, 3))
-        self.assertTrue(np.array_equal(K_1d, K_1d.T))
-        la.cholesky(K_1d)
+        K = self.kern_rbf_1d.eval(self.data_1d)
+        self.assertTrue(K.ndim == 2)
+        self.assertTrue(K.shape == (3, 3))
+        self.assertTrue(np.array_equal(K, K.T))
+        la.cholesky(K)
         # higher-dimensional inputs
-        K_2d = self.kern_rbf_2d.eval(self.data_2d)
-        self.assertTrue(K_2d.ndim == 2)
-        self.assertTrue(K_2d.shape == (5, 5))
-        self.assertTrue(np.array_equal(K_2d, K_2d.T))
-        la.cholesky(K_2d)
+        K = self.kern_rbf_2d.eval(self.data_2d)
+        self.assertTrue(K.ndim == 2)
+        self.assertTrue(K.shape == (5, 5))
+        self.assertTrue(np.array_equal(K, K.T))
+        la.cholesky(K)
+        # kx, kxx
+        kx = self.kern_rbf_1d.eval(self.test_data_1d, self.data_1d)
+        kxx = self.kern_rbf_1d.eval(self.test_data_1d, self.test_data_1d)
+        kxx_diag = self.kern_rbf_1d.eval(self.test_data_1d, self.test_data_1d, diag=True)
+        self.assertTrue(kx.shape == (50, 3))
+        self.assertTrue(kxx.shape == (50, 50))
+        self.assertTrue(kxx_diag.shape == (50,))
+        kx = self.kern_rbf_2d.eval(self.test_data_2d, self.data_2d)
+        kxx = self.kern_rbf_2d.eval(self.test_data_2d, self.test_data_2d)
+        kxx_diag = self.kern_rbf_2d.eval(self.test_data_2d, self.test_data_2d, diag=True)
+        self.assertTrue(kx.shape == (50, 5))
+        self.assertTrue(kxx.shape == (50, 50))
+        self.assertTrue(kxx_diag.shape == (50,))
 
     def test_exp_x_kx(self):
         q = self.kern_rbf_1d.exp_x_kx(self.data_1d)
@@ -63,7 +76,6 @@ class RBFKernelTest(TestCase):
         self.assertTrue(np.array_equal(q, q.T))
         la.cholesky(q)
 
-
-class AffineKernelTest(TestCase):
-    def test_eval(self):
-        pass
+# class AffineKernelTest(TestCase):
+#     def test_eval(self):
+#         pass
