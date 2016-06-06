@@ -1,9 +1,11 @@
 import numpy as np
 import numpy.linalg as la
 from numpy import newaxis as na
+from abc import ABCMeta, abstractmethod
 
 
 class Kernel(object):
+    __metaclass__ = ABCMeta
     # list of strings of supported hyperparameters
     _hyperparameters_ = None
 
@@ -17,27 +19,34 @@ class Kernel(object):
         self.hypers = self._get_default_hyperparameters(dim) if hypers is None else hypers
 
     # evaluation
+    @abstractmethod
     def eval(self, x1, x2=None):
         raise NotImplementedError
 
     # expectations
+    @abstractmethod
     def exp_x_kx(self, x):
         raise NotImplementedError
 
+    @abstractmethod
     def exp_x_xkx(self, x):
         raise NotImplementedError
 
+    @abstractmethod
     def exp_x_kxx(self):
         raise NotImplementedError
 
+    @abstractmethod
     def exp_xy_kxy(self):
         raise NotImplementedError
 
+    @abstractmethod
     def exp_x_kxkx(self, x):
         raise NotImplementedError
 
     # derivatives
 
+    @abstractmethod
     def _get_default_hyperparameters(self, dim):
         raise NotImplementedError
 
