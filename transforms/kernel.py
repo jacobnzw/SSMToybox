@@ -20,7 +20,7 @@ class Kernel(object):
 
     # evaluation
     @abstractmethod
-    def eval(self, x1, x2=None):
+    def eval(self, x1, x2=None, diag=False):
         raise NotImplementedError
 
     # expectations
@@ -64,13 +64,17 @@ class RBF(Kernel):
         self.sqrt_inv_lam = np.diag(np.sqrt(self.el ** -1))
         self.eye_d = np.eye(dim)
 
-    def eval(self, x1, x2=None):
-        # ensure correct dimensions of x1, x2
+    def eval(self, x1, x2=None, diag=False):
+        # x1.shape = (D, N), x2.shape = (D, M)
         if x2 is None:
             x2 = x1
         x1 = self.sqrt_inv_lam.dot(x1)
         x2 = self.sqrt_inv_lam.dot(x2)
-        return np.exp(2 * np.log(self.alpha) - 0.5 * self._maha(x2.T, x1.T))
+        if diag:  # only diagonal of kernel matrix
+            assert x1.shape == x2.shape
+            return np.exp(2 * np.log(self.alpha) - 0.5 * np.sum(x1 * x2, axis=0))
+        else:
+            return np.exp(2 * np.log(self.alpha) - 0.5 * self._maha(x2.T, x1.T))
 
     def exp_x_kx(self, x):
         # a.k.a. kernel mean map w.r.t. standard Gaussian PDF
@@ -119,7 +123,7 @@ class Affine(Kernel):
     def __init__(self, dim, hypers):
         super(Affine, self).__init__(dim, hypers)
 
-    def eval(self, x1, x2=None):
+    def eval(self, x1, x2=None, diag=False):
         pass
 
     def exp_x_kx(self, x):
