@@ -30,6 +30,11 @@ class Model(object):
         raise NotImplementedError
 
     @abstractmethod
+    def exp_model_variance(self, fcn_obs):
+        # each model has to implement this using kernel expectations
+        raise NotImplementedError
+
+    @abstractmethod
     def marginal_log_likelihood(self, hypers, observations):
         # model specific marginal likelihood, will serve as an objective function passed into the optimizer
         raise NotImplementedError
@@ -40,6 +45,7 @@ class Model(object):
 
     def plot_model(self, test_data, fcn_obs, fcn_true=None, in_dim=0):
         # general plotting routine for all models defined in terms of model's predictive mean and variance
+        assert in_dim <= self.d - 1
 
         fcn_obs = np.squeeze(fcn_obs)
         fcn_true = np.squeeze(fcn_true)
@@ -47,13 +53,14 @@ class Model(object):
         mean, var = self.predict(test_data, fcn_obs)
         std = np.sqrt(var)
         test_data = np.squeeze(test_data[in_dim, :])
-        # set title according to model
+        # set plot title according to model
         fig_title = self.__class__.__name__ + ' model of the integrand'
         # plot training data, predictive mean and variance
         fig = plt.figure(fig_title)
         plt.fill_between(test_data, mean - 2 * std, mean + 2 * std, color='0.1', alpha=0.15)
         plt.plot(test_data, mean, color='k', lw=2)
         plt.plot(self.points[in_dim, :], fcn_obs, 'ko', ms=8)
+        # true function values at test points if provided
         if fcn_true is not None:
             plt.plot(test_data, fcn_true, lw=2, ls='--', color='tomato')
         plt.show()
@@ -102,6 +109,12 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         var = np.squeeze(kxx - np.einsum('im,mn,mi->i', kx, iK, kx.T))
         return mean, var
 
+    def exp_model_variance(self, fcn_obs):
+        q_bar = self.kernel.exp_x_kxx()
+        Q = self.kernel.exp_x_kxkx(self.points)
+        iK = self._cho_inv(self.kernel.eval(self.points) + self.jitter * self.eye_n, self.eye_n)
+        return q_bar - np.trace(Q.dot(iK))
+
     def marginal_log_likelihood(self, hypers, observations):
         pass
 
@@ -118,6 +131,13 @@ class StudentTProcess(Model):
         var = np.squeeze(kxx - np.einsum('im,mn,mi->i', kx, iK, kx.T))
         scale = (nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (nu - 2 + self.n)
         return mean, scale * var
+
+    def exp_model_variance(self, fcn_obs, nu=3.0):
+        q_bar = self.kernel.exp_x_kxx()
+        Q = self.kernel.exp_x_kxkx(self.points)
+        iK = self._cho_inv(self.kernel.eval(self.points) + self.jitter * self.eye_n, self.eye_n)
+        scale = (nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (nu - 2 + self.n)
+        return scale * (q_bar - np.trace(Q.dot(iK)))
 
     def marginal_log_likelihood(self, hypers, observations):
         pass
