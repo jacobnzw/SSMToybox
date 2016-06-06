@@ -56,8 +56,8 @@ class RBF(Kernel):
 
     def __init__(self, dim, hypers=None):
         super(RBF, self).__init__(dim, hypers)
-        self.alpha = hypers['alpha']
-        self.el = hypers['el']  # TODO: if scalar, no ARD; if 1d-array/list/tuple, do ARD
+        self.alpha = self.hypers['alpha']
+        self.el = self.hypers['el']  # TODO: if scalar, no ARD; if 1d-array/list/tuple, do ARD
         # pre-computation for convenience
         self.lam = np.diag(self.el ** 2)
         self.inv_lam = np.diag(self.el ** -2)
