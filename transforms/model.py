@@ -8,7 +8,9 @@ from kernel import *
 
 
 class Model(object):
+
     __metaclass__ = ABCMeta
+
     _supported_points_ = ['sr', 'ut', 'gh']
     _supported_kernels_ = ['rbf']
 
@@ -133,6 +135,7 @@ class StudentTProcess(Model):
         return mean, scale * var
 
     def exp_model_variance(self, fcn_obs, nu=3.0):
+        fcn_obs = np.squeeze(fcn_obs)
         q_bar = self.kernel.exp_x_kxx()
         Q = self.kernel.exp_x_kxkx(self.points)
         iK = self._cho_inv(self.kernel.eval(self.points) + self.jitter * self.eye_n, self.eye_n)

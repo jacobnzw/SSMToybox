@@ -7,12 +7,12 @@ from numpy import newaxis as na
 
 # fcn = lambda x: np.sin((x + 1) ** -1)
 fcn = lambda x: x ** 2
-
-
 # fcn = lambda x: x
 
 
 class GPModelTest(TestCase):
+    # TODO: could be general test class for any model
+
     def test_init(self):
         khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
         phyp = {'alpha': 1.0}
@@ -26,6 +26,12 @@ class GPModelTest(TestCase):
         y = fcn(model.points)
         f = fcn(xtest)
         model.plot_model(xtest, y, f)
+
+    def test_exp_model_variance(self):
+        khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
+        model = GaussianProcess(1, kern_hyp=khyp)
+        y = fcn(model.points)
+        self.assertTrue(model.exp_model_variance(y) >= 0)
 
 
 class TPModelTest(TestCase):
@@ -43,3 +49,9 @@ class TPModelTest(TestCase):
         y = fcn(model.points)
         f = fcn(xtest)
         model.plot_model(xtest, y, f)
+
+    def test_exp_model_variance(self):
+        khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
+        model = StudentTProcess(1, kern_hyp=khyp)
+        y = fcn(model.points)
+        self.assertTrue(model.exp_model_variance(y) >= 0)
