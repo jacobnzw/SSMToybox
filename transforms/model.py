@@ -2,7 +2,6 @@ import numpy as np
 import numpy.linalg as la
 import matplotlib.pyplot as plt
 from abc import ABCMeta, abstractmethod
-from scipy.linalg import cho_factor, cho_solve
 from quad import *
 from kernel import *
 
@@ -19,10 +18,10 @@ class Model(object):
             kern_hyp = {}
         if point_hyp is None:
             point_hyp = {}
-        self.jitter = 1e-8
         # init kernel and sigma-points
         self.kernel = Model.get_kernel(dim, kernel, kern_hyp)
         self.points = Model.get_points(dim, points, point_hyp)
+        # may no longer be necessary now that jitter is in kernel
         self.d, self.n = self.points.shape
         self.eye_d, self.eye_n = np.eye(self.d), np.eye(self.n)
 
@@ -87,16 +86,13 @@ class Model(object):
         kernel = kernel.lower()
         # make sure kernel is supported
         if kernel not in Model._supported_kernels_:
-            print 'Kernel {} not supported. Supported points are {}.'.format(kernel, Model._supported_kernels_)
+            print 'Kernel {} not supported. Supported kernels are {}.'.format(kernel, Model._supported_kernels_)
             return None
         # initialize the chosen kernel
         if kernel == 'rbf':
             return RBF(dim, hypers)
         elif kernel == 'affine':
             return Affine(dim, hypers)
-
-    def _cho_inv(self, A, b):
-        return cho_solve(cho_factor(A), b)
 
 
 class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/GPRegression, same for TP

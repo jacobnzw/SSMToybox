@@ -2,6 +2,7 @@ import numpy as np
 import numpy.linalg as la
 from numpy import newaxis as na
 from abc import ABCMeta, abstractmethod
+from scipy.linalg import cho_factor, cho_solve
 
 
 class Kernel(object):
@@ -9,8 +10,9 @@ class Kernel(object):
     # list of strings of supported hyperparameters
     _hyperparameters_ = None
 
-    def __init__(self, dim, hypers):
+    def __init__(self, dim, hypers, jitter):
         self.dim = dim
+        self.jitter = jitter
         # check if supplied hypers are all supported by the kernel
         if hypers is not None:
             if not np.alltrue([hyp in hypers.keys() for hyp in self._hyperparameters_]):
@@ -18,10 +20,18 @@ class Kernel(object):
         # use default hypers if unspecified or if given some unsupported hyperparameter
         self.hypers = self._get_default_hyperparameters(dim) if hypers is None else hypers
 
+    @staticmethod
+    def _cho_inv(A):
+        # inversion of PD matrix A using Cholesky decomposition
+        return cho_solve(cho_factor(A), np.eye(A.shape[0]))
+
     # evaluation
     @abstractmethod
     def eval(self, x1, x2=None, diag=False):
         raise NotImplementedError
+
+    def eval_inv(self, x1, x2=None, diag=False):
+        return Kernel._cho_inv(self.eval(x1, x2, diag) + self.jitter * np.eye(x1.shape[1]))
 
     # expectations
     @abstractmethod
@@ -54,8 +64,8 @@ class Kernel(object):
 class RBF(Kernel):
     _hyperparameters_ = ['alpha', 'el']
 
-    def __init__(self, dim, hypers=None):
-        super(RBF, self).__init__(dim, hypers)
+    def __init__(self, dim, hypers=None, jitter=1e-8):
+        super(RBF, self).__init__(dim, hypers, jitter)
         self.alpha = self.hypers['alpha']
         self.el = self.hypers['el']  # TODO: if scalar, no ARD; if 1d-array/list/tuple, do ARD
         # pre-computation for convenience

@@ -1,8 +1,10 @@
 from __future__ import division
 
 import numpy as np
+from abc import ABCMeta, abstractmethod
 from numpy import newaxis as na
 from numpy.linalg import cholesky
+from transforms.model import *
 
 
 class MomentTransform(object):
@@ -28,17 +30,15 @@ class SigmaPointTransform(MomentTransform):
 
 
 class BayesianQuadratureTransform(MomentTransform):
-    # it's possible I'll need to make some more specialized parent classes
-    def __init__(self, dim, unit_sp=None, hypers=None):
-        # use default sigma-points if not provided
-        self.unit_sp = unit_sp if unit_sp is not None else self.default_sigma_points(dim)  # (d, n)
-        # get number of sigmas (n) and dimension of sigmas (d)
-        self.d, self.n = self.unit_sp.shape
-        assert self.d == dim  # check unit sigmas have proper dimension
-        # use default kernel hyper-parameters if not provided
-        self.hypers = hypers if hypers is not None else self.default_hypers(dim)
-        # BQ weights given the unit sigma-points, kernel hyper-parameters and the kernel
-        self.wm, self.Wc, self.Wcc = self._weights(self.unit_sp, self.hypers)
+    __metaclass__ = ABCMeta
+
+    _supported_models_ = ['gp', 'tp']  # mgp, gpder, ...
+
+    def __init__(self, dim, model='gp', kernel=None, points=None, kern_hyp=None, point_par=None):
+        self.model = BayesianQuadratureTransform._get_model(dim, model, kernel, points, kern_hyp, point_par)
+        self.d, self.n = self.model.points.shape
+        # BQ transform weights for the mean, covariance and cross-covariance
+        self.wm, self.Wc, self.Wcc = self._weights()
 
     def apply(self, f, mean, cov, pars):
         # method defined in terms of abstract private functions for computing mean, covariance and cross-covariance
@@ -51,20 +51,38 @@ class BayesianQuadratureTransform(MomentTransform):
         cov_fx = self._cross_covariance(self.Wcc, fx, chol_cov)
         return mean_f, cov_f, cov_fx
 
-    def default_sigma_points(self, dim):
-        # set default sigma-points
-        raise NotImplementedError
-
-    def default_hypers(self, dim):
-        # define default hypers
-        raise NotImplementedError
-
-    def _weights(self, sigma_points, hypers):
-        # implementation will differ based on kernel
-        # it's possible it will call functions which implement weights for particular kernel
-        raise NotImplementedError
+    @staticmethod
+    def _get_model(self, dim, model, kernel, points, hypers, point_pars):
+        model = model.lower()
+        # make sure kernel is supported
+        if model not in BayesianQuadratureTransform._supported_models_:
+            print 'Model {} not supported. Supported models are {}.'.format(kernel, Model._supported_kernels_)
+            return None
+        # initialize the chosen kernel
+        if model == 'gp':
+            return GaussianProcess(dim, kernel, points, hypers, point_pars)
+        elif model == 'tp':
+            return StudentTProcess(dim, kernel, points, hypers, point_pars)
 
     # TODO: specify requirements for shape of input/output for all of these fcns
+
+    def minimum_variance_points(self, x0, hypers):
+        # run optimizer to find minvar point sets using initial guess x0; requires implemented _integral_variance()
+        pass
+
+    @abstractmethod
+    def _weights(self):
+        # no need for input args because points and hypers are in self.model.points and self.model.kernel.hypers
+        raise NotImplementedError
+
+    @abstractmethod
+    def _integral_variance(self, points, hypers):
+        # can serve for finding minimum variance point sets or hyper-parameters
+        # optimizers require the first argument to be the variable, a decorator could be used to interchange the first
+        # two arguments, so that we don't have to define the same function twice only w/ different signature
+        raise NotImplementedError
+
+    @abstractmethod
     def _fcn_eval(self, fcn, x, fcn_pars):
         # derived class decides whether to return derivatives also
         raise NotImplementedError
@@ -73,7 +91,8 @@ class BayesianQuadratureTransform(MomentTransform):
         return fcn_evals.dot(weights)
 
     def _covariance(self, weights, fcn_evals, mean_out):
-        return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + self.model_var
+        expected_model_var = self.model.exp_model_variance(fcn_evals)
+        return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + expected_model_var
 
     def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
         return fcn_evals.dot(weights.T).dot(chol_cov_in.T)
