@@ -54,7 +54,7 @@ class BayesianQuadratureTransform(MomentTransform):
     def apply(self, f, mean, cov, pars):
         mean = mean[:, na]
         chol_cov = cholesky(cov)
-        x = mean + chol_cov.dot(self.unit_sp)
+        x = mean + chol_cov.dot(self.model.points)
         fx = self._fcn_eval(f, x, pars)
         mean_f = self._mean(self.wm, fx)
         cov_f = self._covariance(self.Wc, fx, mean_f)

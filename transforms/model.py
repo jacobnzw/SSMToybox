@@ -111,7 +111,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
     def exp_model_variance(self, fcn_obs):
         q_bar = self.kernel.exp_x_kxx()
         Q = self.kernel.exp_x_kxkx(self.points)
-        iK = self._cho_inv(self.kernel.eval(self.points) + self.jitter * self.eye_n, self.eye_n)
+        iK = self.kernel.eval_inv(self.points)
         return q_bar - np.trace(Q.dot(iK))
 
     def marginal_log_likelihood(self, hypers, observations):
