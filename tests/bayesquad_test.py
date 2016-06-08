@@ -1,14 +1,18 @@
 from unittest import TestCase
 
 import numpy as np
+import numpy.linalg as la
 
 from bayesquad import GPQuad
+from models.pendulum import Pendulum
 from models.ungm import UNGM
 
 np.set_printoptions(precision=4)
 
 
 class GPQuadTest(TestCase):
+    models = [UNGM, Pendulum]
+
     def test_weights_rbf(self):
         dim = 1
         khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(dim, )}
@@ -22,9 +26,12 @@ class GPQuadTest(TestCase):
         # print 'GP model variance: {}'.format(tf.model.exp_model_variance())
 
     def test_apply(self):
-        dim = 1
-        tf = GPQuad(dim, 'rbf', 'ut')
-        f = UNGM().dyn_eval
-        mean, cov = np.zeros(dim, ), np.eye(dim)
-        tmean, tcov, tccov = tf.apply(f, mean, cov, np.atleast_1d(1.0))
-        print "Transformed moments\nmean: {}\ncov: {}\nccov: {}".format(tmean, tcov, tccov)
+        for ssm in self.models:
+            f = ssm().dyn_eval
+            dim = ssm.xD
+            tf = GPQuad(dim, 'rbf', 'ut')
+            mean, cov = np.zeros(dim, ), np.eye(dim)
+            tmean, tcov, tccov = tf.apply(f, mean, cov, np.atleast_1d(1.0))
+            self.assertTrue(np.array_equal(tcov, tcov.T))
+            la.cholesky(tcov)
+            print "Transformed moments\nmean: {}\ncov: {}\nccov: {}".format(tmean, tcov, tccov)
