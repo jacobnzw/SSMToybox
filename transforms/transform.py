@@ -41,7 +41,6 @@ class BayesianQuadratureTransform(MomentTransform):
         self.wm, self.Wc, self.Wcc = self._weights()
 
     def apply(self, f, mean, cov, pars):
-        # method defined in terms of abstract private functions for computing mean, covariance and cross-covariance
         mean = mean[:, na]
         chol_cov = cholesky(cov)
         x = mean + chol_cov.dot(self.unit_sp)

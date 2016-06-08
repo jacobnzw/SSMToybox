@@ -41,7 +41,7 @@ class Model(object):
         raise NotImplementedError
 
     def optimize_hypers_max_ml(self, hypers_0, points, observations):
-        # general routine minimizing the general negative marginal log-likelihood
+        # general routine minimizing negative marginal log-likelihood
         pass
 
     def plot_model(self, test_data, fcn_obs, fcn_true=None, in_dim=0):
@@ -118,10 +118,13 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
 
 class StudentTProcess(Model):
-    def __init__(self, dim, kernel='rbf', points='ut', kern_hyp=None, point_hyp=None):
+    def __init__(self, dim, kernel='rbf', points='ut', kern_hyp=None, point_hyp=None, nu=3.0):
         super(StudentTProcess, self).__init__(dim, kernel, points, kern_hyp, point_hyp)
+        self.nu = nu
 
-    def predict(self, test_data, fcn_obs, nu=3.0):
+    def predict(self, test_data, fcn_obs, nu=None):
+        if nu is None:
+            nu = self.nu
         iK = self._cho_inv(self.kernel.eval(self.points) + self.jitter * self.eye_n, self.eye_n)
         kx = self.kernel.eval(test_data, self.points)
         kxx = self.kernel.eval(test_data, test_data, diag=True)
@@ -130,12 +133,12 @@ class StudentTProcess(Model):
         scale = (nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (nu - 2 + self.n)
         return mean, scale * var
 
-    def exp_model_variance(self, fcn_obs, nu=3.0):
+    def exp_model_variance(self, fcn_obs):
         fcn_obs = np.squeeze(fcn_obs)
         q_bar = self.kernel.exp_x_kxx()
         Q = self.kernel.exp_x_kxkx(self.points)
         iK = self._cho_inv(self.kernel.eval(self.points) + self.jitter * self.eye_n, self.eye_n)
-        scale = (nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (nu - 2 + self.n)
+        scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.n)
         return scale * (q_bar - np.trace(Q.dot(iK)))
 
     def marginal_log_likelihood(self, hypers, observations):
