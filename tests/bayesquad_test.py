@@ -3,7 +3,7 @@ from unittest import TestCase
 import numpy as np
 import numpy.linalg as la
 
-from bayesquad import GPQuad
+from bayesquad import GPQ
 from models.pendulum import Pendulum
 from models.ungm import UNGM
 
@@ -17,7 +17,7 @@ class GPQuadTest(TestCase):
         dim = 1
         khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(dim, )}
         # phyp = {'kappa': 0.0, 'alpha': 1.0}
-        tf = GPQuad(dim, 'rbf', 'ut', khyp)
+        tf = GPQ(dim, 'rbf', 'ut', khyp)
         wm, wc, wcc = tf.wm, tf.Wc, tf.Wcc
         print 'wm = \n{}\nwc = \n{}\nwcc = \n{}'.format(wm, wc, wcc)
         self.assertTrue(np.allclose(wc, wc.T), "Covariance weight matrix not symmetric.")
@@ -29,7 +29,7 @@ class GPQuadTest(TestCase):
         for ssm in self.models:
             f = ssm().dyn_eval
             dim = ssm.xD
-            tf = GPQuad(dim, 'rbf', 'ut')
+            tf = GPQ(dim, 'rbf', 'ut')
             mean, cov = np.zeros(dim, ), np.eye(dim)
             tmean, tcov, tccov = tf.apply(f, mean, cov, np.atleast_1d(1.0))
             self.assertTrue(np.array_equal(tcov, tcov.T))

@@ -4,9 +4,12 @@ import numpy as np
 from transform import BayesianQuadratureTransform
 
 
-class GPQuad(BayesianQuadratureTransform):  # consider renaming to GPQTransform
+# TODO: override __str__() method of the Kernel, Model and BQTransform to create printable summaries
+
+
+class GPQ(BayesianQuadratureTransform):  # consider renaming to GPQTransform
     def __init__(self, dim, kernel, points, kern_hyp=None, point_par=None):
-        super(GPQuad, self).__init__(dim, 'gp', kernel, points, kern_hyp, point_par)
+        super(GPQ, self).__init__(dim, 'gp', kernel, points, kern_hyp, point_par)
 
     def _weights(self):
         x = self.model.points
@@ -28,9 +31,9 @@ class GPQuad(BayesianQuadratureTransform):  # consider renaming to GPQTransform
         pass
 
 
-class TPQuad(BayesianQuadratureTransform):
+class TPQ(BayesianQuadratureTransform):
     def __init__(self, dim, kernel, points, kern_hyp=None, point_par=None, nu=3.0):
-        super(TPQuad, self).__init__(dim, 'tp', kernel, points, kern_hyp, point_par)
+        super(TPQ, self).__init__(dim, 'tp', kernel, points, kern_hyp, point_par)
 
     def _weights(self):
         x = self.model.points

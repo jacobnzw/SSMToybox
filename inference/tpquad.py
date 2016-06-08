@@ -1,9 +1,6 @@
-import numpy as np
-
 from inference.ssinfer import StateSpaceInference
 from models.ssmodel import StateSpaceModel
-from transforms import Unscented
-from transforms.bayesquad import TPQuad
+from transforms.bayesquad import TPQ
 
 
 class TPQuadKalman(StateSpaceInference):
@@ -15,8 +12,8 @@ class TPQuadKalman(StateSpaceInference):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        self.tf = TPQuad(nq, unit_sp=usp_dyn, hypers=hyp_dyn, nu=2.5)
-        self.th = TPQuad(nr, unit_sp=usp_meas, hypers=hyp_meas, nu=2.5)
+        self.tf = TPQ(nq, unit_sp=usp_dyn, hypers=hyp_dyn, nu=2.5)
+        self.th = TPQ(nr, unit_sp=usp_meas, hypers=hyp_meas, nu=2.5)
         super(TPQuadKalman, self).__init__(self.tf, self.th, sys)
 
 

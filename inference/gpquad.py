@@ -2,7 +2,7 @@ import numpy as np
 
 from inference.ssinfer import StateSpaceInference
 from models.ssmodel import StateSpaceModel
-from transforms.bayesquad import GPQuad
+from transforms.bayesquad import GPQ
 from transforms.quad import Unscented
 
 
@@ -15,8 +15,8 @@ class GPQuadKalman(StateSpaceInference):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        self.tf = GPQuad(nq, usp_dyn, hyp_dyn)
-        self.th = GPQuad(nr, usp_meas, hyp_meas)
+        self.tf = GPQ(nq, usp_dyn, hyp_dyn)
+        self.th = GPQ(nr, usp_meas, hyp_meas)
         super(GPQuadKalman, self).__init__(self.tf, self.th, sys)
 
 
