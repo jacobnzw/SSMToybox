@@ -1,14 +1,7 @@
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 import numpy as np
-import warnings
-from numba import jit
-from numpy import newaxis as na
-from scipy.linalg import cho_factor, cho_solve, solve
-from scipy.stats import multivariate_normal
 
+# from transforms.transform import BayesianQuadratureTransform
 from transform import BayesianQuadratureTransform
-from transforms.model import *
 
 
 class GPQuad(BayesianQuadratureTransform):  # consider renaming to GPQTransform
@@ -31,12 +24,15 @@ class GPQuad(BayesianQuadratureTransform):  # consider renaming to GPQTransform
     def _fcn_eval(self, fcn, x, fcn_pars):
         return np.apply_along_axis(fcn, 0, x, fcn_pars)
 
+    def _integral_variance(self, points, hypers):
+        pass
+
 
 class TPQuad(BayesianQuadratureTransform):
-    def __init__(self, dim, unit_sp=None, hypers=None, nu=3.0):
+    def __init__(self, dim, kernel, points, kern_hyp=None, point_par=None, nu=3.0):
         super(TPQuad, self).__init__(dim, 'tp', kernel, points, kern_hyp, point_par)
 
-    def _weights(self, sigma_points, hypers):
+    def _weights(self):
         x = self.model.points
         iK = self.model.kernel.eval_inv(x)
         # kernel expectations
@@ -51,3 +47,6 @@ class TPQuad(BayesianQuadratureTransform):
 
     def _fcn_eval(self, fcn, x, fcn_pars):
         return np.apply_along_axis(fcn, 0, x, fcn_pars)
+
+    def _integral_variance(self, points, hypers):
+        pass

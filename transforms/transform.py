@@ -1,18 +1,29 @@
 from __future__ import division
 
-import numpy as np
 from abc import ABCMeta, abstractmethod
+
+import numpy as np
 from numpy import newaxis as na
 from numpy.linalg import cholesky
-from transforms.model import *
+
+
+# Causes import hell through circular dependencies: Model needs to import from quad to get to the points,
+# but all transforms in quad need MomentTransform to inherit from it. If the statement is moved after the definition of
+# MomentTransform and SigmaPointTransform classes then no circular dependencies occur.
+# from model import GaussianProcess, StudentTProcess
 
 
 class MomentTransform(object):
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
     def apply(self, f, mean, cov, pars):
         raise NotImplementedError
 
 
 class SigmaPointTransform(MomentTransform):
+    __metaclass__ = ABCMeta
+
     def apply(self, f, mean, cov, pars):
         mean = mean[:, na]
         # form sigma-points from unit sigma-points
@@ -51,7 +62,8 @@ class BayesianQuadratureTransform(MomentTransform):
         return mean_f, cov_f, cov_fx
 
     @staticmethod
-    def _get_model(self, dim, model, kernel, points, hypers, point_pars):
+    def _get_model(dim, model, kernel, points, hypers, point_pars):
+        from model import GaussianProcess, StudentTProcess  # import must be after SigmaPointTransform
         model = model.lower()
         # make sure kernel is supported
         if model not in BayesianQuadratureTransform._supported_models_:

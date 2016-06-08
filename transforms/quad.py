@@ -5,7 +5,7 @@ from numpy.polynomial.hermite_e import hermegauss, hermeval
 from scipy.special import factorial
 from sklearn.utils.extmath import cartesian
 
-from transforms.transform import MomentTransform, SigmaPointTransform
+from transform import MomentTransform, SigmaPointTransform
 
 
 # TODO: add higher-order fully symmetric rules from [McNamee, Stenger]

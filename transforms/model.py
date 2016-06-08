@@ -1,9 +1,10 @@
-import numpy as np
-import numpy.linalg as la
-import matplotlib.pyplot as plt
 from abc import ABCMeta, abstractmethod
-from quad import *
-from kernel import *
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+from kernel import RBF
+from quad import SphericalRadial, Unscented, GaussHermite
 
 
 class Model(object):
