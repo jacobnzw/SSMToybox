@@ -6,8 +6,7 @@ from transforms.transform import MomentTransform
 
 
 class StateSpaceInference(object):
-
-    def __init__(self, transf_dyn, transf_meas, sys):
+    def __init__(self, transf_dyn, transf_meas, sys):  # REFACTOR: reorder arguments: sys, t_dyn, t_obs
         # separate moment transforms for system dynamics and measurement model
         assert isinstance(transf_dyn, MomentTransform) and isinstance(transf_meas, MomentTransform)
         self.transf_dyn = transf_dyn

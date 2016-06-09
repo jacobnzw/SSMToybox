@@ -125,8 +125,10 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
 
 class StudentTProcess(Model):
-    def __init__(self, dim, kernel='rbf', points='ut', kern_hyp=None, point_hyp=None, nu=3.0):
+    def __init__(self, dim, kernel='rbf', points='ut', kern_hyp=None, point_hyp=None, nu=None):
         super(StudentTProcess, self).__init__(dim, kernel, points, kern_hyp, point_hyp)
+        nu = 3.0 if nu is None else nu
+        assert nu > 2, 'Degrees of freedom (nu) must be > 2.'
         self.nu = nu
 
     def predict(self, test_data, fcn_obs, nu=None):

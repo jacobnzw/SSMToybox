@@ -45,8 +45,8 @@ class BayesianQuadratureTransform(MomentTransform):
 
     _supported_models_ = ['gp', 'tp']  # mgp, gpder, ...
 
-    def __init__(self, dim, model='gp', kernel=None, points=None, kern_hyp=None, point_par=None):
-        self.model = BayesianQuadratureTransform._get_model(dim, model, kernel, points, kern_hyp, point_par)
+    def __init__(self, dim, model='gp', kernel=None, points=None, kern_hyp=None, point_par=None, **kwargs):
+        self.model = BayesianQuadratureTransform._get_model(dim, model, kernel, points, kern_hyp, point_par, **kwargs)
         self.d, self.n = self.model.points.shape
         # BQ transform weights for the mean, covariance and cross-covariance
         self.wm, self.Wc, self.Wcc = self._weights()
@@ -62,7 +62,7 @@ class BayesianQuadratureTransform(MomentTransform):
         return mean_f, cov_f, cov_fx
 
     @staticmethod
-    def _get_model(dim, model, kernel, points, hypers, point_pars):
+    def _get_model(dim, model, kernel, points, hypers, point_pars, **kwargs):
         from model import GaussianProcess, StudentTProcess  # import must be after SigmaPointTransform
         model = model.lower()
         # make sure kernel is supported
@@ -71,9 +71,9 @@ class BayesianQuadratureTransform(MomentTransform):
             return None
         # initialize the chosen kernel
         if model == 'gp':
-            return GaussianProcess(dim, kernel, points, hypers, point_pars)
+            return GaussianProcess(dim, kernel, points, hypers, point_pars, **kwargs)
         elif model == 'tp':
-            return StudentTProcess(dim, kernel, points, hypers, point_pars)
+            return StudentTProcess(dim, kernel, points, hypers, point_pars, **kwargs)
 
     # TODO: specify requirements for shape of input/output for all of these fcns
 

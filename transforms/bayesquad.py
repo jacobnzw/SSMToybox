@@ -32,8 +32,8 @@ class GPQ(BayesianQuadratureTransform):  # consider renaming to GPQTransform
 
 
 class TPQ(BayesianQuadratureTransform):
-    def __init__(self, dim, kernel, points, kern_hyp=None, point_par=None, nu=3.0):
-        super(TPQ, self).__init__(dim, 'tp', kernel, points, kern_hyp, point_par)
+    def __init__(self, dim, kernel, points, kern_hyp=None, point_par=None, nu=None):
+        super(TPQ, self).__init__(dim, 'tp', kernel, points, kern_hyp, point_par, nu=nu)
 
     def _weights(self):
         x = self.model.points

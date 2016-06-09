@@ -4,5 +4,5 @@
 #     'GaussHermiteKalman',
 #     'CubatureKalman',
 #     'GPQKalman',
-#     'TPQuadKalman'
+#     'TPQKalman'
 # ]
