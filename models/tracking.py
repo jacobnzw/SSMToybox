@@ -1,8 +1,8 @@
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 
-from ssmodel import *
 from inference.ssinfer import StateSpaceInference
+from ssmodel import *
 
 
 class CoordinatedTurnBOT(StateSpaceModel):
@@ -417,11 +417,11 @@ def bot_filter_demo(filt_class, **kwargs):
     plt.show()
 
 
-def reentry_filter_demo(filt_class, **kwargs):
+def reentry_filter_demo(filt_class, *args, **kwargs):
     assert issubclass(filt_class, StateSpaceInference)
     system = ReentryRadar()
     # create filter object, pass in additional kwargs
-    filt = filt_class(system, **kwargs)
+    filt = filt_class(system, *args, **kwargs)
     # simulate dynamic system for given number of steps and mc simulations
     time_steps, mc = 750, 100
     x, z = system.simulate(time_steps, mc_sims=mc)

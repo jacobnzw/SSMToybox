@@ -3,6 +3,6 @@
 #     'UnscentedKalman',
 #     'GaussHermiteKalman',
 #     'CubatureKalman',
-#     'GPQuadKalman',
+#     'GPQKalman',
 #     'TPQuadKalman'
 # ]

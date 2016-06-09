@@ -1,7 +1,8 @@
+from abc import ABCMeta, abstractmethod
+
 import numpy as np
 import numpy.linalg as la
 from numpy import newaxis as na
-from abc import ABCMeta, abstractmethod
 from scipy.linalg import cho_factor, cho_solve
 
 
@@ -71,7 +72,7 @@ class RBF(Kernel):
         # pre-computation for convenience
         self.lam = np.diag(self.el ** 2)
         self.inv_lam = np.diag(self.el ** -2)
-        self.sqrt_inv_lam = np.diag(np.sqrt(self.el ** -1))
+        self.sqrt_inv_lam = np.diag(self.el ** -1)
         self.eye_d = np.eye(dim)
 
     def eval(self, x1, x2=None, diag=False):
