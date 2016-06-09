@@ -75,6 +75,9 @@ class RBF(Kernel):
         self.sqrt_inv_lam = np.diag(self.el ** -1)
         self.eye_d = np.eye(dim)
 
+    def __str__(self):
+        return '{} {}'.format(self.__class__.__name__, self.hypers.update({'jitter': self.jitter}))
+
     def eval(self, x1, x2=None, diag=False):
         # x1.shape = (D, N), x2.shape = (D, M)
         if x2 is None:

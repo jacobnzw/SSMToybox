@@ -22,9 +22,15 @@ class Model(object):
         # init kernel and sigma-points
         self.kernel = Model.get_kernel(dim, kernel, kern_hyp)
         self.points = Model.get_points(dim, points, point_hyp)
+        # save for printing
+        self.str_pts = points
+        self.str_pts_hyp = str(point_hyp)
         # may no longer be necessary now that jitter is in kernel
         self.d, self.n = self.points.shape
         self.eye_d, self.eye_n = np.eye(self.d), np.eye(self.n)
+
+    def __str__(self):
+        return '{}\n{} {}'.format(self.kernel, self.str_pts, self.str_pts_hyp)
 
     @abstractmethod
     def predict(self, test_data, fcn_obs):
@@ -101,7 +107,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         super(GaussianProcess, self).__init__(dim, kernel, points, kern_hyp, point_hyp)
 
     def predict(self, test_data, fcn_obs):
-        iK = self._cho_inv(self.kernel.eval(self.points) + self.jitter * self.eye_n, self.eye_n)
+        iK = self.kernel.eval_inv(self.points)
         kx = self.kernel.eval(test_data, self.points)
         kxx = self.kernel.eval(test_data, test_data, diag=True)
         mean = np.squeeze(kx.dot(iK).dot(fcn_obs.T))
@@ -126,7 +132,7 @@ class StudentTProcess(Model):
     def predict(self, test_data, fcn_obs, nu=None):
         if nu is None:
             nu = self.nu
-        iK = self._cho_inv(self.kernel.eval(self.points) + self.jitter * self.eye_n, self.eye_n)
+        iK = self.kernel.eval_inv(self.points)
         kx = self.kernel.eval(test_data, self.points)
         kxx = self.kernel.eval(test_data, test_data, diag=True)
         mean = np.squeeze(kx.dot(iK).dot(fcn_obs.T))
@@ -138,7 +144,7 @@ class StudentTProcess(Model):
         fcn_obs = np.squeeze(fcn_obs)
         q_bar = self.kernel.exp_x_kxx()
         Q = self.kernel.exp_x_kxkx(self.points)
-        iK = self._cho_inv(self.kernel.eval(self.points) + self.jitter * self.eye_n, self.eye_n)
+        iK = self.kernel.eval_inv(self.points)
         scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.n)
         return scale * (q_bar - np.trace(Q.dot(iK)))
 

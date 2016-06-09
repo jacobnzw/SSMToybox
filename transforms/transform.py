@@ -107,3 +107,6 @@ class BayesianQuadratureTransform(MomentTransform):
 
     def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
         return fcn_evals.dot(weights.T).dot(chol_cov_in.T)
+
+    def __str__(self):
+        return '{}\n{}'.format(self.__class__.__name__, self.model)
