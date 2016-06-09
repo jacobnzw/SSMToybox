@@ -16,7 +16,7 @@ class GPQKalman(StateSpaceInference):
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
         t_dyn = GPQ(nq, kernel, points, kern_hyp_dyn, point_hyp)
         t_obs = GPQ(nr, kernel, points, kern_hyp_obs, point_hyp)
-        super(GPQKalman, self).__init__(t_dyn, t_obs, sys)
+        super(GPQKalman, self).__init__(sys, t_dyn, t_obs)
 
 
 def main():

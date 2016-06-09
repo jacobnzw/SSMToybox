@@ -6,6 +6,9 @@ from numpy import newaxis as na
 from scipy.linalg import cho_factor, cho_solve
 
 
+# TODO: documentation
+
+
 class Kernel(object):
     __metaclass__ = ABCMeta
     # list of strings of supported hyperparameters
@@ -68,17 +71,25 @@ class RBF(Kernel):
     def __init__(self, dim, hypers=None, jitter=1e-8):
         super(RBF, self).__init__(dim, hypers, jitter)
         self.alpha = self.hypers['alpha']
-        self.el = self.hypers['el']  # TODO: if scalar, no ARD; if 1d-array/list/tuple, do ARD
+        el = self.hypers['el']
+        if not np.isscalar(el):
+            if len(el) == 1 and dim > 1:
+                # if el is a list/tuple/array w/ 1 element and dim > 1
+                el = el[0] * np.ones(dim, )
+        else:
+            # turn scalar el into vector
+            el = el * np.ones(dim, )
+        self.el = el
         # pre-computation for convenience
         self.lam = np.diag(self.el ** 2)
         self.inv_lam = np.diag(self.el ** -2)
         self.sqrt_inv_lam = np.diag(self.el ** -1)
         self.eye_d = np.eye(dim)
 
-    def __str__(self):
+    def __str__(self):  # TODO: improve string representation
         return '{} {}'.format(self.__class__.__name__, self.hypers.update({'jitter': self.jitter}))
 
-    def eval(self, x1, x2=None, diag=False):
+    def eval(self, x1, x2=None, diag=False):  # TODO: prob need to add hypers args because of ML-II opt.
         # x1.shape = (D, N), x2.shape = (D, M)
         if x2 is None:
             x2 = x1

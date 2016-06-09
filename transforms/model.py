@@ -7,6 +7,9 @@ from kernel import RBF
 from quad import SphericalRadial, Unscented, GaussHermite
 
 
+# TODO: documentation
+
+
 class Model(object):
 
     __metaclass__ = ABCMeta

@@ -14,7 +14,7 @@ class UnscentedKalman(StateSpaceInference):
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
         tf = Unscented(nq, kappa=kappa, alpha=alpha, beta=beta)
         th = Unscented(nr, kappa=kappa, alpha=alpha, beta=beta)
-        super(UnscentedKalman, self).__init__(tf, th, sys)
+        super(UnscentedKalman, self).__init__(sys, tf, th)
 
 
 def main():

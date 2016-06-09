@@ -17,7 +17,7 @@ class TPQKalman(StateSpaceInference):
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
         t_dyn = TPQ(nq, kernel, points, kern_hyp_dyn, point_hyp, nu)
         t_obs = TPQ(nr, kernel, points, kern_hyp_obs, point_hyp, nu)
-        super(TPQKalman, self).__init__(t_dyn, t_obs, sys)
+        super(TPQKalman, self).__init__(sys, t_dyn, t_obs)
 
 
 def main():

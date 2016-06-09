@@ -14,7 +14,7 @@ class ExtendedKalman(StateSpaceInference):
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
         tf = Taylor1stOrder(nq)
         th = Taylor1stOrder(nr)
-        super(ExtendedKalman, self).__init__(tf, th, sys)
+        super(ExtendedKalman, self).__init__(sys, tf, th)
 
 
 class ExtendedKalmanGPQD(StateSpaceInference):
@@ -24,7 +24,7 @@ class ExtendedKalmanGPQD(StateSpaceInference):
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
         tf = TaylorGPQD(nq, alpha, el)
         th = TaylorGPQD(nr, alpha, el)
-        super(ExtendedKalmanGPQD, self).__init__(tf, th, sys)
+        super(ExtendedKalmanGPQD, self).__init__(sys, tf, th)
 
 
 def main():

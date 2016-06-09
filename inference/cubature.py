@@ -14,7 +14,7 @@ class CubatureKalman(StateSpaceInference):
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
         tf = SphericalRadial(nq)
         th = SphericalRadial(nr)
-        super(CubatureKalman, self).__init__(tf, th, sys)
+        super(CubatureKalman, self).__init__(sys, tf, th)
 
 
 def main():
@@ -22,7 +22,7 @@ def main():
     # ungm_filter_demo(CubatureKalman)
     # from models.pendulum import pendulum_filter_demo
     # pendulum_filter_demo(CubatureKalman)
-    from models.tracking import bot_filter_demo, reentry_filter_demo
+    from models.tracking import reentry_filter_demo
     reentry_filter_demo(CubatureKalman)
 
 

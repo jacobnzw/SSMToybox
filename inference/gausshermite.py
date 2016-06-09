@@ -14,7 +14,7 @@ class GaussHermiteKalman(StateSpaceInference):
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
         tf = GaussHermite(nq, degree=deg)
         th = GaussHermite(nr, degree=deg)
-        super(GaussHermiteKalman, self).__init__(tf, th, sys)
+        super(GaussHermiteKalman, self).__init__(sys, tf, th)
 
 
 def main():
