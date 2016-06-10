@@ -25,17 +25,22 @@ class Kernel(object):
         self.hypers = self._get_default_hyperparameters(dim) if hypers is None else hypers
 
     @staticmethod
-    def _cho_inv(A):
+    def _cho_inv(A, b=None):
         # inversion of PD matrix A using Cholesky decomposition
-        return cho_solve(cho_factor(A), np.eye(A.shape[0]))
+        if b is None:
+            b = np.eye(A.shape[0])
+        return cho_solve(cho_factor(A), b)
 
     # evaluation
     @abstractmethod
     def eval(self, x1, x2=None, diag=False):
         raise NotImplementedError
 
-    def eval_inv(self, x1, x2=None, diag=False):
-        return Kernel._cho_inv(self.eval(x1, x2, diag) + self.jitter * np.eye(x1.shape[1]))
+    def eval_inv_dot(self, x, b=None):
+        return Kernel._cho_inv(self.eval(x) + self.jitter * np.eye(x.shape[1]), b)
+
+    def eval_chol(self, x):
+        return la.cholesky(self.eval(x) + self.jitter * np.eye(x.shape[1]))
 
     # expectations
     @abstractmethod

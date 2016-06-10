@@ -85,7 +85,7 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
 
     def _weights(self):
         x = self.model.points
-        iK = self.model.kernel.eval_inv(x)
+        iK = self.model.kernel.eval_inv_dot(x)
         # kernel expectations
         q = self.model.kernel.exp_x_kx(x)
         Q = self.model.kernel.exp_x_kxkx(x)
@@ -109,7 +109,7 @@ class TPQ(BQTransform):
 
     def _weights(self):
         x = self.model.points
-        iK = self.model.kernel.eval_inv(x)
+        iK = self.model.kernel.eval_inv_dot(x)
         # kernel expectations
         q = self.model.kernel.exp_x_kx(x)
         Q = self.model.kernel.exp_x_kxkx(x)

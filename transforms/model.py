@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.linalg as la
 
 from kernel import RBF
 from quad import SphericalRadial, Unscented, GaussHermite
@@ -46,7 +47,7 @@ class Model(object):
         raise NotImplementedError
 
     @abstractmethod
-    def marginal_log_likelihood(self, hypers, observations):
+    def log_marginal_likelihood(self, hypers, observations):
         # model specific marginal likelihood, will serve as an objective function passed into the optimizer
         raise NotImplementedError
 
@@ -110,7 +111,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         super(GaussianProcess, self).__init__(dim, kernel, points, kern_hyp, point_hyp)
 
     def predict(self, test_data, fcn_obs):
-        iK = self.kernel.eval_inv(self.points)
+        iK = self.kernel.eval_inv_dot(self.points)
         kx = self.kernel.eval(test_data, self.points)
         kxx = self.kernel.eval(test_data, test_data, diag=True)
         mean = np.squeeze(kx.dot(iK).dot(fcn_obs.T))
@@ -120,11 +121,22 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
     def exp_model_variance(self, fcn_obs):
         q_bar = self.kernel.exp_x_kxx()
         Q = self.kernel.exp_x_kxkx(self.points)
-        iK = self.kernel.eval_inv(self.points)
+        iK = self.kernel.eval_inv_dot(self.points)
         return q_bar - np.trace(Q.dot(iK))
 
-    def marginal_log_likelihood(self, hypers, observations):
-        pass
+    def log_marginal_likelihood(self, hypers, fcn_obs):
+        # marginal log-likelihood of GP
+        # N - # points, E - # function outputs
+        # fcn_obs (N, E), hypers (num_hyp, )
+        L = self.kernel.eval_chol(self.points)  # (N, N)
+        a = la.solve(L, fcn_obs)  # (N, E)
+        y_dot_a = np.einsum('ij, ji', fcn_obs.T, a)  # sum of diagonal of A.T.dot(A)
+        a_out_a = np.einsum('i...j, ...jn', A, A.T)  # (N, N) sum over of outer products of columns of A
+        log_ml = - 0.5 * (y_dot_a + np.sum(np.log(np.diag(L))))
+        dK_dTheta = self.kernel.der_hyp(self.points, hypers)  # (N, N, num_hyp)
+        iK = solve(L.dot(L.T), np.eye(self.n))
+        dlogml_dtheta = -0.5 * np.trace((a_out_a - iK).dot(dK_dTheta))  # (num_hyp, )
+        return log_ml, dlogml_dtheta
 
 
 class StudentTProcess(Model):
@@ -137,7 +149,7 @@ class StudentTProcess(Model):
     def predict(self, test_data, fcn_obs, nu=None):
         if nu is None:
             nu = self.nu
-        iK = self.kernel.eval_inv(self.points)
+        iK = self.kernel.eval_inv_dot(self.points)
         kx = self.kernel.eval(test_data, self.points)
         kxx = self.kernel.eval(test_data, test_data, diag=True)
         mean = np.squeeze(kx.dot(iK).dot(fcn_obs.T))
@@ -149,9 +161,9 @@ class StudentTProcess(Model):
         fcn_obs = np.squeeze(fcn_obs)
         q_bar = self.kernel.exp_x_kxx()
         Q = self.kernel.exp_x_kxkx(self.points)
-        iK = self.kernel.eval_inv(self.points)
+        iK = self.kernel.eval_inv_dot(self.points)
         scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.n)
         return scale * (q_bar - np.trace(Q.dot(iK)))
 
-    def marginal_log_likelihood(self, hypers, observations):
+    def log_marginal_likelihood(self, hypers, observations):
         pass
