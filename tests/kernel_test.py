@@ -1,7 +1,9 @@
 from unittest import TestCase
-from kernel import RBF, Affine
+
 import numpy as np
 import numpy.linalg as la
+
+from kernel import RBF
 
 
 class RBFKernelTest(TestCase):

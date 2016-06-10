@@ -33,14 +33,17 @@ class Kernel(object):
 
     # evaluation
     @abstractmethod
-    def eval(self, x1, x2=None, diag=False):
+    def eval(self, x1, x2=None, hyp=None, diag=False):
         raise NotImplementedError
 
-    def eval_inv_dot(self, x, b=None):
-        return Kernel._cho_inv(self.eval(x) + self.jitter * np.eye(x.shape[1]), b)
+    # TODO: methods could return their byproducts, such as kernel matrix
+    # TODO: other methods could optionally accept them to save computation
+    def eval_inv_dot(self, x, hyp=None, b=None):
+        # if b=None returns inverse of K
+        return Kernel._cho_inv(self.eval(x, hyp=hyp) + self.jitter * np.eye(x.shape[1]), b)
 
-    def eval_chol(self, x):
-        return la.cholesky(self.eval(x) + self.jitter * np.eye(x.shape[1]))
+    def eval_chol(self, x, hyp=None):
+        return la.cholesky(self.eval(x, hyp=hyp) + self.jitter * np.eye(x.shape[1]))
 
     # expectations
     @abstractmethod
@@ -64,6 +67,10 @@ class Kernel(object):
         raise NotImplementedError
 
     # derivatives
+    @abstractmethod
+    def der_hyp(self, x, hyp0):
+        # evaluates derivative of the kernel matrix at hyp0; x is data, now acting as parameter
+        raise NotImplementedError
 
     @abstractmethod
     def _get_default_hyperparameters(self, dim):
@@ -94,18 +101,26 @@ class RBF(Kernel):
     def __str__(self):  # TODO: improve string representation
         return '{} {}'.format(self.__class__.__name__, self.hypers.update({'jitter': self.jitter}))
 
-    def eval(self, x1, x2=None, diag=False):  # TODO: prob need to add hypers args because of ML-II opt.
+    def eval(self, x1, x2=None, hyp=None, diag=False):
         # x1.shape = (D, N), x2.shape = (D, M)
         if x2 is None:
             x2 = x1
-        x1 = self.sqrt_inv_lam.dot(x1)
-        x2 = self.sqrt_inv_lam.dot(x2)
+        # hyp (D+1,) array_like
+        if hyp is not None:
+            # use provided hypers
+            alpha, sqrt_inv_lam = hyp[0], np.diag(hyp[1:] ** -1)
+        else:
+            # use hypers provided during init
+            alpha, sqrt_inv_lam = self.alpha, self.sqrt_inv_lam
+
+        x1 = sqrt_inv_lam.dot(x1)
+        x2 = sqrt_inv_lam.dot(x2)
         if diag:  # only diagonal of kernel matrix
             assert x1.shape == x2.shape
             dx = x1 - x2
-            return np.exp(2 * np.log(self.alpha) - 0.5 * np.sum(dx * dx, axis=0))
+            return np.exp(2 * np.log(alpha) - 0.5 * np.sum(dx * dx, axis=0))
         else:
-            return np.exp(2 * np.log(self.alpha) - 0.5 * self._maha(x1.T, x2.T))
+            return np.exp(2 * np.log(alpha) - 0.5 * self._maha(x1.T, x2.T))
 
     def exp_x_kx(self, x):
         # a.k.a. kernel mean map w.r.t. standard Gaussian PDF
@@ -132,6 +147,17 @@ class RBF(Kernel):
         n = (xi[:, na] + xi[na, :]) + 0.5 * self._maha(x.T, -x.T, V=inv_r)
         return la.det(inv_r) ** 0.5 * np.exp(n)
 
+    def der_hyp(self, x, hyp0):  # K as kwarg would save computation (would have to be evaluated w/ hyp0)
+        # hyp0: array_like [alpha, el_1, ..., el_D]
+        # x: (D, N)
+        alpha, el = hyp0[0], hyp0[1:]
+        K = self.eval(x, hyp=hyp0)
+        # derivative w.r.t. alpha (N,N)
+        d_alpha = 2 * alpha ** -1 * K
+        # derivatives w.r.t. el_1, ..., el_D (N,N,D)
+        d_el = (x[:, na, :] - x[:, :, na]) ** 2 * (el ** -3)[:, na, na] * K[na, :, :]
+        return np.concatenate((d_alpha[..., na], d_el.T), axis=2)
+
     def _get_default_hyperparameters(self, dim):
         return {'alpha': 1.0, 'el': 1.0 * np.ones(dim, )}
 
@@ -154,7 +180,7 @@ class Affine(Kernel):
     def __init__(self, dim, hypers):
         super(Affine, self).__init__(dim, hypers)
 
-    def eval(self, x1, x2=None, diag=False):
+    def eval(self, x1, x2=None, hyp=None, diag=False):
         pass
 
     def exp_x_kx(self, x):
