@@ -38,7 +38,7 @@ class Model(object):
         return '{}\n{} {}'.format(self.kernel, self.str_pts, self.str_pts_hyp)
 
     @abstractmethod
-    def predict(self, test_data, fcn_obs):
+    def predict(self, test_data, fcn_obs, hyp=None):
         # model predictive mean and variance to be implemented by GP and TP classes
         raise NotImplementedError
 
@@ -53,18 +53,19 @@ class Model(object):
         raise NotImplementedError
 
     def optimize_hypers_max_ml(self, log_hyp0, fcn_obs):
-        # general routine minimizing negative marginal log-likelihood
-        hypers_ml = minimize(self.neg_log_marginal_likelihood, log_hyp0, fcn_obs, method='CG', jac=True)
+        # general routine minimizing negative marginal log-likelihood # TODO: try other methods
+        b = ((np.log(0.9), np.log(1.1)), (None, None))
+        hypers_ml = minimize(self.neg_log_marginal_likelihood, log_hyp0, fcn_obs, method='L-BFGS-B', jac=True, bounds=b)
         return hypers_ml
 
-    def plot_model(self, test_data, fcn_obs, fcn_true=None, in_dim=0):
+    def plot_model(self, test_data, fcn_obs, hyp=None, fcn_true=None, in_dim=0):
         # general plotting routine for all models defined in terms of model's predictive mean and variance
         assert in_dim <= self.d - 1
 
         fcn_obs = np.squeeze(fcn_obs)
         fcn_true = np.squeeze(fcn_true)
         # model predictive mean and variance
-        mean, var = self.predict(test_data, fcn_obs)
+        mean, var = self.predict(test_data, fcn_obs, hyp=hyp)
         std = np.sqrt(var)
         test_data = np.squeeze(test_data[in_dim, :])
         # set plot title according to model
@@ -112,10 +113,10 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
     def __init__(self, dim, kernel='rbf', points='ut', kern_hyp=None, point_hyp=None):
         super(GaussianProcess, self).__init__(dim, kernel, points, kern_hyp, point_hyp)
 
-    def predict(self, test_data, fcn_obs):
-        iK = self.kernel.eval_inv_dot(self.points)
-        kx = self.kernel.eval(test_data, self.points)
-        kxx = self.kernel.eval(test_data, test_data, diag=True)
+    def predict(self, test_data, fcn_obs, hyp=None):
+        iK = self.kernel.eval_inv_dot(self.points, hyp=hyp)
+        kx = self.kernel.eval(test_data, self.points, hyp=hyp)
+        kxx = self.kernel.eval(test_data, test_data, diag=True, hyp=hyp)
         mean = np.squeeze(kx.dot(iK).dot(fcn_obs.T))
         var = np.squeeze(kxx - np.einsum('im,mn,mi->i', kx, iK, kx.T))
         return mean, var
@@ -135,13 +136,19 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         hypers = np.exp(log_hyp)
 
         L = self.kernel.eval_chol(self.points, hyp=hypers)  # (N, N)
-        a = la.solve(L.dot(L.T), fcn_obs)  # (N, E)
+        K = L.dot(L.T)  # jitter included from eval_chol
+        a = la.solve(K, fcn_obs)  # (N, E)
         y_dot_a = np.einsum('ij, ji', fcn_obs.T, a)  # sum of diagonal of A.T.dot(A)
         a_out_a = np.einsum('i...j, ...jn', a, a.T)  # (N, N) sum over of outer products of columns of A
-        nlml = 0.5 * (y_dot_a + np.sum(np.log(np.diag(L))))
-        dK_dTheta = self.kernel.der_hyp(self.points, hypers)  # TODO: bugs here? (N, N, num_hyp)
-        iK = la.solve(L.dot(L.T), np.eye(self.n))  # checks out
-        dnlml_dtheta = 0.5 * np.trace((a_out_a - iK).dot(dK_dTheta))  # (num_hyp, )
+
+        # negative marginal log-likelihood
+        nlml = 0.5 * y_dot_a + np.sum(np.log(np.diag(L))) + 0.5 * self.n * np.log(2 * np.pi)
+        # nlml = np.log(nlml)  # w/o this, solver terminates w/ 'precision loss'
+
+        # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
+        dK_dTheta = self.kernel.der_hyp(self.points, hypers)  # (N, N, num_hyp) # FIXME: bugs here?
+        iK = la.solve(K, np.eye(self.n))  # checks out
+        dnlml_dtheta = 0.5 * np.trace((iK - a_out_a).dot(dK_dTheta))  # (num_hyp, )
         return nlml, dnlml_dtheta
 
 
@@ -152,7 +159,7 @@ class StudentTProcess(Model):
         assert nu > 2, 'Degrees of freedom (nu) must be > 2.'
         self.nu = nu
 
-    def predict(self, test_data, fcn_obs, nu=None):
+    def predict(self, test_data, fcn_obs, hyp=None):
         if nu is None:
             nu = self.nu
         iK = self.kernel.eval_inv_dot(self.points)

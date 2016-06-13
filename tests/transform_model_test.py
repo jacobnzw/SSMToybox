@@ -3,12 +3,13 @@ from unittest import TestCase
 import numpy as np
 from numpy import newaxis as na
 
-from transforms.model import *
+from transforms.model import GaussianProcess
 
-fcn = lambda x: np.sin((x + 1) ** -1)
+# fcn = lambda x: np.sin((x + 1) ** -1)
+fcn = lambda x: 0.5 * x + 25 * x / (1 + x ** 2)
 
 
-# fcn = lambda x: x ** 2
+# fcn = lambda x: 0.5*x ** 2
 # fcn = lambda x: x
 
 
@@ -27,7 +28,7 @@ class GPModelTest(TestCase):
         xtest = np.linspace(-5, 5, 50)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
-        model.plot_model(xtest, y, f)
+        model.plot_model(xtest, y, fcn_true=f)
 
     def test_exp_model_variance(self):
         khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
@@ -44,12 +45,38 @@ class GPModelTest(TestCase):
 
     def test_hypers_optim(self):
         khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
-        model = GaussianProcess(1, kern_hyp=khyp)
+        model = GaussianProcess(1, points='gh', kern_hyp=khyp, point_hyp={'degree': 3})
+        xtest = np.linspace(-5, 5, 50)[na, :]
         y = fcn(model.points)
-        lhyp0 = np.log([1.0, 1.0])
-        lhyp_opt = model.optimize_hypers_max_ml(lhyp0, y.T)
-        print lhyp_opt
-        print 'ML-II hypers: {}'.format(np.exp(lhyp_opt.x))
+        f = fcn(xtest)
+        # plot before optimization
+        model.plot_model(xtest, y, fcn_true=f)
+        lhyp0 = np.log([1.0, 3.0])
+        opt_result = model.optimize_hypers_max_ml(lhyp0, y.T)
+        hyp_opt = np.exp(opt_result.x)
+        print opt_result
+        print 'ML-II hypers: alpha = {:.4f}, el = {:.4f} '.format(hyp_opt[0], hyp_opt[1])
+        # plot after optimization
+        model.plot_model(xtest, y, fcn_true=f, hyp=hyp_opt)
+
+        # plot NLML surface
+        # x = np.log(np.mgrid[1:10:0.5, 0.5:20:0.5])
+        # m, n = x.shape[1:]
+        # z = np.zeros(x.shape[1:])
+        # for i in range(m):
+        #     for j in range(n):
+        #         z[i, j], grad = model.neg_log_marginal_likelihood(x[:, i, j], y.T)
+        #
+        # import matplotlib.pyplot as plt
+        # from mpl_toolkits.mplot3d import Axes3D
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111, projection='3d')
+        # ax.plot_surface((x[0, ...]), (x[1, ...]), z, linewidth=0.5, alpha=0.5, rstride=2, cstride=2)
+        # ax.set_xlabel('alpha')
+        # ax.set_ylabel('el')
+        # plt.show()
+
+
 
 # class TPModelTest(TestCase):
 #     def test_init(self):

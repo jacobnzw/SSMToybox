@@ -83,14 +83,10 @@ class RBF(Kernel):
     def __init__(self, dim, hypers=None, jitter=1e-8):
         super(RBF, self).__init__(dim, hypers, jitter)
         self.alpha = self.hypers['alpha']
-        el = self.hypers['el']
-        if not np.isscalar(el):
-            if len(el) == 1 and dim > 1:
-                # if el is a list/tuple/array w/ 1 element and dim > 1
-                el = el[0] * np.ones(dim, )
-        else:
-            # turn scalar el into vector
-            el = el * np.ones(dim, )
+        el = np.asarray(self.hypers['el'])
+        if len(el) == 1 and dim > 1:
+            # if el is a list/tuple/array w/ 1 element and dim > 1
+            el = el[0] * np.ones(dim, )
         self.el = el
         # pre-computation for convenience
         self.lam = np.diag(self.el ** 2)
