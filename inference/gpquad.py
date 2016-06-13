@@ -1,5 +1,3 @@
-import numpy as np
-
 from inference.ssinfer import StateSpaceInference
 from models.ssmodel import StateSpaceModel
 from transforms.bayesquad import GPQ
@@ -21,10 +19,10 @@ class GPQKalman(StateSpaceInference):
 
 def main():
     # UNGM demo
-    from models.ungm import ungm_filter_demo
-    khyp = {'alpha': 1.0, 'el': 0.3 * np.ones(1)}
-    ut_hyp = {'kappa': 0.0}
-    ungm_filter_demo(GPQKalman, 'rbf', 'sr', kern_hyp_dyn=khyp, kern_hyp_obs=khyp, point_hyp=None)
+    # from models.ungm import ungm_filter_demo
+    # khyp = {'alpha': 1.0, 'el': 0.3 * np.ones(1)}
+    # ut_hyp = {'kappa': 0.0}
+    # ungm_filter_demo(GPQKalman, 'rbf', 'sr', kern_hyp_dyn=khyp, kern_hyp_obs=khyp, point_hyp=None)
 
     # Pendulum demo
     # from models.pendulum import pendulum_filter_demo
@@ -32,11 +30,16 @@ def main():
     # pendulum_filter_demo(GPQKalman, hyp_dyn=hdyn, hyp_meas=hmeas)
 
     # Reentry vehicle tracking demo
-    # from models.tracking import reentry_filter_demo
-    # d = 5
-    # hdyn = {'alpha': 1.0, 'el': 25.0 * np.ones(d, )}
-    # hobs = {'alpha': 1.0, 'el': 25.0 * np.ones(d, )}
-    # reentry_filter_demo(GPQKalman, 'rbf', 'sr', kern_hyp_dyn=hdyn, kern_hyp_obs=hobs)
+    # The radar measurement model only uses the first two state dimensions as input, which means that the remaining
+    # state dimensions are irrelevant to the GP model of the measurement function. This is why we set high
+    # lengthscale for the remaining dimensions, which ensures they will not contribute significantly to kernel
+    # covariance (the RBF kernel is expressed in terms of inverse lengthscales).
+    # TODO: find hypers that give position RMSE < ~0.01 (UKF), GPQKF best position RMSE is ~0.1,
+    from models.tracking import reentry_filter_demo
+    d = 5
+    hdyn = {'alpha': 1.0, 'el': [15.0, 15.0, 15.0, 15.0, 15.0]}
+    hobs = {'alpha': 1.0, 'el': [15.0, 15.0, 1e4, 1e4, 1e4]}
+    reentry_filter_demo(GPQKalman, 'rbf', 'ut', kern_hyp_dyn=hdyn, kern_hyp_obs=hobs)
 
     # Frequency demodulation demo
     # d = 2
