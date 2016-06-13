@@ -23,7 +23,8 @@ class Pendulum(StateSpaceModel):
             'q_mean': np.zeros(self.qD),
             'q_cov': 0.01 * np.array([[(dt ** 3) / 3, (dt ** 2) / 2], [(dt ** 2) / 2, dt]]),
             'r_mean': np.zeros(self.rD),
-            'r_cov': np.atleast_2d(r_cov)
+            'r_cov': np.atleast_2d(r_cov),
+            'q_factor': np.eye(2)
         }
         super(Pendulum, self).__init__(**req_kwargs)
 
@@ -59,11 +60,11 @@ def pendulum_demo():
     plt.show()
 
 
-def pendulum_filter_demo(filt_class, **kwargs):
+def pendulum_filter_demo(filt_class, *args, **kwargs):
     assert issubclass(filt_class, StateSpaceInference)
     system = Pendulum()
     # create filter object, pass in additional kwargs
-    filt = filt_class(system, **kwargs)
+    filt = filt_class(system, *args, **kwargs)
     # simulate dynamic system for given number of steps and mc simulations
     time_steps, mc = 500, 100
     x, z = system.simulate(time_steps, mc_sims=mc)

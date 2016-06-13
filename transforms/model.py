@@ -52,10 +52,16 @@ class Model(object):
         # model specific marginal likelihood, will serve as an objective function passed into the optimizer
         raise NotImplementedError
 
-    def optimize_hypers_max_ml(self, log_hyp0, fcn_obs):
-        # general routine minimizing negative marginal log-likelihood # TODO: try other methods
-        b = ((np.log(0.9), np.log(1.1)), (None, None))
-        hypers_ml = minimize(self.neg_log_marginal_likelihood, log_hyp0, fcn_obs, method='L-BFGS-B', jac=True, bounds=b)
+    @abstractmethod
+    def likelihood_regularized(self, log_hyp, fcn_obs):
+        # negative marginal log-likelihood w/ additional regularizing term
+        # regularizing terms: integral variance, expected model variance or both, prior on hypers
+        pass
+
+    def optimize_hypers_max_ml(self, log_hyp0, fcn_obs, method='BFGS', jac=True, **kwargs):
+        # general routine minimizing negative marginal log-likelihood
+        # additional kwargs are passed into the scipy.optimize.minimize solver
+        hypers_ml = minimize(self.neg_log_marginal_likelihood, log_hyp0, fcn_obs, method=method, jac=jac, **kwargs)
         return hypers_ml
 
     def plot_model(self, test_data, fcn_obs, hyp=None, fcn_true=None, in_dim=0):
@@ -140,16 +146,17 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         a = la.solve(K, fcn_obs)  # (N, E)
         y_dot_a = np.einsum('ij, ji', fcn_obs.T, a)  # sum of diagonal of A.T.dot(A)
         a_out_a = np.einsum('i...j, ...jn', a, a.T)  # (N, N) sum over of outer products of columns of A
-
         # negative marginal log-likelihood
         nlml = 0.5 * y_dot_a + np.sum(np.log(np.diag(L))) + 0.5 * self.n * np.log(2 * np.pi)
-        # nlml = np.log(nlml)  # w/o this, solver terminates w/ 'precision loss'
-
+        nlml = np.log(nlml)  # w/o this, unconstrained solver terminates w/ 'precision loss'
         # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
-        dK_dTheta = self.kernel.der_hyp(self.points, hypers)  # (N, N, num_hyp) # FIXME: bugs here?
-        iK = la.solve(K, np.eye(self.n))  # checks out
+        dK_dTheta = self.kernel.der_hyp(self.points, hypers)  # (N, N, num_hyp)
+        iK = la.solve(K, np.eye(self.n))
         dnlml_dtheta = 0.5 * np.trace((iK - a_out_a).dot(dK_dTheta))  # (num_hyp, )
-        return nlml, dnlml_dtheta
+        return nlml  # , dnlml_dtheta
+
+    def likelihood_regularized(self, log_hyp, fcn_obs):
+        pass
 
 
 class StudentTProcess(Model):
@@ -179,4 +186,7 @@ class StudentTProcess(Model):
         return scale * (q_bar - np.trace(Q.dot(iK)))
 
     def neg_log_marginal_likelihood(self, log_hyp, fcn_obs):
+        pass
+
+    def likelihood_regularized(self, log_hyp, fcn_obs):
         pass

@@ -1,6 +1,11 @@
 import numpy as np
 from numpy import newaxis as na
 # TODO: Abstract Base Classes to enforce the requirements of the base class on the derived classes.
+# TODO: The class should recognize input dimensions of dynamics and observation models separately
+# This is because observation models do not always use all the state dimensions, e.g. radar only uses position
+# to produce range and bearing measurements, the remaining states (velocity, ...) remain unused. Therefore the moment
+#  transform for the observation model should have different dimension. I think this approach should be followed by
+# all the sigma-point transforms.
 
 
 class StateSpaceModel(object):
@@ -18,6 +23,8 @@ class StateSpaceModel(object):
         self.pars = kwargs
         self.zero_q = np.zeros((self.qD))
         self.zero_r = np.zeros((self.rD))
+        # TODO: if q_factor not given, use identity matrix
+        # TODO: if _mean not given, assume zero-mean
 
     def dyn_fcn(self, x, q, pars):
         """ System dynamics.
@@ -146,7 +153,7 @@ class StateSpaceModel(object):
         """
         if self.q_additive:
             assert len(xq) == self.xD
-            if dx:  # TODO: put in zero vector, not int
+            if dx:
                 out = (self.dyn_fcn_dx(xq, self.zero_q, pars).T.flatten())
             else:
                 out = self.dyn_fcn(xq, self.zero_q, pars)

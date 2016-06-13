@@ -9,7 +9,7 @@ from transforms.model import GaussianProcess
 fcn = lambda x: 0.5 * x + 25 * x / (1 + x ** 2)
 
 
-# fcn = lambda x: 0.5*x ** 2
+# fcn = lambda x: 0.05*x ** 2
 # fcn = lambda x: x
 
 
@@ -44,21 +44,23 @@ class GPModelTest(TestCase):
         f, df = model.neg_log_marginal_likelihood(lhyp, y.T)
 
     def test_hypers_optim(self):
-        khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
-        model = GaussianProcess(1, points='gh', kern_hyp=khyp, point_hyp={'degree': 3})
+        khyp = {'alpha': 1.0, 'el': 1.0 * np.ones(1)}
+        model = GaussianProcess(1, points='gh', kern_hyp=khyp, point_hyp={'degree': 15})
         xtest = np.linspace(-5, 5, 50)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
         # plot before optimization
         model.plot_model(xtest, y, fcn_true=f)
-        lhyp0 = np.log([1.0, 3.0])
-        opt_result = model.optimize_hypers_max_ml(lhyp0, y.T)
+        lhyp0 = np.log([1.0, 1.0])
+        b = ((np.log(0.9), np.log(1.1)), (None, None))
+        opt_result = model.optimize_hypers_max_ml(lhyp0, y.T, method='L-BFGS-B', jac=False, bounds=b)
         hyp_opt = np.exp(opt_result.x)
         print opt_result
         print 'ML-II hypers: alpha = {:.4f}, el = {:.4f} '.format(hyp_opt[0], hyp_opt[1])
         # plot after optimization
         model.plot_model(xtest, y, fcn_true=f, hyp=hyp_opt)
 
+        # TODO: test fitting of multioutput GPs, GPy supports this in GPRegression
         # plot NLML surface
         # x = np.log(np.mgrid[1:10:0.5, 0.5:20:0.5])
         # m, n = x.shape[1:]
