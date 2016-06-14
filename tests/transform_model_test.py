@@ -45,7 +45,7 @@ class GPModelTest(TestCase):
 
     def test_hypers_optim(self):
         khyp = {'alpha': 1.0, 'el': 1.0 * np.ones(1)}
-        model = GaussianProcess(1, points='gh', kern_hyp=khyp, point_hyp={'degree': 15})
+        model = GaussianProcess(1, points='gh', kern_hyp=khyp, point_hyp={'degree': 3})
         xtest = np.linspace(-5, 5, 50)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
@@ -53,7 +53,7 @@ class GPModelTest(TestCase):
         model.plot_model(xtest, y, fcn_true=f)
         lhyp0 = np.log([1.0, 1.0])
         b = ((np.log(0.9), np.log(1.1)), (None, None))
-        opt_result = model.optimize_hypers_max_ml(lhyp0, y.T, method='L-BFGS-B', jac=False, bounds=b)
+        opt_result = model.optimize_ml(lhyp0, y.T, method='BFGS', jac=False, bounds=b)
         hyp_opt = np.exp(opt_result.x)
         print opt_result
         print 'ML-II hypers: alpha = {:.4f}, el = {:.4f} '.format(hyp_opt[0], hyp_opt[1])
@@ -78,6 +78,22 @@ class GPModelTest(TestCase):
         # ax.set_ylabel('el')
         # plt.show()
 
+    def test_hypers_optim_regularized(self):
+        khyp = {'alpha': 1.0, 'el': 1.0 * np.ones(1)}
+        model = GaussianProcess(1, points='gh', kern_hyp=khyp, point_hyp={'degree': 3})
+        xtest = np.linspace(-5, 5, 50)[na, :]
+        y = fcn(model.points)
+        f = fcn(xtest)
+        # plot before optimization
+        model.plot_model(xtest, y, fcn_true=f)
+        lhyp0 = np.log([1.0, 1.0])
+        b = ((np.log(0.9), np.log(1.1)), (None, None))
+        opt_result = model.optimize_ml_regularized(lhyp0, y.T, method='BFGS', jac=False, bounds=b)
+        hyp_opt = np.exp(opt_result.x)
+        print opt_result
+        print 'ML-II-REG hypers: alpha = {:.4f}, el = {:.4f} '.format(hyp_opt[0], hyp_opt[1])
+        # plot after optimization
+        model.plot_model(xtest, y, fcn_true=f, hyp=hyp_opt)
 
 
 # class TPModelTest(TestCase):

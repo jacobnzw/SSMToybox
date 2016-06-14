@@ -47,35 +47,33 @@ class Kernel(object):
 
     # expectations
     @abstractmethod
-    def exp_x_kx(self, x):
-        raise NotImplementedError
+    def exp_x_kx(self, x, hyp=None):
+        pass
 
     @abstractmethod
-    def exp_x_xkx(self, x):
-        raise NotImplementedError
-
+    def exp_x_xkx(self, x, hyp=None):
+        pass
     @abstractmethod
-    def exp_x_kxx(self):
-        raise NotImplementedError
-
+    def exp_x_kxx(self, hyp=None):
+        pass
     @abstractmethod
-    def exp_xy_kxy(self):
-        raise NotImplementedError
-
+    def exp_xy_kxy(self, hyp=None):
+        pass
     @abstractmethod
-    def exp_x_kxkx(self, x):
-        raise NotImplementedError
-
+    def exp_x_kxkx(self, x, hyp=None):
+        pass
     # derivatives
     @abstractmethod
     def der_hyp(self, x, hyp0):
         # evaluates derivative of the kernel matrix at hyp0; x is data, now acting as parameter
-        raise NotImplementedError
-
+        pass
     @abstractmethod
     def _get_default_hyperparameters(self, dim):
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
+    def _get_hyperparameters(self, hyp):
+        pass
 
 class RBF(Kernel):
     _hyperparameters_ = ['alpha', 'el']
@@ -98,16 +96,11 @@ class RBF(Kernel):
         return '{} {}'.format(self.__class__.__name__, self.hypers.update({'jitter': self.jitter}))
 
     def eval(self, x1, x2=None, hyp=None, diag=False):
-        # x1.shape = (D, N), x2.shape = (D, M)
+        # x1.shape = (D, N), x2.shape = (D, M), hyp (D+1,) array_like
         if x2 is None:
             x2 = x1
-        # hyp (D+1,) array_like
-        if hyp is not None:
-            # use provided hypers
-            alpha, sqrt_inv_lam = hyp[0], np.diag(hyp[1:] ** -1)
-        else:
-            # use hypers provided during init
-            alpha, sqrt_inv_lam = self.alpha, self.sqrt_inv_lam
+        # use hyp as hypers if given, otherwise use init hypers
+        alpha, sqrt_inv_lam = self._get_hyperparameters(hyp)
 
         x1 = sqrt_inv_lam.dot(x1)
         x2 = sqrt_inv_lam.dot(x2)
@@ -118,28 +111,42 @@ class RBF(Kernel):
         else:
             return np.exp(2 * np.log(alpha) - 0.5 * self._maha(x1.T, x2.T))
 
-    def exp_x_kx(self, x):
+    def exp_x_kx(self, x, hyp=None):
         # a.k.a. kernel mean map w.r.t. standard Gaussian PDF
-        c = self.alpha ** 2 * (la.det(self.inv_lam + self.eye_d)) ** -0.5
-        xl = la.inv(self.lam + self.eye_d).dot(x)
+        # hyp (D+1,) array_like
+        alpha, sqrt_inv_lam = self._get_hyperparameters(hyp)
+        inv_lam = sqrt_inv_lam ** 2
+        lam = inv_lam ** -1
+
+        c = alpha ** 2 * (la.det(inv_lam + self.eye_d)) ** -0.5
+        xl = la.inv(lam + self.eye_d).dot(x)
         return c * np.exp(-0.5 * np.sum(x * xl, axis=0))
 
-    def exp_x_xkx(self, x):
-        mu_q = la.inv(self.lam + self.eye_d).dot(x)
-        q = self.exp_x_kx(x)
+    def exp_x_xkx(self, x, hyp=None):
+        alpha, sqrt_inv_lam = self._get_hyperparameters(hyp)
+        lam = sqrt_inv_lam ** -2
+
+        mu_q = la.inv(lam + self.eye_d).dot(x)
+        q = self.exp_x_kx(x, hyp)
         return q[na, :] * mu_q
 
-    def exp_x_kxx(self):
-        return self.alpha ** 2
+    def exp_x_kxx(self, hyp=None):
+        alpha, sqrt_inv_lam = self._get_hyperparameters(hyp)
+        return alpha ** 2
 
-    def exp_xy_kxy(self):
-        return self.alpha ** 2 * la.det(2 * self.inv_lam + self.eye_d) ** -0.5
+    def exp_xy_kxy(self, hyp=None):
+        alpha, sqrt_inv_lam = self._get_hyperparameters(hyp)
+        inv_lam = sqrt_inv_lam ** 2
+        return alpha ** 2 * la.det(2 * inv_lam + self.eye_d) ** -0.5
 
-    def exp_x_kxkx(self, x):
-        inv_r = la.inv(2 * self.inv_lam + self.eye_d)
-        xi = self.sqrt_inv_lam.dot(x)
-        xi = 2 * np.log(self.alpha) - 0.5 * np.sum(xi * xi, axis=0)
-        x = self.inv_lam.dot(x)
+    def exp_x_kxkx(self, x, hyp=None):
+        alpha, sqrt_inv_lam = self._get_hyperparameters(hyp)
+        inv_lam = sqrt_inv_lam ** 2
+
+        inv_r = la.inv(2 * inv_lam + self.eye_d)
+        xi = sqrt_inv_lam.dot(x)
+        xi = 2 * np.log(alpha) - 0.5 * np.sum(xi * xi, axis=0)
+        x = inv_lam.dot(x)
         n = (xi[:, na] + xi[na, :]) + 0.5 * self._maha(x.T, -x.T, V=inv_r)
         return la.det(inv_r) ** 0.5 * np.exp(n)
 
@@ -156,6 +163,15 @@ class RBF(Kernel):
 
     def _get_default_hyperparameters(self, dim):
         return {'alpha': 1.0, 'el': 1.0 * np.ones(dim, )}
+
+    def _get_hyperparameters(self, hyp=None):
+        # if new hypers are given return them, if not return the initial hypers
+        if hyp is None:
+            # return alpha and sqrt_inv_lambda
+            return self.alpha, self.sqrt_inv_lam
+        else:
+            hyp = np.asarray(hyp)
+            return hyp[0], np.diag(hyp[1:] ** -1)
 
     def _maha(self, x, y, V=None):
         """
@@ -179,19 +195,19 @@ class Affine(Kernel):
     def eval(self, x1, x2=None, hyp=None, diag=False):
         pass
 
-    def exp_x_kx(self, x):
+    def exp_x_kx(self, x, hyp=None):
         pass
 
-    def exp_x_xkx(self, x):
+    def exp_x_xkx(self, x, hyp=None):
         pass
 
-    def exp_x_kxx(self):
+    def exp_x_kxx(self, hyp=None):
         pass
 
-    def exp_xy_kxy(self):
+    def exp_xy_kxy(self, hyp=None):
         pass
 
-    def exp_x_kxkx(self, x):
+    def exp_x_kxkx(self, x, hyp=None):
         pass
 
     def _get_default_hyperparameters(self, dim):

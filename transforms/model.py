@@ -43,7 +43,7 @@ class Model(object):
         raise NotImplementedError
 
     @abstractmethod
-    def exp_model_variance(self, fcn_obs):
+    def exp_model_variance(self, fcn_obs, hyp=None):
         # each model has to implement this using kernel expectations
         raise NotImplementedError
 
@@ -58,11 +58,14 @@ class Model(object):
         # regularizing terms: integral variance, expected model variance or both, prior on hypers
         pass
 
-    def optimize_hypers_max_ml(self, log_hyp0, fcn_obs, method='BFGS', jac=True, **kwargs):
+    def optimize_ml(self, log_hyp0, fcn_obs, method='BFGS', jac=True, **kwargs):
         # general routine minimizing negative marginal log-likelihood
         # additional kwargs are passed into the scipy.optimize.minimize solver
-        hypers_ml = minimize(self.neg_log_marginal_likelihood, log_hyp0, fcn_obs, method=method, jac=jac, **kwargs)
-        return hypers_ml
+        return minimize(self.neg_log_marginal_likelihood, log_hyp0, fcn_obs, method=method, jac=jac, **kwargs)
+
+    def optimize_ml_regularized(self, log_hyp0, fcn_obs, method='BFGS', jac=True, **kwargs):
+        # minimization of regularized negative marginal log-likelihood
+        return minimize(self.likelihood_regularized, log_hyp0, fcn_obs, method=method, jac=jac, **kwargs)
 
     def plot_model(self, test_data, fcn_obs, hyp=None, fcn_true=None, in_dim=0):
         # general plotting routine for all models defined in terms of model's predictive mean and variance
@@ -127,10 +130,10 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         var = np.squeeze(kxx - np.einsum('im,mn,mi->i', kx, iK, kx.T))
         return mean, var
 
-    def exp_model_variance(self, fcn_obs):
-        q_bar = self.kernel.exp_x_kxx()
-        Q = self.kernel.exp_x_kxkx(self.points)
-        iK = self.kernel.eval_inv_dot(self.points)
+    def exp_model_variance(self, fcn_obs, hyp=None):
+        q_bar = self.kernel.exp_x_kxx(hyp=hyp)
+        Q = self.kernel.exp_x_kxkx(self.points, hyp=hyp)
+        iK = self.kernel.eval_inv_dot(self.points, hyp=hyp)
         return q_bar - np.trace(Q.dot(iK))
 
     def neg_log_marginal_likelihood(self, log_hyp, fcn_obs):
@@ -156,7 +159,9 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         return nlml  # , dnlml_dtheta
 
     def likelihood_regularized(self, log_hyp, fcn_obs):
-        pass
+        nlml = self.neg_log_marginal_likelihood(log_hyp, fcn_obs)
+        exp_model_var = self.exp_model_variance(fcn_obs, hyp=np.exp(log_hyp))
+        return nlml + exp_model_var
 
 
 class StudentTProcess(Model):
@@ -177,7 +182,7 @@ class StudentTProcess(Model):
         scale = (nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (nu - 2 + self.n)
         return mean, scale * var
 
-    def exp_model_variance(self, fcn_obs):
+    def exp_model_variance(self, fcn_obs, hyp=None):
         fcn_obs = np.squeeze(fcn_obs)
         q_bar = self.kernel.exp_x_kxx()
         Q = self.kernel.exp_x_kxkx(self.points)
