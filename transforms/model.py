@@ -40,32 +40,61 @@ class Model(object):
     @abstractmethod
     def predict(self, test_data, fcn_obs, hyp=None):
         # model predictive mean and variance to be implemented by GP and TP classes
-        raise NotImplementedError
+        pass
 
     @abstractmethod
     def exp_model_variance(self, fcn_obs, hyp=None):
         # each model has to implement this using kernel expectations
-        raise NotImplementedError
+        pass
+
+    @abstractmethod
+    def integral_variance(self, fcn_obs, hyp=None):
+        pass
 
     @abstractmethod
     def neg_log_marginal_likelihood(self, log_hyp, fcn_obs):
         # model specific marginal likelihood, will serve as an objective function passed into the optimizer
-        raise NotImplementedError
-
-    @abstractmethod
-    def likelihood_regularized(self, log_hyp, fcn_obs):
-        # negative marginal log-likelihood w/ additional regularizing term
-        # regularizing terms: integral variance, expected model variance or both, prior on hypers
         pass
 
-    def optimize_ml(self, log_hyp0, fcn_obs, method='BFGS', jac=True, **kwargs):
-        # general routine minimizing negative marginal log-likelihood
-        # additional kwargs are passed into the scipy.optimize.minimize solver
-        return minimize(self.neg_log_marginal_likelihood, log_hyp0, fcn_obs, method=method, jac=jac, **kwargs)
+    def likelihood_reg_emv(self, log_hyp, fcn_obs):
+        # negative marginal log-likelihood w/ additional regularizing term
+        # regularizing terms: integral variance, expected model variance or both, prior on hypers
+        nlml, nlml_grad = self.neg_log_marginal_likelihood(log_hyp, fcn_obs)
+        # NOTE: not entirely sure regularization is usefull, because the regularized ML-II seems to give very similar
+        # results to ML-II; this regularizer tends to prefer longer lengthscales, which proves usefull when
+        reg = self.exp_model_variance(fcn_obs, hyp=np.exp(log_hyp))
+        return nlml + reg
 
-    def optimize_ml_regularized(self, log_hyp0, fcn_obs, method='BFGS', jac=True, **kwargs):
-        # minimization of regularized negative marginal log-likelihood
-        return minimize(self.likelihood_regularized, log_hyp0, fcn_obs, method=method, jac=jac, **kwargs)
+    def likelihood_reg_ivar(self, log_hyp, fcn_obs):
+        # negative marginal log-likelihood w/ additional regularizing term
+        # regularizing terms: integral variance, expected model variance or both, prior on hypers
+        nlml, nlml_grad = self.neg_log_marginal_likelihood(log_hyp, fcn_obs)
+        # NOTE:
+        reg = self.integral_variance(fcn_obs, hyp=np.exp(log_hyp))
+        return nlml + reg
+
+    def optimize(self, log_hyp0, fcn_obs, crit='NLML', method='BFGS', **kwargs):
+        # general routine minimizing chosen criterion w.r.t. hyper-parameters
+        # loghyp: 1d ndarray - logarithm of hyper-parameters
+        # crit determines which criterion to minimize:
+        # 'nlml' - negative marginal log-likelihood
+        # 'nlml+emv' - NLML with expected model variance as regularizer
+        # 'nlml+ivar' - NLML with integral variance as regularizer
+        # **kwargs - passed into the solver
+        # returns scipy.optimize.OptimizeResult dict
+        crit = crit.lower()
+        if crit == 'nlml':
+            obj_func = self.neg_log_marginal_likelihood
+            jac = True
+        elif crit == 'nlml+emv':
+            obj_func = self.likelihood_reg_emv
+            jac = False  # gradients not implemented for regularizers (solver uses approximations)
+        elif crit == 'nlml+ivar':
+            obj_func = self.likelihood_reg_ivar
+            jac = False  # gradients not implemented for regularizers (solver uses approximations)
+        else:
+            raise ValueError('Unknown criterion {}.'.format(crit))
+        return minimize(obj_func, log_hyp0, fcn_obs, method=method, jac=jac, **kwargs)
 
     def plot_model(self, test_data, fcn_obs, hyp=None, fcn_true=None, in_dim=0):
         # general plotting routine for all models defined in terms of model's predictive mean and variance
@@ -136,6 +165,12 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         iK = self.kernel.eval_inv_dot(self.points, hyp=hyp)
         return q_bar - np.trace(Q.dot(iK))
 
+    def integral_variance(self, fcn_obs, hyp=None):
+        kbar = self.kernel.exp_x_kxx(hyp)
+        q = self.kernel.exp_x_kx(self.points, hyp)
+        iK = self.kernel.eval_inv_dot(self.points, hyp=hyp)
+        return kbar - q.T.dot(iK).dot(q)
+
     def neg_log_marginal_likelihood(self, log_hyp, fcn_obs):
         # marginal log-likelihood of GP, uses log-hypers for optimization reasons
         # N - # points, E - # function outputs
@@ -151,17 +186,13 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         a_out_a = np.einsum('i...j, ...jn', a, a.T)  # (N, N) sum over of outer products of columns of A
         # negative marginal log-likelihood
         nlml = 0.5 * y_dot_a + np.sum(np.log(np.diag(L))) + 0.5 * self.n * np.log(2 * np.pi)
-        nlml = np.log(nlml)  # w/o this, unconstrained solver terminates w/ 'precision loss'
+        # nlml = np.log(nlml)  # w/o this, unconstrained solver terminates w/ 'precision loss'
+        # TODO: check the gradient with check_grad method
         # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
         dK_dTheta = self.kernel.der_hyp(self.points, hypers)  # (N, N, num_hyp)
         iK = la.solve(K, np.eye(self.n))
         dnlml_dtheta = 0.5 * np.trace((iK - a_out_a).dot(dK_dTheta))  # (num_hyp, )
-        return nlml  # , dnlml_dtheta
-
-    def likelihood_regularized(self, log_hyp, fcn_obs):
-        nlml = self.neg_log_marginal_likelihood(log_hyp, fcn_obs)
-        exp_model_var = self.exp_model_variance(fcn_obs, hyp=np.exp(log_hyp))
-        return nlml + exp_model_var
+        return nlml, dnlml_dtheta
 
 
 class StudentTProcess(Model):
@@ -171,7 +202,7 @@ class StudentTProcess(Model):
         assert nu > 2, 'Degrees of freedom (nu) must be > 2.'
         self.nu = nu
 
-    def predict(self, test_data, fcn_obs, hyp=None):
+    def predict(self, test_data, fcn_obs, hyp=None, nu=None):
         if nu is None:
             nu = self.nu
         iK = self.kernel.eval_inv_dot(self.points)
@@ -190,8 +221,38 @@ class StudentTProcess(Model):
         scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.n)
         return scale * (q_bar - np.trace(Q.dot(iK)))
 
-    def neg_log_marginal_likelihood(self, log_hyp, fcn_obs):
-        pass
+    def integral_variance(self, fcn_obs, hyp=None):
+        fcn_obs = np.squeeze(fcn_obs)
+        kbar = self.kernel.exp_x_kxx(hyp)
+        q = self.kernel.exp_x_kx(self.points, hyp)
+        iK = self.kernel.eval_inv_dot(self.points, hyp=hyp)
+        scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.n)
+        return scale * (kbar - q.T.dot(iK).dot(q))
 
-    def likelihood_regularized(self, log_hyp, fcn_obs):
-        pass
+    def neg_log_marginal_likelihood(self, log_hyp, fcn_obs):
+        # marginal log-likelihood of TP, uses log-hypers for optimization reasons
+        # N - # points, E - # function outputs
+        # fcn_obs (N, E), hypers (num_hyp, )
+
+        # convert from log-hypers to hypers
+        hypers = np.exp(log_hyp)
+
+        L = self.kernel.eval_chol(self.points, hyp=hypers)  # (N, N)
+        K = L.dot(L.T)  # jitter included from eval_chol
+        a = la.solve(K, fcn_obs)  # (N, E)
+        y_dot_a = np.einsum('ij, ji', fcn_obs.T, a)  # sum of diagonal of A.T.dot(A)
+        a_out_a = np.einsum('i...j, ...jn', a, a.T)  # (N, N) sum over of outer products of columns of A
+
+        # negative marginal log-likelihood
+        from scipy.special import gamma
+        half_logdet_K = np.sum(np.log(np.diag(L)))
+        const = 0.5 * self.n * np.log((self.nu - 2) * np.pi) + np.log(
+            gamma(0.5 * self.nu + self.n) / gamma(0.5 * self.nu))
+        nlml = 0.5 * (self.nu + self.n) * np.log(1 + y_dot_a) + half_logdet_K + const
+
+        # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
+        dK_dTheta = self.kernel.der_hyp(self.points, hypers)  # (N, N, num_hyp)
+        iK = la.solve(K, np.eye(self.n))
+        scale = (self.nu + self.n) / (self.nu + y_dot_a - 2)
+        dnlml_dtheta = 0.5 * np.trace((iK - scale * a_out_a).dot(dK_dTheta))  # (num_hyp, )
+        return nlml, dnlml_dtheta
