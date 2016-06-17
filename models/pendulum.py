@@ -13,7 +13,7 @@ class Pendulum(StateSpaceModel):
     r_additive = True
     g = 9.81  # gravitation constant
 
-    def __init__(self, x0_mean=np.array([1.5, 0]), x0_cov=0.1 * np.eye(2), r_cov=np.array([[0.32]]), dt=0.01):
+    def __init__(self, x0_mean=np.array([1.5, 0]), x0_cov=0.01 * np.eye(2), r_cov=np.array([[0.1]]), dt=0.01):
         self.dt = dt
         assert x0_mean.shape == (self.xD,) and x0_cov.shape == (self.xD, self.xD)
         assert r_cov.shape == (self.zD, self.zD)

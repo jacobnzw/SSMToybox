@@ -7,6 +7,9 @@ from transforms.model import GaussianProcess, StudentTProcess
 
 # fcn = lambda x: np.sin((x + 1) ** -1)
 fcn = lambda x: 0.5 * x + 25 * x / (1 + x ** 2)
+
+
+# fcn = lambda x: np.sin(x)
 # fcn = lambda x: 0.05*x ** 2
 # fcn = lambda x: x
 
@@ -50,7 +53,7 @@ class GPModelTest(TestCase):
     def test_hypers_optim(self):
         khyp = {'alpha': 1.0, 'el': 1.0 * np.ones(1)}
         model = GaussianProcess(1, points='gh', kern_hyp=khyp, point_hyp={'degree': 15})
-        xtest = np.linspace(-5, 5, 100)[na, :]
+        xtest = np.linspace(-7, 7, 100)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
         # plot before optimization
@@ -102,6 +105,40 @@ class GPModelTest(TestCase):
         # ax.set_ylabel('el')
         # plt.show()
 
+    def test_hypers_optim_multioutput(self):
+        dim = 5
+        from models.tracking import ReentryRadar
+        ssm = ReentryRadar()
+        func = ssm.meas_eval
+        khyp = {'alpha': 1.0, 'el': 1.0 * np.ones(dim)}
+        model = GaussianProcess(dim, points='sr', kern_hyp=khyp)  # , point_hyp={'degree': 10})
+        x = ssm.get_pars('x0_mean')[0][:, na] + model.points  # ssm.get_pars('x0_cov')[0].dot(model.points)
+        y = np.apply_along_axis(func, 0, x, None)  # (d_out, n**2)
+
+        lhyp0 = np.log([1.0] + [1000] * dim)
+        b = ((np.log(1.0), np.log(1.0)),) + ((None, None),) * dim
+
+        def con_alpha(lhyp):
+            # constrain alpha**2 = 1
+            return np.exp(lhyp[0]) ** 2 - 1 ** 2
+
+        con = {'type': 'eq', 'fun': con_alpha}
+        res_ml2 = model.optimize(lhyp0, y.T, crit='nlml', method='L-BFGS-B', bounds=b)
+        res_ml2_emv = model.optimize(lhyp0, y.T, crit='nlml+emv', method='L-BFGS-B', bounds=b)
+        res_ml2_ivar = model.optimize(lhyp0, y.T, crit='nlml+ivar', method='L-BFGS-B', bounds=b)
+        hyp_ml2 = np.exp(res_ml2.x)
+        hyp_ml2_emv = np.exp(res_ml2_emv.x)
+        hyp_ml2_ivar = np.exp(res_ml2_ivar.x)
+
+        print res_ml2
+        print res_ml2_emv
+        print res_ml2_ivar
+        np.set_printoptions(precision=4)
+        print 'ML-II({:.4f}) @ alpha: {:.4f}, el: {}'.format(res_ml2.fun, hyp_ml2[0], hyp_ml2[1:])
+        print 'ML-II-EMV({:.4f}) @ alpha: {:.4f}, el: {}'.format(res_ml2_emv.fun, hyp_ml2_emv[0], hyp_ml2_emv[1:])
+        print 'ML-II-IVAR({:.4f}) @ alpha: {:.4f}, el: {}'.format(res_ml2_ivar.fun, hyp_ml2_ivar[0],
+                                                                  hyp_ml2_ivar[1:])
+
 
 class TPModelTest(TestCase):
     def test_init(self):
@@ -134,7 +171,7 @@ class TPModelTest(TestCase):
     def test_hypers_optim(self):
         khyp = {'alpha': 1.0, 'el': 1.0 * np.ones(1)}
         model = StudentTProcess(1, points='gh', kern_hyp=khyp, point_hyp={'degree': 15})
-        xtest = np.linspace(-5, 5, 50)[na, :]
+        xtest = np.linspace(-7, 7, 100)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
         # plot before optimization

@@ -117,7 +117,7 @@ class RBF(Kernel):
         # hyp (D+1,) array_like
         alpha, sqrt_inv_lam = self._get_hyperparameters(hyp)
         inv_lam = sqrt_inv_lam ** 2
-        lam = inv_lam ** -1
+        lam = np.diag(inv_lam.diagonal() ** -1)
 
         c = alpha ** 2 * (la.det(inv_lam + self.eye_d)) ** -0.5
         xl = la.inv(lam + self.eye_d).dot(x)
@@ -125,7 +125,7 @@ class RBF(Kernel):
 
     def exp_x_xkx(self, x, hyp=None):
         alpha, sqrt_inv_lam = self._get_hyperparameters(hyp)
-        lam = sqrt_inv_lam ** -2
+        lam = np.diag(sqrt_inv_lam.diagonal() ** -2)
 
         mu_q = la.inv(lam + self.eye_d).dot(x)
         q = self.exp_x_kx(x, hyp)
