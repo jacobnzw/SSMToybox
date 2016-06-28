@@ -1,4 +1,4 @@
-from transforms.quad import SphericalRadial, SphericalRadialTrunc, MonteCarlo
+from transforms.quad import *
 import numpy as np
 import numpy.linalg as la
 from numpy import newaxis as na
@@ -21,8 +21,10 @@ def polar2cartesian(x, pars, dx=False):
     return x[0] * np.array([np.cos(x[1]), np.sin(x[1])])
 
 
-def spherical_radial_demo():
-    dim = [2, 5, 10, 15]
+def mt_trunc_demo(mt_trunc, mt, dim=None, **kwargs):
+    assert issubclass(mt_trunc, MomentTransform) and issubclass(mt, MomentTransform)
+    # state dimensions and effective dimension
+    dim = [2, 3, 4, 5] if dim is None else dim
     d_eff = 2
     # compare truncated SR and SR on cartesian2polar transform for increasing state dimensions
     # truncated SR is aware of the effective dimension, so we expect it to be closer to the true covariance
@@ -40,8 +42,8 @@ def spherical_radial_demo():
     C = np.zeros((2, 2, len(dim), 2))
     X = np.zeros((2, 50, len(dim), 2))
     for i, d in enumerate(dim):
-        t = SphericalRadialTrunc(d, d_eff)
-        s = SphericalRadial(d)
+        t = mt_trunc(d, d_eff, **kwargs)
+        s = mt(d, **kwargs)
         # input mean ana covariance
         mean, cov = np.zeros(d), np.eye(d)
         mean[:d_eff], cov[:d_eff, :d_eff] = mean_eff, cov_eff
@@ -59,13 +61,14 @@ def spherical_radial_demo():
     # SR and SR-T mean and covariance for various state dimensions
     for i, d in enumerate(dim):
         plt.plot(M[0, i, 0], M[1, i, 0], 'b+', markersize=10, lw=2)
-        plt.plot(X[0, :, i, 0], X[1, :, i, 0], color='b', label='SR-T (d={})'.format(d))
+        plt.plot(X[0, :, i, 0], X[1, :, i, 0], color='b', label='mt-trunc (d={})'.format(d))
+    for i, d in enumerate(dim):
         plt.plot(M[0, i, 0], M[1, i, 0], 'go', markersize=6)
-        plt.plot(X[0, :, i, 1], X[1, :, i, 1], color='g', label='SR (d={})'.format(d))
+        plt.plot(X[0, :, i, 1], X[1, :, i, 1], color='g', label='mt (d={})'.format(d))
     plt.axes().set_aspect('equal')
     plt.legend()
     plt.show()
 
 
 if __name__ == '__main__':
-    spherical_radial_demo()
+    mt_trunc_demo(UnscentedTrunc, Unscented, [2, 5, 10, 15], kappa=0)

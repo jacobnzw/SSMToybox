@@ -108,6 +108,18 @@ class Unscented(SigmaPointTransform):
         return wm, wc
 
 
+class UnscentedTrunc(SigmaPointTruncTransform):
+    def __init__(self, dim, dim_eff, kappa=None, alpha=1.0, beta=2.0):
+        self.dim, self.dim_eff = dim, dim_eff
+        # weights & points for transformed mean and covariance
+        self.wm, wc = Unscented.weights(dim_eff, kappa, alpha, beta)
+        self.Wc = np.diag(wc)
+        self.unit_sp_eff = Unscented.unit_sigma_points(dim_eff, kappa, alpha)
+        # weights & points for input-output covariance
+        self.Wcc = np.diag(Unscented.weights(dim, kappa, alpha, beta)[1])
+        self.unit_sp = Unscented.unit_sigma_points(dim, kappa, alpha)
+
+
 class GaussHermite(SigmaPointTransform):
     def __init__(self, dim, degree=3):
         self.degree = degree
@@ -129,3 +141,15 @@ class GaussHermite(SigmaPointTransform):
         x, w = hermegauss(degree)
         # nD sigma-points by cartesian product
         return cartesian([x] * dim).T  # column/sigma-point
+
+
+class GaussHermiteTrunc(SigmaPointTruncTransform):
+    def __init__(self, dim, dim_eff, degree=3):
+        self.dim, self.dim_eff = dim, dim_eff
+        # weights & points for transformed mean and covariance
+        self.wm = GaussHermite.weights(dim_eff, degree)
+        self.Wc = np.diag(self.wm)
+        self.unit_sp_eff = GaussHermite.unit_sigma_points(dim_eff, degree)
+        # weights & points for input-output covariance
+        self.Wcc = np.diag(GaussHermite.weights(dim, degree))
+        self.unit_sp = GaussHermite.unit_sigma_points(dim, degree)
