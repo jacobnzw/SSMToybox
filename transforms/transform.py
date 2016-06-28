@@ -41,3 +41,32 @@ class SigmaPointTransform(MomentTransform):
         # input-output covariance
         cov_fx = dfx.dot(self.Wc).dot((x - mean).T)
         return mean_f, cov_f, cov_fx
+
+
+class SigmaPointTruncTransform(SigmaPointTransform):
+    # sigma-point transform respecting effective input dimensionality
+
+    def apply(self, f, mean, cov, pars):
+        mean = mean[:, na]
+
+        # consider only effective dimension
+        mean_eff = mean[:self.dim_eff]
+        cov_eff = cov[:self.dim_eff, :self.dim_eff]
+
+        # form sigma-points from unit sigma-points
+        x_eff = mean_eff + cholesky(cov_eff).dot(self.unit_sp_eff)
+        x = mean + cholesky(cov).dot(self.unit_sp)
+
+        # push sigma-points through non-linearity
+        fx_eff = np.apply_along_axis(f, 0, x_eff, pars)
+        fx = np.apply_along_axis(f, 0, x, pars)
+
+        # output mean
+        mean_f = fx_eff.dot(self.wm)
+        # output covariance
+        dfx_eff = fx_eff - mean_f[:, na]
+        dfx = fx - mean_f[:, na]
+        cov_f = dfx_eff.dot(self.Wc).dot(dfx_eff.T)
+        # input-output covariance
+        cov_fx = dfx.dot(self.Wcc).dot((x - mean).T)
+        return mean_f, cov_f, cov_fx

@@ -5,7 +5,7 @@ from numpy.polynomial.hermite_e import hermegauss, hermeval
 from scipy.special import factorial
 from sklearn.utils.extmath import cartesian
 
-from transform import MomentTransform, SigmaPointTransform
+from transform import MomentTransform, SigmaPointTransform, SigmaPointTruncTransform
 
 
 # TODO: add higher-order fully symmetric rules from [McNamee, Stenger]
@@ -65,6 +65,18 @@ class SphericalRadial(SigmaPointTransform):
         return np.hstack((c * np.eye(dim), -c * np.eye(dim)))
 
 
+class SphericalRadialTrunc(SigmaPointTruncTransform):
+    def __init__(self, dim, dim_eff):
+        self.dim, self.dim_eff = dim, dim_eff
+        # weights & points for transformed mean and covariance
+        self.wm = SphericalRadial.weights(dim_eff)
+        self.Wc = np.diag(self.wm)
+        self.unit_sp_eff = SphericalRadial.unit_sigma_points(dim_eff)
+        # weights & points for input-output covariance
+        self.Wcc = np.diag(SphericalRadial.weights(dim))
+        self.unit_sp = SphericalRadial.unit_sigma_points(dim)
+
+
 class Unscented(SigmaPointTransform):
     """
     General purpose class implementing Uscented transform.
@@ -72,7 +84,7 @@ class Unscented(SigmaPointTransform):
 
     def __init__(self, dim, kappa=None, alpha=1.0, beta=2.0):
         # UT weights
-        self.wm, self.wc = self.weights(dim, kappa=kappa, alpha=alpha, beta=alpha)
+        self.wm, self.wc = self.weights(dim, kappa=kappa, alpha=alpha, beta=beta)
         self.Wm = np.diag(self.wm)
         self.Wc = np.diag(self.wc)
         # UT unit sigma-points

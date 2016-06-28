@@ -5,7 +5,7 @@ import scipy as sp
 import numpy as np
 import numpy.linalg as la
 from numpy import newaxis as na
-from transforms.quad import MonteCarlo
+from transforms.quad import MonteCarlo, SphericalRadialTrunc
 from models.ungm import UNGM
 
 
@@ -19,6 +19,19 @@ def sum_of_squares(x, pars, dx=False):
         return np.atleast_1d(x.T.dot(x))
     else:
         return np.atleast_1d(2 * x)
+
+
+def cartesian2polar(x, pars, dx=False):
+    return np.array([np.sqrt(x[0] ** 2 + x[1] ** 2), np.arctan2(x[1], x[0])])
+
+
+class SigmaPointTruncTest(TestCase):
+    def test_apply(self):
+        d, d_eff = 5, 2
+        t = SphericalRadialTrunc(d, d_eff)
+        f = cartesian2polar
+        mean, cov = np.zeros(d), np.eye(d)
+        t.apply(f, mean, cov, None)
 
 
 class MonteCarloTest(TestCase):

@@ -6,7 +6,7 @@ from scipy.linalg import cho_factor, cho_solve
 from numpy.linalg import cholesky
 from inference import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GPQuadKalman
 from transforms import SphericalRadial, Unscented, GaussHermite, GPQuad
-from models.ungm import UNGM
+from ungm import UNGM
 import matplotlib.pyplot as plt
 import time
 
