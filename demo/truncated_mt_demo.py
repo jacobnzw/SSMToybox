@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 
 def ellipse_points(x0, P):
-    # x0 center, SPD matrix
+    # x0 center, P SPD matrix
     w, v = la.eig(P)
     theta = np.linspace(0, 2 * np.pi)
     t = np.asarray((np.cos(theta), np.sin(theta)))
@@ -22,12 +22,13 @@ def polar2cartesian(x, pars, dx=False):
 
 
 def mt_trunc_demo(mt_trunc, mt, dim=None, **kwargs):
+    # compare truncated MT and MT on polar2cartesian transform for increasing state dimensions
+    # truncated MT is aware of the effective dimension, so we expect it to be closer to the true covariance
     assert issubclass(mt_trunc, MomentTransform) and issubclass(mt, MomentTransform)
     # state dimensions and effective dimension
     dim = [2, 3, 4, 5] if dim is None else dim
     d_eff = 2
-    # compare truncated SR and SR on cartesian2polar transform for increasing state dimensions
-    # truncated SR is aware of the effective dimension, so we expect it to be closer to the true covariance
+    # observation model
     f = polar2cartesian
     # use MC transform with lots of samples to compute the true transformed moments
     mean_eff, cov_eff = np.array([1, np.pi / 2]), np.diag([0.05 ** 2, (np.pi / 10) ** 2])

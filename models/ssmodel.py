@@ -183,7 +183,7 @@ class StateSpaceModel(object):
             Evaluated measurement model or evaluated Jacobian of the measurement model.
         """
         if self.r_additive:
-            assert len(xr) == self.xD
+            # assert len(xr) == self.xD
             if dx:
                 out = (self.meas_fcn_dx(xr, self.zero_r, pars).T.flatten())
             else:
