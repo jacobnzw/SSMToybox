@@ -1,4 +1,4 @@
-from transforms.transform import MomentTransform
+from transforms.mtform import MomentTransform
 import numpy as np
 import numpy.linalg as la
 

@@ -4,7 +4,7 @@ import numpy as np
 from numpy import newaxis as na
 from numpy.linalg import cholesky
 
-from transform import MomentTransform
+from mtform import MomentTransform
 
 
 class BQTransform(MomentTransform):
@@ -30,7 +30,7 @@ class BQTransform(MomentTransform):
 
     @staticmethod
     def _get_model(dim, model, kernel, points, hypers, point_pars, **kwargs):
-        from model import GaussianProcess, StudentTProcess  # import must be after SigmaPointTransform
+        from bqmodel import GaussianProcess, StudentTProcess  # import must be after SigmaPointTransform
         model = model.lower()
         # make sure kernel is supported
         if model not in BQTransform._supported_models_:

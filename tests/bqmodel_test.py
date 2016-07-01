@@ -3,7 +3,7 @@ from unittest import TestCase
 import numpy as np
 import matplotlib.pyplot as plt
 from numpy import newaxis as na
-from transforms.model import GaussianProcess, StudentTProcess
+from transforms.bqmodel import GaussianProcess, StudentTProcess
 
 # fcn = lambda x: np.sin((x + 1) ** -1)
 fcn = lambda x: 0.5 * x + 25 * x / (1 + x ** 2)

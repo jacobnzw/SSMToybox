@@ -2,7 +2,7 @@ import numpy as np
 from scipy.linalg import cho_factor, cho_solve, block_diag
 
 from models.ssmodel import StateSpaceModel
-from transforms.transform import MomentTransform
+from transforms.mtform import MomentTransform
 
 
 class StateSpaceInference(object):
