@@ -45,6 +45,9 @@ class SigmaPointTransform(MomentTransform):
 
 class SigmaPointTruncTransform(SigmaPointTransform):
     # sigma-point transform respecting effective input dimensionality
+    # TODO: cross-covariance can still be computed with the lower-dimensional rule if lowdim points are extended with
+    # zeros to match the state dimension, amounts to updating only the observed state dimensions
+    # TODO: test again
 
     def apply(self, f, mean, cov, pars):
         mean = mean[:, na]
@@ -68,5 +71,5 @@ class SigmaPointTruncTransform(SigmaPointTransform):
         dfx = fx - mean_f[:, na]
         cov_f = dfx_eff.dot(self.Wc).dot(dfx_eff.T)
         # input-output covariance
-        cov_fx = dfx.dot(self.Wcc).dot((x - mean).T)
+        cov_fx = dfx_eff.dot(self.Wcc).dot((x - mean).T)
         return mean_f, cov_f, cov_fx

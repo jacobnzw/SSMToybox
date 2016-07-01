@@ -4,8 +4,9 @@ from numpy import newaxis as na
 # TODO: The class should recognize input dimensions of dynamics and observation models separately
 # This is because observation models do not always use all the state dimensions, e.g. radar only uses position
 # to produce range and bearing measurements, the remaining states (velocity, ...) remain unused. Therefore the moment
-#  transform for the observation model should have different dimension. I think this approach should be followed by
-# all the sigma-point transforms.
+# transform for the observation model should have different dimension. I think this approach should be followed by
+# all the sigma-point transforms. The question is how to compute I/O covariance? Perhaps using the lower-dimensional
+# rule with sigma-points extended with zeros to match the state dimension.
 
 
 class StateSpaceModel(object):
