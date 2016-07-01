@@ -232,8 +232,8 @@ class System(object):
                                                    np.abs(jac_hx - self.meas_eval(xr, par, dx=True)))
 
     def simulate_trajectory(self, dt=0.1, duration=10, mc_sims=1):
+        # should call Euler integration and other methods
         assert dt < duration
-        self.dt = dt
         x0_mean, x0_cov, q_mean, q_cov, r_mean, r_cov = self.get_pars(
             'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov'
         )
@@ -247,7 +247,9 @@ class System(object):
         for imc in xrange(mc_sims):
             for k in xrange(1, steps):
                 theta = self.par_fcn(k - 1)
-                x[:, k, imc] = self.dyn_fcn(x[:, k - 1, imc], q[:, k - 1, imc], theta)
+                xdot = self.dyn_fcn(x[:, k - 1, imc], q[:, k - 1, imc], theta)
+                # Euler ODE integration
+                x[:, k, imc] = x[:, k - 1, imc] + dt * xdot
                 # z[:, k, imc] = self.meas_fcn(x[:, k, imc], r[:, k, imc], theta)
         return x
 
@@ -310,10 +312,9 @@ class ReentryRadar(System):
             'x0_mean': np.array([6500.4, 349.14, -1.8093, -6.7967, 0.6932]),  # m, m/s, m m/s, rad/s
             'x0_cov': np.diag([1e-6, 1e-6, 1e-6, 1e-6, 0]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
             'q_mean': np.zeros(self.qD),
-            'q_cov': np.array(
-                [[2.4064e-5, 0, 0],
-                 [0, 2.4064e-5, 0],
-                 [0, 0, 1e-6]]),
+            'q_cov': np.array([[2.4064e-4, 0, 0],
+                               [0, 2.4064e-4, 0],
+                               [0, 0, 0]]),
             'r_mean': np.zeros(self.rD),
             'r_cov': np.array([[1e-6, 0],
                                [0, 0.17e-3 ** 2]]),
@@ -332,13 +333,11 @@ class ReentryRadar(System):
         D = b * np.exp((self.R0 - R) / self.H0) * V
         # gravity force
         G = -self.Gm0 / R ** 3
-        x = x + self.dt * np.array([x[2],
-                                    x[3],
-                                    D * x[2] + G * x[0],
-                                    D * x[3] + G * x[1],
-                                    0])
-        x[-3:] += q
-        return x
+        return np.array([x[2],
+                         x[3],
+                         D * x[2] + G * x[0] + q[0],
+                         D * x[3] + G * x[1] + q[1],
+                         q[2]])
 
     def meas_fcn(self, x, r, pars):
         # range
@@ -361,7 +360,7 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 
 sys = ReentryRadar()
-mc = 100
+mc = 10
 x = sys.simulate_trajectory(dt=0.1, duration=200, mc_sims=mc)
 plt.figure()
 g = GridSpec(2, 4)
