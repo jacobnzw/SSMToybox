@@ -231,27 +231,56 @@ class System(object):
         print "Errors in Jacobians\n{}\n{}".format(np.abs(jac_fx - self.dyn_eval(xq, par, dx=True)),
                                                    np.abs(jac_hx - self.meas_eval(xr, par, dx=True)))
 
-    def simulate_trajectory(self, dt=0.1, duration=10, mc_sims=1):
-        # should call Euler integration and other methods
+    def simulate_trajectory(self, method='euler', dt=0.1, duration=10, mc_sims=1):
+        # endure sensible values of dt
         assert dt < duration
+
+        # get the system statistics
         x0_mean, x0_cov, q_mean, q_cov, r_mean, r_cov = self.get_pars(
             'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov'
         )
+
+        # get ODE integration method
+        ode_method = self._get_ode_method(method)
+
+        # allocate space for system state and noise
         steps = int(np.floor(duration / dt))
         x = np.zeros((self.xD, steps, mc_sims))
-        # z = np.zeros((self.zD, steps, mc_sims))
         q = np.random.multivariate_normal(q_mean, q_cov, size=(mc_sims, steps)).T
-        # r = np.random.multivariate_normal(r_mean, r_cov, size=(mc_sims, steps)).T
         x0 = np.random.multivariate_normal(x0_mean, x0_cov, size=mc_sims).T  # (D, mc_sims)
         x[:, 0, :] = x0  # store initial states at k=0
+
+        # continuous-time system simulation
         for imc in xrange(mc_sims):
             for k in xrange(1, steps):
                 theta = self.par_fcn(k - 1)
-                xdot = self.dyn_fcn(x[:, k - 1, imc], q[:, k - 1, imc], theta)
-                # Euler ODE integration
-                x[:, k, imc] = x[:, k - 1, imc] + dt * xdot
-                # z[:, k, imc] = self.meas_fcn(x[:, k, imc], r[:, k, imc], theta)
+                # computes next state x(t + dt) by ODE integration
+                x[:, k, imc] = ode_method(self.dyn_fcn, x[:, k - 1, imc], q[:, k - 1, imc], theta, dt)
         return x
+
+    def _ode_euler(self, func, x, q, theta, dt):
+        # Euler ODE integration
+        # x-state, q-noise, dt-time increment, func-function handle
+        xdot = func(x, q, theta)
+        return x + dt * xdot
+
+    def _ode_rk4(self, func, x, q, theta, dt):
+        # 4-th order Runge-Kutta ODE integration
+        dt2 = 0.5 * dt
+        k1 = func(x, q, theta)
+        k2 = func(x + dt2 * k1, q, theta)
+        k3 = func(x + dt2 * k2, q, theta)
+        k4 = func(x + dt * k3, q, theta)
+        return x + (dt / 6) * (k1 + 2 * (k2 + k3) + k4)
+
+    def _get_ode_method(self, method):
+        method = method.lower()
+        if method == 'euler':
+            return self._ode_euler
+        elif method == 'rk4':
+            return self._ode_rk4
+        else:
+            raise ValueError("Unknown ODE integration method {}".format(method))
 
     def set_pars(self, key, value):
         self.pars[key] = value
@@ -361,7 +390,7 @@ from matplotlib.gridspec import GridSpec
 
 sys = ReentryRadar()
 mc = 10
-x = sys.simulate_trajectory(dt=0.1, duration=200, mc_sims=mc)
+x = sys.simulate_trajectory(method='rk4', dt=0.05, duration=200, mc_sims=mc)
 plt.figure()
 g = GridSpec(2, 4)
 plt.subplot(g[:, :2])
