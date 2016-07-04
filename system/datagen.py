@@ -1,4 +1,4 @@
-from abc import ABCMeta
+from abc import ABCMeta, abstractmethod
 
 import numpy as np
 from numpy import newaxis as na
@@ -24,6 +24,7 @@ class System(object):
         # TODO: if q_factor not given, use identity matrix
         # TODO: if _mean not given, assume zero-mean
 
+    @abstractmethod
     def dyn_fcn(self, x, q, pars):
         """ System dynamics.
 
@@ -43,8 +44,9 @@ class System(object):
         1-D numpy.ndarray of shape (self.xD,)
             system state in the next time step
         """
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def meas_fcn(self, x, r, pars):
         """Measurement model.
 
@@ -64,8 +66,9 @@ class System(object):
         1-D numpy.ndarray of shape (self.zD,)
             measurement of the state
         """
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def par_fcn(self, time):
         """Parameter function of the system dynamics and measurement model.
 
@@ -83,8 +86,9 @@ class System(object):
         1-D numpy.ndarray of shape (self.pD,)
             Vector of parameters at a given time.
         """
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def dyn_fcn_dx(self, x, q, pars):
         """Jacobian of the system dynamics.
 
@@ -107,8 +111,9 @@ class System(object):
                 * additive: (self.xD, self.xD)
                 * non-additive: (self.xD, self.xD + self.qD)
         """
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def meas_fcn_dx(self, x, r, pars):
         """Jacobian of the measurement model.
 
@@ -131,7 +136,7 @@ class System(object):
                 * additive: (self.xD, self.xD)
                 * non-additive: (self.xD, self.xD + self.rD)
         """
-        raise NotImplementedError
+        pass
 
     def dyn_eval(self, xq, pars, dx=False):
         """Evaluation of the system dynamics according to noise additivity.
@@ -232,13 +237,12 @@ class System(object):
                                                    np.abs(jac_hx - self.meas_eval(xr, par, dx=True)))
 
     def simulate_trajectory(self, method='euler', dt=0.1, duration=10, mc_sims=1):
-        # endure sensible values of dt
+        # ensure sensible values of dt
         assert dt < duration
 
         # get the system statistics
-        x0_mean, x0_cov, q_mean, q_cov, r_mean, r_cov = self.get_pars(
-            'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov'
-        )
+        stats = 'x0_mean', 'x0_cov', 'q_mean', 'q_cov'
+        x0_mean, x0_cov, q_mean, q_cov = self.get_pars(*stats)
 
         # get ODE integration method
         ode_method = self._get_ode_method(method)
