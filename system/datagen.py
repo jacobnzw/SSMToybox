@@ -262,6 +262,11 @@ class System(object):
                 x[:, k, imc] = ode_method(self.dyn_fcn, x[:, k - 1, imc], q[:, k - 1, imc], theta, dt)
         return x
 
+    def simulate_measurements(self, x, freq=10, mc_per_step=1):
+        # x-state trajectory, freq-sampling frequency [Hz],
+        # mc_per_step-how many measurement to generate in each time step
+        pass
+
     def _ode_euler(self, func, x, q, theta, dt):
         # Euler ODE integration
         # x-state, q-noise, dt-time increment, func-function handle
