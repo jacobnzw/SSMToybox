@@ -119,3 +119,97 @@ class StateSpaceInference(object):
         self.x_mean_smooth = self.x_mean_filt + gain.dot(self.x_mean_smooth - self.x_mean_pred)
         self.x_cov_smooth = self.x_cov_filt + gain.dot(self.x_cov_smooth - self.x_cov_pred).dot(gain.T)
 
+
+class MarginalInference(StateSpaceInference):
+
+    def _time_update(self, time):
+        # in non-additive case, augment mean and covariance
+        mean = self.x_mean_filt if self.sys.q_additive else np.hstack((self.x_mean_filt, self.q_mean))
+        cov = self.x_cov_filt if self.sys.q_additive else block_diag(self.x_cov_filt, self.q_cov)
+        assert mean.ndim == 1 and cov.ndim == 2
+
+        # apply moment transform to compute predicted state mean, covariance
+        self.x_mean_pred, self.x_cov_pred, self.xx_cov = self.transf_dyn.apply(self.sys.dyn_eval, mean, cov,
+                                                                               self.sys.par_fcn(time))
+        if self.sys.q_additive:
+            self.x_cov_pred += self.G.dot(self.q_cov).dot(self.G.T)
+
+        # in non-additive case, augment mean and covariance
+        mean = self.x_mean_pred if self.sys.r_additive else np.hstack((self.x_mean_pred, self.r_mean))
+        cov = self.x_cov_pred if self.sys.r_additive else block_diag(self.x_cov_pred, self.r_cov)
+        assert mean.ndim == 1 and cov.ndim == 2
+
+        # apply moment transform to compute measurement mean, covariance
+        self.z_mean_pred, self.z_cov_pred, self.xz_cov = self.transf_meas.apply(self.sys.meas_eval, mean, cov,
+                                                                                self.sys.par_fcn(time))
+        # in additive case, noise covariances need to be added
+        if self.sys.r_additive:
+            self.z_cov_pred += self.r_cov
+
+        # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)
+        self.xz_cov = self.xz_cov[:, :self.sys.xD]
+        self.xx_cov = self.xx_cov[:, :self.sys.xD]
+
+    def _measurement_update(self, y):
+        """
+        Computes the posterior state mean and covariance by marginalizing out the GPQ-parameters.
+
+        Procedure has two steps:
+          1. Compute Laplace approximation of the GPQ parameter posterior
+          2. Use fully-symmetric quadrature rule to compute posterior state mean and covariance by marginalizing
+             out the GPQ-parameters over the approximated posterior.
+
+        Parameters
+        ----------
+        y: ndarray
+          Measurement at a given time step
+
+        Returns
+        -------
+
+        """
+
+        # Laplace approximation:
+        #   Input:
+        #       - function handle for J(theta) = log l(theta) + log q(theta | y_1:k-1)
+        #         where l(theta) = p(y_k | theta) = N(y_k | m_k^y(theta), P_k^y(theta))
+        #   Output:
+        #       - mean and covariance of parameter posterior q(theta | y_1:k)
+
+        # Marginalization of GPQ-parameters
+        #   Input:
+        #       - moments of q(theta | y_1:k)
+        #       - function for evaluating posterior mean and covariance at theta
+
+        gain = cho_solve(cho_factor(self.z_cov_pred), self.xz_cov).T
+        self.x_mean_filt = self.x_mean_pred + gain.dot(y - self.z_mean_pred)
+        self.x_cov_filt = self.x_cov_pred - gain.dot(self.z_cov_pred).dot(gain.T)
+
+    def _smoothing_update(self):
+        gain = cho_solve(cho_factor(self.x_cov_pred), self.xx_cov).T
+        self.x_mean_smooth = self.x_mean_filt + gain.dot(self.x_mean_smooth - self.x_mean_pred)
+        self.x_cov_smooth = self.x_cov_filt + gain.dot(self.x_cov_smooth - self.x_cov_pred).dot(gain.T)
+
+    def _likelihood_penalized(self, theta, y, k):
+        """
+        l(theta) = p(y_k | theta) = N(y_k | m_k^y(theta), P_k^y(theta))
+
+        Parameters
+        ----------
+        theta: ndarray
+            Vector of parameters
+        y: ndarray
+            Measurement y_k
+        k: ndarray
+            time (for time varying dynamics)
+
+        Returns
+        -------
+            Value of penalized likelihood for given vector of parameters.
+        """
+
+        # TODO: compute mean and covariance to evaluate N(y_k | m_k^y(theta), P_k^y(theta))
+
+    def _parameter_posterior_moments(self):
+        # Laplace approximation of p(theta | y_k)
+        pass

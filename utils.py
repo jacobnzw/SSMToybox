@@ -73,6 +73,7 @@ def nll(x, m, P):
 
 
 def bootstrap_var(data, samples=1000):
+    # Estimates variance of a given data sample by bootstrapping
     # data (1, mc_sims)
     data = data.squeeze()
     mc_sims = data.shape[0]
