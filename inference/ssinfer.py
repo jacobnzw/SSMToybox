@@ -6,16 +6,16 @@ from transforms.mtform import MomentTransform
 
 
 class StateSpaceInference(object):
-    def __init__(self, sys, transf_dyn, transf_meas):  # REFACTOR: reorder arguments: sys, t_dyn, t_obs
+    def __init__(self, ssm, transf_dyn, transf_meas):
         # separate moment transforms for system dynamics and measurement model
         assert isinstance(transf_dyn, MomentTransform) and isinstance(transf_meas, MomentTransform)
         self.transf_dyn = transf_dyn
         self.transf_meas = transf_meas
         # dynamical system whose state is to be estimated
-        assert isinstance(sys, StateSpaceModel)
-        self.sys = sys
+        assert isinstance(ssm, StateSpaceModel)
+        self.ssm = ssm
         # set initial condition mean and covariance, and noise covariances
-        self.x_mean_filt, self.x_cov_filt, self.q_mean, self.q_cov, self.r_mean, self.r_cov, self.G = sys.get_pars(
+        self.x_mean_filt, self.x_cov_filt, self.q_mean, self.q_cov, self.r_mean, self.r_cov, self.G = ssm.get_pars(
             'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov', 'q_factor'
         )
         self.flags = {'filtered': False, 'smoothed': False}
@@ -35,8 +35,8 @@ class StateSpaceInference(object):
 
     def forward_pass(self, data):
         self.D, self.N = data.shape
-        self.fi_mean = np.zeros((self.sys.xD, self.N))
-        self.fi_cov = np.zeros((self.sys.xD, self.sys.xD, self.N))
+        self.fi_mean = np.zeros((self.ssm.xD, self.N))
+        self.fi_cov = np.zeros((self.ssm.xD, self.ssm.xD, self.N))
         self.fi_mean[:, 0], self.fi_cov[..., 0] = self.x_mean_filt, self.x_cov_filt
         self.pr_mean = self.fi_mean.copy()
         self.pr_cov = self.fi_cov.copy()
@@ -71,7 +71,7 @@ class StateSpaceInference(object):
         return self.sm_mean, self.sm_cov
 
     def reset(self):
-        self.x_mean_filt, self.x_cov_filt = self.sys.get_pars('x0_mean', 'x0_cov')
+        self.x_mean_filt, self.x_cov_filt = self.ssm.get_pars('x0_mean', 'x0_cov')
         self.flags = {'filtered': False, 'smoothed': False}
         self.x_mean_pred, self.x_cov_pred, = None, None
         self.x_mean_smooth, self.x_cov_smooth = None, None
@@ -83,31 +83,31 @@ class StateSpaceInference(object):
 
     def _time_update(self, time):
         # in non-additive case, augment mean and covariance
-        mean = self.x_mean_filt if self.sys.q_additive else np.hstack((self.x_mean_filt, self.q_mean))
-        cov = self.x_cov_filt if self.sys.q_additive else block_diag(self.x_cov_filt, self.q_cov)
+        mean = self.x_mean_filt if self.ssm.q_additive else np.hstack((self.x_mean_filt, self.q_mean))
+        cov = self.x_cov_filt if self.ssm.q_additive else block_diag(self.x_cov_filt, self.q_cov)
         assert mean.ndim == 1 and cov.ndim == 2
 
         # apply moment transform to compute predicted state mean, covariance
-        self.x_mean_pred, self.x_cov_pred, self.xx_cov = self.transf_dyn.apply(self.sys.dyn_eval, mean, cov,
-                                                                               self.sys.par_fcn(time))
-        if self.sys.q_additive:
+        self.x_mean_pred, self.x_cov_pred, self.xx_cov = self.transf_dyn.apply(self.ssm.dyn_eval, mean, cov,
+                                                                               self.ssm.par_fcn(time))
+        if self.ssm.q_additive:
             self.x_cov_pred += self.G.dot(self.q_cov).dot(self.G.T)
 
         # in non-additive case, augment mean and covariance
-        mean = self.x_mean_pred if self.sys.r_additive else np.hstack((self.x_mean_pred, self.r_mean))
-        cov = self.x_cov_pred if self.sys.r_additive else block_diag(self.x_cov_pred, self.r_cov)
+        mean = self.x_mean_pred if self.ssm.r_additive else np.hstack((self.x_mean_pred, self.r_mean))
+        cov = self.x_cov_pred if self.ssm.r_additive else block_diag(self.x_cov_pred, self.r_cov)
         assert mean.ndim == 1 and cov.ndim == 2
 
         # apply moment transform to compute measurement mean, covariance
-        self.z_mean_pred, self.z_cov_pred, self.xz_cov = self.transf_meas.apply(self.sys.meas_eval, mean, cov,
-                                                                                self.sys.par_fcn(time))
+        self.z_mean_pred, self.z_cov_pred, self.xz_cov = self.transf_meas.apply(self.ssm.meas_eval, mean, cov,
+                                                                                self.ssm.par_fcn(time))
         # in additive case, noise covariances need to be added
-        if self.sys.r_additive:
+        if self.ssm.r_additive:
             self.z_cov_pred += self.r_cov
 
         # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)
-        self.xz_cov = self.xz_cov[:, :self.sys.xD]
-        self.xx_cov = self.xx_cov[:, :self.sys.xD]
+        self.xz_cov = self.xz_cov[:, :self.ssm.xD]
+        self.xx_cov = self.xx_cov[:, :self.ssm.xD]
 
     def _measurement_update(self, y):
         gain = cho_solve(cho_factor(self.z_cov_pred), self.xz_cov).T
@@ -124,31 +124,31 @@ class MarginalInference(StateSpaceInference):
 
     def _time_update(self, time):
         # in non-additive case, augment mean and covariance
-        mean = self.x_mean_filt if self.sys.q_additive else np.hstack((self.x_mean_filt, self.q_mean))
-        cov = self.x_cov_filt if self.sys.q_additive else block_diag(self.x_cov_filt, self.q_cov)
+        mean = self.x_mean_filt if self.ssm.q_additive else np.hstack((self.x_mean_filt, self.q_mean))
+        cov = self.x_cov_filt if self.ssm.q_additive else block_diag(self.x_cov_filt, self.q_cov)
         assert mean.ndim == 1 and cov.ndim == 2
 
         # apply moment transform to compute predicted state mean, covariance
-        self.x_mean_pred, self.x_cov_pred, self.xx_cov = self.transf_dyn.apply(self.sys.dyn_eval, mean, cov,
-                                                                               self.sys.par_fcn(time))
-        if self.sys.q_additive:
+        self.x_mean_pred, self.x_cov_pred, self.xx_cov = self.transf_dyn.apply(self.ssm.dyn_eval, mean, cov,
+                                                                               self.ssm.par_fcn(time))
+        if self.ssm.q_additive:
             self.x_cov_pred += self.G.dot(self.q_cov).dot(self.G.T)
 
         # in non-additive case, augment mean and covariance
-        mean = self.x_mean_pred if self.sys.r_additive else np.hstack((self.x_mean_pred, self.r_mean))
-        cov = self.x_cov_pred if self.sys.r_additive else block_diag(self.x_cov_pred, self.r_cov)
+        mean = self.x_mean_pred if self.ssm.r_additive else np.hstack((self.x_mean_pred, self.r_mean))
+        cov = self.x_cov_pred if self.ssm.r_additive else block_diag(self.x_cov_pred, self.r_cov)
         assert mean.ndim == 1 and cov.ndim == 2
 
         # apply moment transform to compute measurement mean, covariance
-        self.z_mean_pred, self.z_cov_pred, self.xz_cov = self.transf_meas.apply(self.sys.meas_eval, mean, cov,
-                                                                                self.sys.par_fcn(time))
+        self.z_mean_pred, self.z_cov_pred, self.xz_cov = self.transf_meas.apply(self.ssm.meas_eval, mean, cov,
+                                                                                self.ssm.par_fcn(time))
         # in additive case, noise covariances need to be added
-        if self.sys.r_additive:
+        if self.ssm.r_additive:
             self.z_cov_pred += self.r_cov
 
         # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)
-        self.xz_cov = self.xz_cov[:, :self.sys.xD]
-        self.xx_cov = self.xx_cov[:, :self.sys.xD]
+        self.xz_cov = self.xz_cov[:, :self.ssm.xD]
+        self.xx_cov = self.xx_cov[:, :self.ssm.xD]
 
     def _measurement_update(self, y):
         """
