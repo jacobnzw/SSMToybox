@@ -75,14 +75,14 @@ class TestUNGM(unittest.TestCase):
             TPQuadKalman(ssm, usp_dyn, usp_meas, hyp_dyn, hyp_meas),
         )
         for inf in inf_method:
-            print r"Testing {} ...".format(inf.__class__.__name__),
+            print(r"Testing {} ...".format(inf.__class__.__name__), end=' ')
             try:
                 inf.forward_pass(z[..., 0])
                 inf.backward_pass()
             except BaseException as e:
-                print "Failed {}".format(e)
+                print("Failed {}".format(e))
                 continue
-            print "OK"
+            print("OK")
 
 
 class TestPendulum(unittest.TestCase):

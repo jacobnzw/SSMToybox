@@ -231,8 +231,8 @@ class StateSpaceModel(object):
             hmh[:, i] = self.meas_eval(xrmh[:, i], par)
         jac_fx = (2 * h) ** -1 * (fph - fmh)
         jac_hx = (2 * h) ** -1 * (hph - hmh)
-        print "Errors in Jacobians\n{}\n{}".format(np.abs(jac_fx - self.dyn_eval(xq, par, dx=True)),
-                                                   np.abs(jac_hx - self.meas_eval(xr, par, dx=True)))
+        print("Errors in Jacobians\n{}\n{}".format(np.abs(jac_fx - self.dyn_eval(xq, par, dx=True)),
+                                                   np.abs(jac_hx - self.meas_eval(xr, par, dx=True))))
 
     def simulate(self, steps, mc_sims=1):
         """State-space model simulation.
@@ -264,8 +264,8 @@ class StateSpaceModel(object):
         r = np.random.multivariate_normal(r_mean, r_cov, size=(mc_sims, steps)).T
         x0 = np.random.multivariate_normal(x0_mean, x0_cov, size=mc_sims).T  # (D, mc_sims)
         x[:, 0, :] = x0  # store initial states at k=0
-        for imc in xrange(mc_sims):
-            for k in xrange(1, steps):
+        for imc in range(mc_sims):
+            for k in range(1, steps):
                 theta = self.par_fcn(k - 1)
                 x[:, k, imc] = self.dyn_fcn(x[:, k-1, imc], q[:, k-1, imc], theta)
                 z[:, k, imc] = self.meas_fcn(x[:, k, imc], r[:, k, imc], theta)

@@ -28,10 +28,10 @@ class ExtendedKalmanGPQD(StateSpaceInference):
 
 
 def main():
-    # from models.ungm import ungm_filter_demo
-    # ungm_filter_demo(ExtendedKalman)
     from models.ungm import ungm_filter_demo
-    ungm_filter_demo(ExtendedKalmanGPQD, alpha=1.0, ell=1.0)
+    ungm_filter_demo(ExtendedKalman)
+    # from models.ungm import ungm_filter_demo
+    # ungm_filter_demo(ExtendedKalmanGPQD, alpha=1.0, ell=1.0)
     # from models.pendulum import pendulum_filter_demo
     # pendulum_filter_demo(ExtendedKalman)
 

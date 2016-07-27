@@ -4,12 +4,10 @@ import numpy as np
 from numpy import newaxis as na
 from numpy.linalg import cholesky
 
-from mtform import MomentTransform
+from .mtform import MomentTransform
 
 
-class BQTransform(MomentTransform):
-    __metaclass__ = ABCMeta
-
+class BQTransform(MomentTransform, metaclass=ABCMeta):
     _supported_models_ = ['gp', 'tp']  # mgp, gpder, ...
 
     def __init__(self, dim, model='gp', kernel=None, points=None, kern_hyp=None, point_par=None, **kwargs):
@@ -30,11 +28,11 @@ class BQTransform(MomentTransform):
 
     @staticmethod
     def _get_model(dim, model, kernel, points, hypers, point_pars, **kwargs):
-        from bqmodel import GaussianProcess, StudentTProcess  # import must be after SigmaPointTransform
+        from .bqmodel import GaussianProcess, StudentTProcess  # import must be after SigmaPointTransform
         model = model.lower()
         # make sure kernel is supported
         if model not in BQTransform._supported_models_:
-            print 'Model {} not supported. Supported models are {}.'.format(model, BQTransform._supported_models_)
+            print('Model {} not supported. Supported models are {}.'.format(model, BQTransform._supported_models_))
             return None
         # initialize the chosen model
         if model == 'gp':

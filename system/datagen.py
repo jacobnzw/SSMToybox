@@ -5,9 +5,7 @@ from numpy import newaxis as na
 
 
 # Rough, preliminary code up of the continuous-time system simulations
-class System(object):
-    __metaclass__ = ABCMeta
-
+class System(object, metaclass=ABCMeta):
     xD = None  # state dimension
     zD = None  # measurement dimension
     qD = None  # state noise dimension
@@ -233,8 +231,8 @@ class System(object):
             hmh[:, i] = self.meas_eval(xrmh[:, i], par)
         jac_fx = (2 * h) ** -1 * (fph - fmh)
         jac_hx = (2 * h) ** -1 * (hph - hmh)
-        print "Errors in Jacobians\n{}\n{}".format(np.abs(jac_fx - self.dyn_eval(xq, par, dx=True)),
-                                                   np.abs(jac_hx - self.meas_eval(xr, par, dx=True)))
+        print("Errors in Jacobians\n{}\n{}".format(np.abs(jac_fx - self.dyn_eval(xq, par, dx=True)),
+                                                   np.abs(jac_hx - self.meas_eval(xr, par, dx=True))))
 
     def simulate_trajectory(self, method='euler', dt=0.1, duration=10, mc_sims=1):
         # ensure sensible values of dt
@@ -255,8 +253,8 @@ class System(object):
         x[:, 0, :] = x0  # store initial states at k=0
 
         # continuous-time system simulation
-        for imc in xrange(mc_sims):
-            for k in xrange(1, steps):
+        for imc in range(mc_sims):
+            for k in range(1, steps):
                 theta = self.par_fcn(k - 1)
                 # computes next state x(t + dt) by ODE integration
                 x[:, k, imc] = ode_method(self.dyn_fcn, x[:, k - 1, imc], q[:, k - 1, imc], theta, dt)

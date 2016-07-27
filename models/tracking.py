@@ -2,7 +2,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 
 from inference.ssinfer import StateSpaceInference
-from ssmodel import *
+from .ssmodel import *
 
 
 class CoordinatedTurnBOT(StateSpaceModel):
@@ -392,8 +392,8 @@ def bot_filter_demo(filt_class, **kwargs):
     # simulate dynamic system for given number of steps and mc simulations
     time_steps, mc = 130, 100
     x, z = system.simulate(time_steps, mc_sims=mc)
-    print "Running {} filter/smoother ({} time steps, {} MC simulations) ...".format(filt_class.__name__,
-                                                                                     time_steps, mc)
+    print("Running {} filter/smoother ({} time steps, {} MC simulations) ...".format(filt_class.__name__,
+                                                                                     time_steps, mc))
     rmse_filter = np.zeros((system.xD, mc))
     rmse_smoother = np.zeros((system.xD, mc))
     for imc in range(mc):
@@ -403,11 +403,11 @@ def bot_filter_demo(filt_class, **kwargs):
         rmse_smoother[:, imc] = np.sqrt(np.mean((x[..., imc] - mean_s) ** 2, axis=1))
         filt.reset()
     # print average filter/smoother RMSE
-    print "Filter RMSE: {}".format((rmse_filter.mean(axis=1)))
-    print "Smoother RMSE: {}".format((rmse_smoother.mean(axis=1)))
+    print("Filter RMSE: {}".format((rmse_filter.mean(axis=1))))
+    print("Smoother RMSE: {}".format((rmse_smoother.mean(axis=1))))
     # plot one realization of the system trajectory, measurements and filtered/smoothed state estimate
     plt.figure()
-    time = range(1, time_steps)
+    time = list(range(1, time_steps))
     plt.plot(sen_pos[:, 0], sen_pos[:, 1], 'ko')
     plt.plot(x[0, :, imc], x[2, :, imc], color='r', ls='--', label='true state')
     # plt.plot(z[0, :, 0], color='k', ls='None', marker='o')
@@ -425,8 +425,8 @@ def reentry_filter_demo(filt_class, *args, **kwargs):
     # simulate dynamic system for given number of steps and mc simulations
     time_steps, mc = 750, 100
     x, z = system.simulate(time_steps, mc_sims=mc)
-    print "Running {} filter/smoother ({} time steps, {} MC simulations) ...".format(filt_class.__name__,
-                                                                                     time_steps, mc)
+    print("Running {} filter/smoother ({} time steps, {} MC simulations) ...".format(filt_class.__name__,
+                                                                                     time_steps, mc))
     mse_filter = np.zeros((system.xD, time_steps, mc))
     mse_smoother = np.zeros((system.xD, time_steps, mc))
     for imc in range(mc):
@@ -441,12 +441,12 @@ def reentry_filter_demo(filt_class, *args, **kwargs):
     rmse_smoother_pos = np.sqrt(mse_smoother[:2, ...].sum(axis=0))
     rmse_smoother_vel = np.sqrt(mse_smoother[2:4, ...].sum(axis=0))
     # print average filter/smoother RMSE
-    print "Filter stats:\n============="
-    print "Time-averaged RMSE (position): {}".format((rmse_filter_pos.mean()))
-    print "Time-averaged RMSE (velocity): {}".format((rmse_filter_vel.mean()))
-    print "Smoother stats:\n==============="
-    print "Time-averaged RMSE (position): {}".format((rmse_smoother_pos.mean()))
-    print "Time-averaged RMSE (velocity): {}".format((rmse_smoother_vel.mean()))
+    print("Filter stats:\n=============")
+    print("Time-averaged RMSE (position): {}".format((rmse_filter_pos.mean())))
+    print("Time-averaged RMSE (velocity): {}".format((rmse_filter_vel.mean())))
+    print("Smoother stats:\n===============")
+    print("Time-averaged RMSE (position): {}".format((rmse_smoother_pos.mean())))
+    print("Time-averaged RMSE (velocity): {}".format((rmse_smoother_vel.mean())))
     # plot filter and smoother RMSE of position/velocity in time (MC averages)
     time = np.linspace(0, time_steps * system.dt, time_steps)
     g = gridspec.GridSpec(4, 2)

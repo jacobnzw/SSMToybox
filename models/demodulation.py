@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-from ssmodel import *
+from .ssmodel import *
 from inference.ssinfer import StateSpaceInference
 
 
@@ -75,8 +75,8 @@ def frequency_demodulation_filter_demo(filt_class, *args, **kwargs):
     # simulate dynamic system for given number of steps and mc simulations
     time_steps, mc = 500, 100
     x, z = system.simulate(time_steps, mc_sims=mc)
-    print "Running {} filter/smoother ({} time steps, {} MC simulations) ...".format(filt_class.__name__,
-                                                                                     time_steps, mc)
+    print("Running {} filter/smoother ({} time steps, {} MC simulations) ...".format(filt_class.__name__,
+                                                                                     time_steps, mc))
     mse_filter = np.zeros((system.xD, time_steps, mc))
     mse_smoother = np.zeros((system.xD, time_steps, mc))
     for imc in range(mc):
@@ -89,12 +89,12 @@ def frequency_demodulation_filter_demo(filt_class, *args, **kwargs):
     rmse_filter = np.sqrt(mse_filter)
     rmse_smoother = np.sqrt(mse_smoother)
     # print average filter/smoother RMSE
-    print "Filter stats:\n============="
-    print "Time-averaged RMSE: {}".format((rmse_filter.mean(axis=(1, 2))))
-    print "Smoother stats:\n==============="
-    print "Time-averaged RMSE: {}".format((rmse_smoother.mean(axis=(1, 2))))
+    print("Filter stats:\n=============")
+    print("Time-averaged RMSE: {}".format((rmse_filter.mean(axis=(1, 2)))))
+    print("Smoother stats:\n===============")
+    print("Time-averaged RMSE: {}".format((rmse_smoother.mean(axis=(1, 2)))))
     # plot one realization of the system trajectory, measurements and filtered/smoothed state estimate
-    time = range(0, time_steps)
+    time = list(range(0, time_steps))
     rmse_time_f = rmse_filter.mean(axis=2)
     plt.figure()
     plt.plot(time, rmse_time_f[0, :], time, rmse_time_f[1, :])

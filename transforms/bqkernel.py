@@ -9,9 +9,7 @@ from scipy.linalg import cho_factor, cho_solve
 # TODO: documentation
 
 
-class Kernel(object):
-    __metaclass__ = ABCMeta
-    # list of strings of supported hyperparameters
+class Kernel(object, metaclass=ABCMeta):
     _hyperparameters_ = None
 
     def __init__(self, dim, hypers, jitter):
@@ -19,7 +17,7 @@ class Kernel(object):
         self.jitter = jitter
         # check if supplied hypers are all supported by the kernel
         if hypers is not None:
-            if not np.alltrue([hyp in hypers.keys() for hyp in self._hyperparameters_]):
+            if not np.alltrue([hyp in list(hypers.keys()) for hyp in self._hyperparameters_]):
                 hypers = None
         # use default hypers if unspecified or if given some unsupported hyperparameter
         self.hypers = self._get_default_hyperparameters(dim) if hypers is None else hypers

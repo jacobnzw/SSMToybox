@@ -68,8 +68,8 @@ def pendulum_filter_demo(filt_class, *args, **kwargs):
     # simulate dynamic system for given number of steps and mc simulations
     time_steps, mc = 500, 100
     x, z = system.simulate(time_steps, mc_sims=mc)
-    print "Running {} filter/smoother ({} time steps, {} MC simulations) ...".format(filt_class.__name__,
-                                                                                     time_steps, mc)
+    print("Running {} filter/smoother ({} time steps, {} MC simulations) ...".format(filt_class.__name__,
+                                                                                     time_steps, mc))
     rmse_filter = np.zeros((system.xD, mc))
     rmse_smoother = np.zeros((system.xD, mc))
     for imc in range(mc):
@@ -79,11 +79,11 @@ def pendulum_filter_demo(filt_class, *args, **kwargs):
         rmse_smoother[:, imc] = np.sqrt(np.mean((x[..., imc] - mean_s) ** 2, axis=1))
         filt.reset()
     # print average filter/smoother RMSE
-    print "Filter RMSE: {}".format((rmse_filter.mean(axis=1)))
-    print "Smoother RMSE: {}".format((rmse_smoother.mean(axis=1)))
+    print("Filter RMSE: {}".format((rmse_filter.mean(axis=1))))
+    print("Smoother RMSE: {}".format((rmse_smoother.mean(axis=1))))
     # plot one realization of the system trajectory, measurements and filtered/smoothed state estimate
     plt.figure()
-    time = range(1, time_steps)
+    time = list(range(1, time_steps))
     plt.plot(x[0, :, 0], color='r', ls='--', label='true state')
     plt.plot(z[0, :, 0], color='k', ls='None', marker='o')
     plt.plot(mean_f[0, ...], color='b', label='filtered estimate')

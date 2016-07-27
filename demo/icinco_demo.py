@@ -84,7 +84,7 @@ def bootstrap_var(data, samples=1000):
 
 def print_table(data, row_labels=None, col_labels=None, latex=False):
     pd.DataFrame(data, index=row_labels, columns=col_labels)
-    print pd
+    print(pd)
     if latex:
         pd.to_latex()
 
@@ -146,14 +146,14 @@ def tables():
     mean_s, cov_s = np.zeros((ssm.xD, steps, mc, num_algs)), np.zeros((ssm.xD, ssm.xD, steps, mc, num_algs))
     # do filtering/smoothing
     t0 = time.time()  # measure execution time
-    print 'Running filters/smoothers ...'
+    print('Running filters/smoothers ...')
     for a, alg in enumerate(algorithms):
-        print '{}'.format(alg.__class__.__name__)  # print filter/smoother name
+        print('{}'.format(alg.__class__.__name__))  # print filter/smoother name
         for sim in range(mc):
             mean_f[..., sim, a], cov_f[..., sim, a] = alg.forward_pass(z[..., sim])
             mean_s[..., sim, a], cov_s[..., sim, a] = alg.backward_pass()
             alg.reset()
-    print 'Done in {0:.4f} [sec]'.format(time.time() - t0)
+    print('Done in {0:.4f} [sec]'.format(time.time() - t0))
 
     # evaluate perfomance
     rmseData_f, rmseData_s = rmse(x, mean_f), rmse(x, mean_s)  # averaged RMSE over time steps
@@ -192,18 +192,18 @@ def tables():
     nll_table_s = pd.DataFrame(np.hstack((nllMean_s.reshape(2, 7).T, nllStd_s.reshape(2, 7).T)), index=row_labels,
                                columns=col_labels)
     # print tables
-    print 'Filter RMSE'
-    print rmse_table_f
-    print 'Filter NCI'
-    print nci_table_f
-    print 'Filter NLL'
-    print nll_table_f
-    print 'Smoother RMSE'
-    print rmse_table_s
-    print 'Smoother NCI'
-    print nci_table_s
-    print 'Smoother NLL'
-    print nll_table_s
+    print('Filter RMSE')
+    print(rmse_table_f)
+    print('Filter NCI')
+    print(nci_table_f)
+    print('Filter NLL')
+    print(nll_table_f)
+    print('Smoother RMSE')
+    print(rmse_table_s)
+    print('Smoother NCI')
+    print(nci_table_s)
+    print('Smoother NLL')
+    print(nll_table_s)
     # return computed metrics for filters and smoothers
     return {'filter_RMSE': rmse_table_f, 'filter_NCI': nci_table_f, 'filter_NLL': nll_table_f,
             'smoother_RMSE': rmse_table_s, 'smoother_NCI': nci_table_s, 'smoother_NLL': nll_table_s}

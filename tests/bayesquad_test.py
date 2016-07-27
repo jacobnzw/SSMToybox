@@ -19,7 +19,7 @@ class GPQuadTest(TestCase):
         # phyp = {'kappa': 0.0, 'alpha': 1.0}
         tf = GPQ(dim, 'rbf', 'ut', khyp)
         wm, wc, wcc = tf.wm, tf.Wc, tf.Wcc
-        print 'wm = \n{}\nwc = \n{}\nwcc = \n{}'.format(wm, wc, wcc)
+        print('wm = \n{}\nwc = \n{}\nwcc = \n{}'.format(wm, wc, wcc))
         self.assertTrue(np.allclose(wc, wc.T), "Covariance weight matrix not symmetric.")
         wc = 0.5 * (wc + wc.T)
         self.assertTrue(np.array_equal(wc, wc.T))
@@ -34,4 +34,4 @@ class GPQuadTest(TestCase):
             tmean, tcov, tccov = tf.apply(f, mean, cov, np.atleast_1d(1.0))
             self.assertTrue(np.array_equal(tcov, tcov.T))
             la.cholesky(tcov)
-            print "Transformed moments\nmean: {}\ncov: {}\nccov: {}".format(tmean, tcov, tccov)
+            print("Transformed moments\nmean: {}\ncov: {}\nccov: {}".format(tmean, tcov, tccov))

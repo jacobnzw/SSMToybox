@@ -86,6 +86,6 @@ def bootstrap_var(data, samples=1000):
 
 def print_table(data, row_labels=None, col_labels=None, latex=False):
     pd.DataFrame(data, index=row_labels, columns=col_labels)
-    print pd
+    print(pd)
     if latex:
         pd.to_latex()

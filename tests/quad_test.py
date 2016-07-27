@@ -58,4 +58,4 @@ class MonteCarloTest(TestCase):
         cov = np.eye(d)
         # does it crash ?
         for t in tmc:
-            print t.apply(f, mean, cov, np.atleast_1d(1.0))
+            print(t.apply(f, mean, cov, np.atleast_1d(1.0)))

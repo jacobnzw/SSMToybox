@@ -5,16 +5,14 @@ import numpy as np
 import numpy.linalg as la
 from scipy.optimize import minimize
 
-from bqkernel import RBF
-from quad import SphericalRadial, Unscented, GaussHermite
+from .bqkernel import RBF
+from .quad import SphericalRadial, Unscented, GaussHermite
 
 
 # TODO: documentation
 
 
-class Model(object):
-    __metaclass__ = ABCMeta
-
+class Model(object, metaclass=ABCMeta):
     _supported_points_ = ['sr', 'ut', 'gh']
     _supported_kernels_ = ['rbf']
 
@@ -122,7 +120,7 @@ class Model(object):
         points = points.lower()
         # make sure points is supported
         if points not in Model._supported_points_:
-            print 'Points {} not supported. Supported points are {}.'.format(points, Model._supported_points_)
+            print('Points {} not supported. Supported points are {}.'.format(points, Model._supported_points_))
             return None
         # create chosen points
         if points == 'sr':
@@ -137,7 +135,7 @@ class Model(object):
         kernel = kernel.lower()
         # make sure kernel is supported
         if kernel not in Model._supported_kernels_:
-            print 'Kernel {} not supported. Supported kernels are {}.'.format(kernel, Model._supported_kernels_)
+            print('Kernel {} not supported. Supported kernels are {}.'.format(kernel, Model._supported_kernels_))
             return None
         # initialize the chosen kernel
         if kernel == 'rbf':

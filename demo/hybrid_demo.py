@@ -16,7 +16,7 @@ import time
 import numpy as np
 import pandas as pd
 
-from icinco_demo import rmse, nci, nll, bootstrap_var
+from .icinco_demo import rmse, nci, nll, bootstrap_var
 from inference import ExtendedKalman, ExtendedKalmanGPQD
 from ungm import UNGM
 from transforms import Unscented
@@ -61,14 +61,14 @@ mean_f, cov_f = np.zeros((ssm.xD, steps, mc, num_alg)), np.zeros((ssm.xD, ssm.xD
 mean_s, cov_s = np.zeros((ssm.xD, steps, mc, num_alg)), np.zeros((ssm.xD, ssm.xD, steps, mc, num_alg))
 # do filtering/smoothing
 t0 = time.time()  # measure execution time
-print 'Running filters/smoothers ...'
+print('Running filters/smoothers ...')
 for a, alg in enumerate(algorithms):
-    print '{}'.format(alg.__class__.__name__)  # print filter/smoother name
+    print('{}'.format(alg.__class__.__name__))  # print filter/smoother name
     for sim in range(mc):
         mean_f[..., sim, a], cov_f[..., sim, a] = alg.forward_pass(z[..., sim])
         mean_s[..., sim, a], cov_s[..., sim, a] = alg.backward_pass()
         alg.reset()
-print 'Done in {0:.4f} [sec]'.format(time.time() - t0)
+print('Done in {0:.4f} [sec]'.format(time.time() - t0))
 
 # evaluate perfomance
 rmseData_f, rmseData_s = rmse(x, mean_f), rmse(x, mean_s)  # averaged RMSE over time steps
@@ -99,7 +99,7 @@ table_f = pd.DataFrame(np.hstack((rmseMean_f, rmseStd_f, nciMean_f, nciStd_f, nl
 table_s = pd.DataFrame(np.hstack((rmseMean_s, rmseStd_s, nciMean_s, nciStd_s, nllMean_s, nllStd_s)),
                        index=row_labels, columns=col_labels)
 # print tables
-print 'Filter metrics'
-print table_f
-print 'Smoother metrics'
-print table_s
+print('Filter metrics')
+print(table_f)
+print('Smoother metrics')
+print(table_s)

@@ -1,4 +1,4 @@
-from __future__ import division
+
 
 from abc import ABCMeta, abstractmethod
 
@@ -16,17 +16,13 @@ from numpy.linalg import cholesky
 # TODO: documentation
 
 
-class MomentTransform(object):
-    __metaclass__ = ABCMeta
-
+class MomentTransform(object, metaclass=ABCMeta):
     @abstractmethod
     def apply(self, f, mean, cov, pars):
         raise NotImplementedError
 
 
-class SigmaPointTransform(MomentTransform):
-    __metaclass__ = ABCMeta
-
+class SigmaPointTransform(MomentTransform, metaclass=ABCMeta):
     def apply(self, f, mean, cov, pars):
         mean = mean[:, na]
         # form sigma-points from unit sigma-points

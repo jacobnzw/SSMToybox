@@ -3,7 +3,7 @@ from unittest import TestCase
 import numpy as np
 import numpy.linalg as la
 
-from bqkernel import RBF
+from transforms.bqkernel import RBF
 
 
 class RBFKernelTest(TestCase):

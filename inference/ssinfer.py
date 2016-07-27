@@ -41,7 +41,7 @@ class StateSpaceInference(object):
         self.pr_mean = self.fi_mean.copy()
         self.pr_cov = self.fi_cov.copy()
         self.pr_xx_cov = self.fi_cov.copy()
-        for k in xrange(1, self.N):  # iterate over columns of data
+        for k in range(1, self.N):  # iterate over columns of data
             self._time_update(k - 1)
             self.pr_mean[..., k] = self.x_mean_pred
             self.pr_cov[..., k] = self.x_cov_pred
@@ -58,7 +58,7 @@ class StateSpaceInference(object):
         assert self.get_flag('filtered')  # require filtered state
         self.sm_mean = self.fi_mean.copy()
         self.sm_cov = self.fi_cov.copy()
-        for k in xrange(self.N-2, 0, -1):
+        for k in range(self.N-2, 0, -1):
             self.x_mean_pred = self.pr_mean[..., k+1]
             self.x_cov_pred = self.pr_cov[..., k+1]
             self.xx_cov = self.pr_xx_cov[..., k+1]
