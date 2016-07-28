@@ -3,7 +3,7 @@ from unittest import TestCase
 import numpy as np
 import numpy.linalg as la
 
-from bayesquad import GPQ
+from transforms.bayesquad import GPQ
 from models.pendulum import Pendulum
 from models.ungm import UNGM
 
