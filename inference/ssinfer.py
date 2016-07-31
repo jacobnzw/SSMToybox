@@ -190,14 +190,14 @@ class MarginalInference(StateSpaceInference):
         self.x_mean_smooth = self.x_mean_filt + gain.dot(self.x_mean_smooth - self.x_mean_pred)
         self.x_cov_smooth = self.x_cov_filt + gain.dot(self.x_cov_smooth - self.x_cov_pred).dot(gain.T)
 
-    def _likelihood_penalized(self, theta, y, k):
+    def _param_likelihood(self, theta, y, k):
         """
         l(theta) = p(y_k | theta) = N(y_k | m_k^y(theta), P_k^y(theta))
 
         Parameters
         ----------
         theta: ndarray
-            Vector of parameters
+            Vector of quadrature parameters.
         y: ndarray
             Measurement y_k
         k: ndarray
@@ -205,11 +205,31 @@ class MarginalInference(StateSpaceInference):
 
         Returns
         -------
-            Value of penalized likelihood for given vector of parameters.
+            Value of likelihood for given vector of parameters and observation.
         """
-
         # TODO: compute mean and covariance to evaluate N(y_k | m_k^y(theta), P_k^y(theta))
+        pass
 
-    def _parameter_posterior_moments(self):
-        # Laplace approximation of p(theta | y_k)
+    def _param_prior(self, theta):
+        """
+        Prior on quadrature parameters. So far only Gaussian on log-parameters.
+
+        p(theta) = N(theta | m^theta_k-1, P^theta_k-1)
+
+        Parameters
+        ----------
+        theta: ndarray
+            Vector of quadrature parameters.
+
+        Returns
+        -------
+            Value of a Gaussian prior PDF.
+
+        """
+        pass
+
+    def _param_posterior_moments(self):
+        # Laplace approximation of p(theta | y_k) is a Gaussian
+        # 1. find theta_* = arg_max p(theta | y_k) ==> mean
+        # 2. evaluate Hessian of p(theta | y_k) at theta_* ==> covariance
         pass
