@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.linalg import cho_factor, cho_solve, block_diag
 from scipy.stats import multivariate_normal
-
+from numpy import newaxis as na
 from models.ssmodel import StateSpaceModel
 from transforms.mtform import MomentTransform
 
@@ -123,33 +123,16 @@ class StateSpaceInference(object):
 
 class MarginalInference(StateSpaceInference):
 
-    def _time_update(self, time):
-        # in non-additive case, augment mean and covariance
-        mean = self.x_mean_filt if self.ssm.q_additive else np.hstack((self.x_mean_filt, self.q_mean))
-        cov = self.x_cov_filt if self.ssm.q_additive else block_diag(self.x_cov_filt, self.q_cov)
-        assert mean.ndim == 1 and cov.ndim == 2
-
-        # apply moment transform to compute predicted state mean, covariance
-        self.x_mean_pred, self.x_cov_pred, self.xx_cov = self.transf_dyn.apply(self.ssm.dyn_eval, mean, cov,
-                                                                               self.ssm.par_fcn(time))
-        if self.ssm.q_additive:
-            self.x_cov_pred += self.G.dot(self.q_cov).dot(self.G.T)
-
-        # in non-additive case, augment mean and covariance
-        mean = self.x_mean_pred if self.ssm.r_additive else np.hstack((self.x_mean_pred, self.r_mean))
-        cov = self.x_cov_pred if self.ssm.r_additive else block_diag(self.x_cov_pred, self.r_cov)
-        assert mean.ndim == 1 and cov.ndim == 2
-
-        # apply moment transform to compute measurement mean, covariance
-        self.z_mean_pred, self.z_cov_pred, self.xz_cov = self.transf_meas.apply(self.ssm.meas_eval, mean, cov,
-                                                                                self.ssm.par_fcn(time))
-        # in additive case, noise covariances need to be added
-        if self.ssm.r_additive:
-            self.z_cov_pred += self.r_cov
-
-        # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)
-        self.xz_cov = self.xz_cov[:, :self.ssm.xD]
-        self.xx_cov = self.xx_cov[:, :self.ssm.xD]
+    def __init__(self, ssm, transf_dyn, transf_meas):
+        super(self, MarginalInference).__init__(ssm, transf_dyn, transf_meas)
+        # prior parameter mean and covariance
+        self.param_dim = 2 * self.ssm.xD
+        self.param_mean = np.zeros(self.param_dim, )  # FIXME: not general, assumes 2*xD parameters
+        self.param_cov = np.eye(self.param_dim)
+        from transforms.quad import SphericalRadial
+        self.param_upts = SphericalRadial.unit_sigma_points(self.param_dim)
+        self.param_wts = SphericalRadial.weights(self.param_dim)
+        self.param_pts_num = self.param_upts.shape[1]
 
     def _measurement_update(self, y):
         """
@@ -170,45 +153,49 @@ class MarginalInference(StateSpaceInference):
 
         """
 
-        # Laplace approximation of the parameter posterior:
-        #   Input:
-        #       - function handle for J(theta) = log l(theta) + log q(theta | y_1:k-1)
-        #         where l(theta) = p(y_k | theta) = N(y_k | m_k^y(theta), P_k^y(theta))
-        #   Output:
-        #       - mean and covariance of parameter posterior q(theta | y_1:k)
+        # Mean and covariance of the parameter posterior by Laplace approximation
+        self._param_posterior_moments(y, k)
 
-        # Marginalization of GPQ-parameters
-        #   Input:
-        #       - moments of q(theta | y_1:k)
-        #       - function for evaluating posterior mean and covariance at theta
-
-        gain = cho_solve(cho_factor(self.z_cov_pred), self.xz_cov).T
-        self.x_mean_filt = self.x_mean_pred + gain.dot(y - self.z_mean_pred)
-        self.x_cov_filt = self.x_cov_pred - gain.dot(self.z_cov_pred).dot(gain.T)
+        # Marginalization of moment transform parameters
+        param_pts = self.param_mean[:, na] + self.param_cov.dot(self.param_upts)
+        mean = np.zeros(self.param_dim, self.param_pts_num)
+        cov = np.zeros(self.param_dim, self.param_dim, self.param_pts_num)
+        # Evaluate state posterior with different values of transform parameters
+        for i in range(self.param_upts.shape[1]):
+            mean[:, i], cov[:, :, i] = self._state_posterior_moments(param_pts[:, i], y, k)
+        # Weighted sum of means and covariances approximates Gaussian mixture state posterior
+        self.x_mean_filt = np.einsum('ij, j -> i', mean, self.param_wts)
+        self.x_cov_filt = np.einsum('ijk, k -> ij', cov, self.param_wts)
 
     def _smoothing_update(self):
         gain = cho_solve(cho_factor(self.x_cov_pred), self.xx_cov).T
         self.x_mean_smooth = self.x_mean_filt + gain.dot(self.x_mean_smooth - self.x_mean_pred)
         self.x_cov_smooth = self.x_cov_filt + gain.dot(self.x_cov_smooth - self.x_cov_pred).dot(gain.T)
 
-    def _param_likelihood(self, theta, y, k):
+    def _state_posterior_moments(self, theta, y, k):
+        self._time_update(k, theta)
+        gain = cho_solve(cho_factor(self.z_cov_pred), self.xz_cov).T
+        mean = self.x_mean_pred + gain.dot(y - self.z_mean_pred)
+        cov = self.x_cov_pred - gain.dot(self.z_cov_pred).dot(gain.T)
+        return mean, cov
+
+    def _param_log_likelihood(self, theta, y, k):
         """
         l(theta) = p(y_k | theta) = N(y_k | m_k^y(theta), P_k^y(theta))
 
         Parameters
         ----------
         theta: ndarray
-            Vector of quadrature parameters.
+            Vector of transform parameters.
         y: ndarray
-            Measurement y_k
-        k: ndarray
-            time (for time varying dynamics)
+            Observation
+        k: int
+            Time (for time varying dynamics)
 
         Returns
         -------
             Value of likelihood for given vector of parameters and observation.
         """
-        # TODO: compute mean and covariance to evaluate N(y_k | m_k^y(theta), P_k^y(theta))
         # in non-additive case, augment mean and covariance
         mean = self.x_mean_filt if self.ssm.q_additive else np.hstack((self.x_mean_filt, self.q_mean))
         cov = self.x_cov_filt if self.ssm.q_additive else block_diag(self.x_cov_filt, self.q_cov)
@@ -233,18 +220,18 @@ class MarginalInference(StateSpaceInference):
         # # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)
         # self.xz_cov = self.xz_cov[:, :self.ssm.xD]
         # self.xx_cov = self.xx_cov[:, :self.ssm.xD]
-        return multivariate_normal.pdf(theta, mean, cov)
+        return multivariate_normal.logpdf(y, mean, cov)
 
-    def _param_prior(self, theta):
+    def _param_log_prior(self, theta):
         """
-        Prior on quadrature parameters.
+        Prior on transform parameters.
 
         p(theta) = N(theta | m^theta_k-1, P^theta_k-1)
 
         Parameters
         ----------
         theta: ndarray
-            Vector of quadrature parameters.
+            Vector of transform parameters.
 
         Notes
         -----
@@ -256,10 +243,47 @@ class MarginalInference(StateSpaceInference):
             Value of a Gaussian prior PDF.
 
         """
-        return multivariate_normal.pdf(theta, self.param_mean, self.param_cov)
+        return multivariate_normal.logpdf(theta, self.param_mean, self.param_cov)
 
-    def _param_posterior_moments(self):
+    def _param_neg_log_posterior(self, theta, y, k):
+        """
+        Un-normalized negative log-posterior over transform parameters.
+
+        Parameters
+        ----------
+        theta: ndarray
+            Transform parameters
+        y: ndarray
+            Observation
+        k: int
+            Time
+
+        Returns
+        -------
+        x: float
+            Evaluation of un-normalized negative logarithm of posterior over transform parameters.
+        """
+        return -self._param_log_likelihood(theta, y, k) - self._param_log_prior(theta)
+
+    def _param_posterior_moments(self, y, k):
+        """
+        Laplace approximation of the intractable transform parameter posterior.
+
+        Parameters
+        ----------
+        y: ndarray
+            Observation
+        k: int
+            Time
+
+        Returns
+        -------
+        (mean, cov): tuple
+            Mean and covariance of the intractable parameter posterior.
+        """
         # Laplace approximation of p(theta | y_k) is a Gaussian
         # 1. find theta_* = arg_max p(theta | y_k) ==> mean
         # 2. evaluate Hessian of p(theta | y_k) at theta_* ==> covariance
-        pass
+        from scipy.optimize import minimize
+        opt_res = minimize(self._param_neg_log_posterior, self.param_mean, (y, k), method='BFGS')
+        self.param_mean, self.param_cov = opt_res.x, opt_res.hess_inv
