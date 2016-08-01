@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.linalg import cho_factor, cho_solve, block_diag
+from scipy.stats import multivariate_normal
 
 from models.ssmodel import StateSpaceModel
 from transforms.mtform import MomentTransform
@@ -169,7 +170,7 @@ class MarginalInference(StateSpaceInference):
 
         """
 
-        # Laplace approximation:
+        # Laplace approximation of the parameter posterior:
         #   Input:
         #       - function handle for J(theta) = log l(theta) + log q(theta | y_1:k-1)
         #         where l(theta) = p(y_k | theta) = N(y_k | m_k^y(theta), P_k^y(theta))
@@ -208,11 +209,35 @@ class MarginalInference(StateSpaceInference):
             Value of likelihood for given vector of parameters and observation.
         """
         # TODO: compute mean and covariance to evaluate N(y_k | m_k^y(theta), P_k^y(theta))
-        pass
+        # in non-additive case, augment mean and covariance
+        mean = self.x_mean_filt if self.ssm.q_additive else np.hstack((self.x_mean_filt, self.q_mean))
+        cov = self.x_cov_filt if self.ssm.q_additive else block_diag(self.x_cov_filt, self.q_cov)
+        assert mean.ndim == 1 and cov.ndim == 2
+
+        # apply moment transform to compute predicted state mean, covariance
+        mean, cov, ccov = self.transf_dyn.apply(self.ssm.dyn_eval, mean, cov, self.ssm.par_fcn(k), theta)
+        if self.ssm.q_additive:
+            cov += self.G.dot(self.q_cov).dot(self.G.T)
+
+        # in non-additive case, augment mean and covariance
+        mean = mean if self.ssm.r_additive else np.hstack((mean, self.r_mean))
+        cov = cov if self.ssm.r_additive else block_diag(cov, self.r_cov)
+        assert mean.ndim == 1 and cov.ndim == 2
+
+        # apply moment transform to compute measurement mean, covariance
+        mean, cov, ccov = self.transf_meas.apply(self.ssm.meas_eval, mean, cov, self.ssm.par_fcn(k), theta)
+        # in additive case, noise covariances need to be added
+        if self.ssm.r_additive:
+            cov += self.r_cov
+
+        # # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)
+        # self.xz_cov = self.xz_cov[:, :self.ssm.xD]
+        # self.xx_cov = self.xx_cov[:, :self.ssm.xD]
+        return multivariate_normal.pdf(theta, mean, cov)
 
     def _param_prior(self, theta):
         """
-        Prior on quadrature parameters. So far only Gaussian on log-parameters.
+        Prior on quadrature parameters.
 
         p(theta) = N(theta | m^theta_k-1, P^theta_k-1)
 
@@ -221,12 +246,17 @@ class MarginalInference(StateSpaceInference):
         theta: ndarray
             Vector of quadrature parameters.
 
+        Notes
+        -----
+        At the moment, only Gaussian prior is supported. Student-t prior might be implemented in the future.
+
         Returns
         -------
+        p(theta): return type of scipy.stats.multivariate_normal.pdf
             Value of a Gaussian prior PDF.
 
         """
-        pass
+        return multivariate_normal.pdf(theta, self.param_mean, self.param_cov)
 
     def _param_posterior_moments(self):
         # Laplace approximation of p(theta | y_k) is a Gaussian
