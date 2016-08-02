@@ -17,13 +17,12 @@ class StateSpaceInference(object):
         assert isinstance(ssm, StateSpaceModel)
         self.ssm = ssm
         # set initial condition mean and covariance, and noise covariances
-        self.x_mean_filt, self.x_cov_filt, self.q_mean, self.q_cov, self.r_mean, self.r_cov, self.G = ssm.get_pars(
+        self.x_mean_fi, self.x_cov_fi, self.q_mean, self.q_cov, self.r_mean, self.r_cov, self.G = ssm.get_pars(
             'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov', 'q_factor'
         )
         self.flags = {'filtered': False, 'smoothed': False}
-        # TODO: refactor long variable names: filt->fi, pred->pr, smooth->sm; run tests
-        self.x_mean_pred, self.x_cov_pred, = None, None
-        self.x_mean_smooth, self.x_cov_smooth = None, None
+        self.x_mean_pr, self.x_cov_pr, = None, None
+        self.x_mean_sm, self.x_cov_sm = None, None
         self.xx_cov, self.xz_cov = None, None
         self.pr_mean, self.pr_cov, self.pr_xx_cov = None, None, None
         self.fi_mean, self.fi_cov = None, None
@@ -40,21 +39,21 @@ class StateSpaceInference(object):
         self.D, self.N = data.shape
         self.fi_mean = np.zeros((self.ssm.xD, self.N))
         self.fi_cov = np.zeros((self.ssm.xD, self.ssm.xD, self.N))
-        self.fi_mean[:, 0], self.fi_cov[..., 0] = self.x_mean_filt, self.x_cov_filt
+        self.fi_mean[:, 0], self.fi_cov[..., 0] = self.x_mean_fi, self.x_cov_fi
         self.pr_mean = self.fi_mean.copy()
         self.pr_cov = self.fi_cov.copy()
         self.pr_xx_cov = self.fi_cov.copy()
         for k in range(1, self.N):  # iterate over columns of data
             self._time_update(k - 1)
-            self.pr_mean[..., k] = self.x_mean_pred
-            self.pr_cov[..., k] = self.x_cov_pred
+            self.pr_mean[..., k] = self.x_mean_pr
+            self.pr_cov[..., k] = self.x_cov_pr
             self.pr_xx_cov[..., k] = self.xx_cov
             self._measurement_update(data[:, k])
-            self.fi_mean[..., k], self.fi_cov[..., k] = self.x_mean_filt, self.x_cov_filt
+            self.fi_mean[..., k], self.fi_cov[..., k] = self.x_mean_fi, self.x_cov_fi
         # set flag that filtered state sequence is available
         self.set_flag('filtered', True)
         # smoothing estimate at the last time step == the filtering estimate at the last time step
-        self.x_mean_smooth, self.x_cov_smooth = self.x_mean_filt, self.x_cov_filt
+        self.x_mean_sm, self.x_cov_sm = self.x_mean_fi, self.x_cov_fi
         return self.fi_mean, self.fi_cov
 
     def backward_pass(self):
@@ -62,22 +61,22 @@ class StateSpaceInference(object):
         self.sm_mean = self.fi_mean.copy()
         self.sm_cov = self.fi_cov.copy()
         for k in range(self.N-2, 0, -1):
-            self.x_mean_pred = self.pr_mean[..., k+1]
-            self.x_cov_pred = self.pr_cov[..., k+1]
+            self.x_mean_pr = self.pr_mean[..., k + 1]
+            self.x_cov_pr = self.pr_cov[..., k + 1]
             self.xx_cov = self.pr_xx_cov[..., k+1]
-            self.x_mean_filt = self.fi_mean[..., k]
-            self.x_cov_filt = self.fi_cov[..., k]
+            self.x_mean_fi = self.fi_mean[..., k]
+            self.x_cov_fi = self.fi_cov[..., k]
             self._smoothing_update()
-            self.sm_mean[..., k] = self.x_mean_smooth
-            self.sm_cov[..., k] = self.x_cov_smooth
+            self.sm_mean[..., k] = self.x_mean_sm
+            self.sm_cov[..., k] = self.x_cov_sm
         self.set_flag('smoothed', True)
         return self.sm_mean, self.sm_cov
 
     def reset(self):
-        self.x_mean_filt, self.x_cov_filt = self.ssm.get_pars('x0_mean', 'x0_cov')
+        self.x_mean_fi, self.x_cov_fi = self.ssm.get_pars('x0_mean', 'x0_cov')
         self.flags = {'filtered': False, 'smoothed': False}
-        self.x_mean_pred, self.x_cov_pred, = None, None
-        self.x_mean_smooth, self.x_cov_smooth = None, None
+        self.x_mean_pr, self.x_cov_pr, = None, None
+        self.x_mean_sm, self.x_cov_sm = None, None
         self.xx_cov, self.xz_cov = None, None
         self.pr_mean, self.pr_cov, self.pr_xx_cov = None, None, None
         self.fi_mean, self.fi_cov = None, None
@@ -86,19 +85,19 @@ class StateSpaceInference(object):
 
     def _time_update(self, time, *args):
         # in non-additive case, augment mean and covariance
-        mean = self.x_mean_filt if self.ssm.q_additive else np.hstack((self.x_mean_filt, self.q_mean))
-        cov = self.x_cov_filt if self.ssm.q_additive else block_diag(self.x_cov_filt, self.q_cov)
+        mean = self.x_mean_fi if self.ssm.q_additive else np.hstack((self.x_mean_fi, self.q_mean))
+        cov = self.x_cov_fi if self.ssm.q_additive else block_diag(self.x_cov_fi, self.q_cov)
         assert mean.ndim == 1 and cov.ndim == 2
 
         # apply moment transform to compute predicted state mean, covariance
-        self.x_mean_pred, self.x_cov_pred, self.xx_cov = self.transf_dyn.apply(self.ssm.dyn_eval, mean, cov,
-                                                                               self.ssm.par_fcn(time), *args)
+        self.x_mean_pr, self.x_cov_pr, self.xx_cov = self.transf_dyn.apply(self.ssm.dyn_eval, mean, cov,
+                                                                           self.ssm.par_fcn(time), *args)
         if self.ssm.q_additive:
-            self.x_cov_pred += self.G.dot(self.q_cov).dot(self.G.T)
+            self.x_cov_pr += self.G.dot(self.q_cov).dot(self.G.T)
 
         # in non-additive case, augment mean and covariance
-        mean = self.x_mean_pred if self.ssm.r_additive else np.hstack((self.x_mean_pred, self.r_mean))
-        cov = self.x_cov_pred if self.ssm.r_additive else block_diag(self.x_cov_pred, self.r_cov)
+        mean = self.x_mean_pr if self.ssm.r_additive else np.hstack((self.x_mean_pr, self.r_mean))
+        cov = self.x_cov_pr if self.ssm.r_additive else block_diag(self.x_cov_pr, self.r_cov)
         assert mean.ndim == 1 and cov.ndim == 2
 
         # apply moment transform to compute measurement mean, covariance
@@ -114,13 +113,13 @@ class StateSpaceInference(object):
 
     def _measurement_update(self, y, *args):
         gain = cho_solve(cho_factor(self.z_cov_pred), self.xz_cov).T
-        self.x_mean_filt = self.x_mean_pred + gain.dot(y - self.z_mean_pred)
-        self.x_cov_filt = self.x_cov_pred - gain.dot(self.z_cov_pred).dot(gain.T)
+        self.x_mean_fi = self.x_mean_pr + gain.dot(y - self.z_mean_pred)
+        self.x_cov_fi = self.x_cov_pr - gain.dot(self.z_cov_pred).dot(gain.T)
 
     def _smoothing_update(self):
-        gain = cho_solve(cho_factor(self.x_cov_pred), self.xx_cov).T
-        self.x_mean_smooth = self.x_mean_filt + gain.dot(self.x_mean_smooth - self.x_mean_pred)
-        self.x_cov_smooth = self.x_cov_filt + gain.dot(self.x_cov_smooth - self.x_cov_pred).dot(gain.T)
+        gain = cho_solve(cho_factor(self.x_cov_pr), self.xx_cov).T
+        self.x_mean_sm = self.x_mean_fi + gain.dot(self.x_mean_sm - self.x_mean_pr)
+        self.x_cov_sm = self.x_cov_fi + gain.dot(self.x_cov_sm - self.x_cov_pr).dot(gain.T)
 
 
 class MarginalInference(StateSpaceInference):
@@ -170,19 +169,19 @@ class MarginalInference(StateSpaceInference):
             mean[:, i], cov[:, :, i] = self._state_posterior_moments(param_pts[:, i], y, k)
 
         # Weighted sum of means and covariances approximates Gaussian mixture state posterior
-        self.x_mean_filt = np.einsum('ij, j -> i', mean, self.param_wts)
-        self.x_cov_filt = np.einsum('ijk, k -> ij', cov, self.param_wts)
+        self.x_mean_fi = np.einsum('ij, j -> i', mean, self.param_wts)
+        self.x_cov_fi = np.einsum('ijk, k -> ij', cov, self.param_wts)
 
     def _smoothing_update(self):
-        gain = cho_solve(cho_factor(self.x_cov_pred), self.xx_cov).T
-        self.x_mean_smooth = self.x_mean_filt + gain.dot(self.x_mean_smooth - self.x_mean_pred)
-        self.x_cov_smooth = self.x_cov_filt + gain.dot(self.x_cov_smooth - self.x_cov_pred).dot(gain.T)
+        gain = cho_solve(cho_factor(self.x_cov_pr), self.xx_cov).T
+        self.x_mean_sm = self.x_mean_fi + gain.dot(self.x_mean_sm - self.x_mean_pr)
+        self.x_cov_sm = self.x_cov_fi + gain.dot(self.x_cov_sm - self.x_cov_pr).dot(gain.T)
 
     def _state_posterior_moments(self, theta, y, k):
         self._time_update(k, theta)
         gain = cho_solve(cho_factor(self.z_cov_pred), self.xz_cov).T
-        mean = self.x_mean_pred + gain.dot(y - self.z_mean_pred)
-        cov = self.x_cov_pred - gain.dot(self.z_cov_pred).dot(gain.T)
+        mean = self.x_mean_pr + gain.dot(y - self.z_mean_pred)
+        cov = self.x_cov_pr - gain.dot(self.z_cov_pred).dot(gain.T)
         return mean, cov
 
     def _param_log_likelihood(self, theta, y, k):
@@ -204,8 +203,8 @@ class MarginalInference(StateSpaceInference):
         """
 
         # in non-additive case, augment mean and covariance
-        mean = self.x_mean_filt if self.ssm.q_additive else np.hstack((self.x_mean_filt, self.q_mean))
-        cov = self.x_cov_filt if self.ssm.q_additive else block_diag(self.x_cov_filt, self.q_cov)
+        mean = self.x_mean_fi if self.ssm.q_additive else np.hstack((self.x_mean_fi, self.q_mean))
+        cov = self.x_cov_fi if self.ssm.q_additive else block_diag(self.x_cov_fi, self.q_cov)
         assert mean.ndim == 1 and cov.ndim == 2
 
         # apply moment transform to compute predicted state mean, covariance
@@ -284,9 +283,7 @@ class MarginalInference(StateSpaceInference):
         (mean, cov): tuple
             Mean and covariance of the intractable parameter posterior.
         """
-        # Laplace approximation of p(theta | y_k) is a Gaussian
-        # 1. find theta_* = arg_max p(theta | y_k) ==> mean
-        # 2. evaluate Hessian of p(theta | y_k) at theta_* ==> covariance
+
         from scipy.optimize import minimize
         opt_res = minimize(self._param_neg_log_posterior, self.param_mean, (y, k), method='BFGS')
         self.param_mean, self.param_cov = opt_res.x, opt_res.hess_inv

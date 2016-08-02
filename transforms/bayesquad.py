@@ -17,6 +17,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         self.wm, self.Wc, self.Wcc = self._weights()
 
     def apply(self, f, mean, cov, pars):
+        # TODO: recompute weights if given
         mean = mean[:, na]
         chol_cov = cholesky(cov)
         x = mean + chol_cov.dot(self.model.points)
@@ -82,6 +83,7 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
         super(GPQ, self).__init__(dim, 'gp', kernel, points, kern_hyp, point_par)
 
     def _weights(self):
+        # TODO: make transform parameters an optional input arg
         x = self.model.points
         iK = self.model.kernel.eval_inv_dot(x)
         # kernel expectations

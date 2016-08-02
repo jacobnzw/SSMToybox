@@ -16,10 +16,10 @@ from numpy.linalg import cholesky
 # TODO: documentation
 
 
-class MomentTransform(object, metaclass=ABCMeta):
+class MomentTransform(metaclass=ABCMeta):
     @abstractmethod
     def apply(self, f, mean, cov, pars):
-        raise NotImplementedError
+        pass
 
 
 class SigmaPointTransform(MomentTransform, metaclass=ABCMeta):
@@ -41,9 +41,6 @@ class SigmaPointTransform(MomentTransform, metaclass=ABCMeta):
 
 class SigmaPointTruncTransform(SigmaPointTransform):
     # sigma-point transform respecting effective input dimensionality
-    # TODO: cross-covariance can still be computed with the lower-dimensional rule if lowdim points are extended with
-    # zeros to match the state dimension, amounts to updating only the observed state dimensions
-    # TODO: test again
 
     def apply(self, f, mean, cov, pars):
         mean = mean[:, na]
