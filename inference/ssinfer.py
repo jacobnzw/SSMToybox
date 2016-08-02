@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.linalg as la
 from scipy.linalg import cho_factor, cho_solve, block_diag
 from scipy.stats import multivariate_normal
 from numpy import newaxis as na
@@ -20,6 +21,7 @@ class StateSpaceInference(object):
             'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov', 'q_factor'
         )
         self.flags = {'filtered': False, 'smoothed': False}
+        # TODO: refactor long variable names: filt->fi, pred->pr, smooth->sm; run tests
         self.x_mean_pred, self.x_cov_pred, = None, None
         self.x_mean_smooth, self.x_cov_smooth = None, None
         self.xx_cov, self.xz_cov = None, None
@@ -82,7 +84,7 @@ class StateSpaceInference(object):
         self.sm_mean, self.sm_cov = None, None
         self.D, self.N = None, None
 
-    def _time_update(self, time):
+    def _time_update(self, time, *args):
         # in non-additive case, augment mean and covariance
         mean = self.x_mean_filt if self.ssm.q_additive else np.hstack((self.x_mean_filt, self.q_mean))
         cov = self.x_cov_filt if self.ssm.q_additive else block_diag(self.x_cov_filt, self.q_cov)
@@ -90,7 +92,7 @@ class StateSpaceInference(object):
 
         # apply moment transform to compute predicted state mean, covariance
         self.x_mean_pred, self.x_cov_pred, self.xx_cov = self.transf_dyn.apply(self.ssm.dyn_eval, mean, cov,
-                                                                               self.ssm.par_fcn(time))
+                                                                               self.ssm.par_fcn(time), *args)
         if self.ssm.q_additive:
             self.x_cov_pred += self.G.dot(self.q_cov).dot(self.G.T)
 
@@ -101,7 +103,7 @@ class StateSpaceInference(object):
 
         # apply moment transform to compute measurement mean, covariance
         self.z_mean_pred, self.z_cov_pred, self.xz_cov = self.transf_meas.apply(self.ssm.meas_eval, mean, cov,
-                                                                                self.ssm.par_fcn(time))
+                                                                                self.ssm.par_fcn(time), *args)
         # in additive case, noise covariances need to be added
         if self.ssm.r_additive:
             self.z_cov_pred += self.r_cov
@@ -110,7 +112,7 @@ class StateSpaceInference(object):
         self.xz_cov = self.xz_cov[:, :self.ssm.xD]
         self.xx_cov = self.xx_cov[:, :self.ssm.xD]
 
-    def _measurement_update(self, y):
+    def _measurement_update(self, y, *args):
         gain = cho_solve(cho_factor(self.z_cov_pred), self.xz_cov).T
         self.x_mean_filt = self.x_mean_pred + gain.dot(y - self.z_mean_pred)
         self.x_cov_filt = self.x_cov_pred - gain.dot(self.z_cov_pred).dot(gain.T)
@@ -134,9 +136,9 @@ class MarginalInference(StateSpaceInference):
         self.param_wts = SphericalRadial.weights(self.param_dim)
         self.param_pts_num = self.param_upts.shape[1]
 
-    def _measurement_update(self, y):
+    def _measurement_update(self, y, *args):
         """
-        Computes the posterior state mean and covariance by marginalizing out the GPQ-parameters.
+        Computes the posterior state mean and covariance by marginalizing out the moment transform parameters.
 
         Procedure has two steps:
           1. Compute Laplace approximation of the GPQ parameter posterior
@@ -153,16 +155,20 @@ class MarginalInference(StateSpaceInference):
 
         """
 
+        k = args[0]  # time index
         # Mean and covariance of the parameter posterior by Laplace approximation
         self._param_posterior_moments(y, k)
 
         # Marginalization of moment transform parameters
-        param_pts = self.param_mean[:, na] + self.param_cov.dot(self.param_upts)
+        param_cov_chol = la.cholesky(self.param_cov)
+        param_pts = self.param_mean[:, na] + param_cov_chol.dot(self.param_upts)
         mean = np.zeros(self.param_dim, self.param_pts_num)
         cov = np.zeros(self.param_dim, self.param_dim, self.param_pts_num)
+
         # Evaluate state posterior with different values of transform parameters
         for i in range(self.param_upts.shape[1]):
             mean[:, i], cov[:, :, i] = self._state_posterior_moments(param_pts[:, i], y, k)
+
         # Weighted sum of means and covariances approximates Gaussian mixture state posterior
         self.x_mean_filt = np.einsum('ij, j -> i', mean, self.param_wts)
         self.x_cov_filt = np.einsum('ijk, k -> ij', cov, self.param_wts)
@@ -196,6 +202,7 @@ class MarginalInference(StateSpaceInference):
         -------
             Value of likelihood for given vector of parameters and observation.
         """
+
         # in non-additive case, augment mean and covariance
         mean = self.x_mean_filt if self.ssm.q_additive else np.hstack((self.x_mean_filt, self.q_mean))
         cov = self.x_cov_filt if self.ssm.q_additive else block_diag(self.x_cov_filt, self.q_cov)
@@ -213,13 +220,9 @@ class MarginalInference(StateSpaceInference):
 
         # apply moment transform to compute measurement mean, covariance
         mean, cov, ccov = self.transf_meas.apply(self.ssm.meas_eval, mean, cov, self.ssm.par_fcn(k), theta)
-        # in additive case, noise covariances need to be added
         if self.ssm.r_additive:
             cov += self.r_cov
 
-        # # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)
-        # self.xz_cov = self.xz_cov[:, :self.ssm.xD]
-        # self.xx_cov = self.xx_cov[:, :self.ssm.xD]
         return multivariate_normal.logpdf(y, mean, cov)
 
     def _param_log_prior(self, theta):
