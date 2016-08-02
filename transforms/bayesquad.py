@@ -16,12 +16,14 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         # BQ transform weights for the mean, covariance and cross-covariance
         self.wm, self.Wc, self.Wcc = self._weights()
 
-    def apply(self, f, mean, cov, pars):
-        # TODO: recompute weights if given
+    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
+        # Re-compute weights if transform parameter tf_pars explicitly given
+        if tf_pars is not None:
+            self._weights(tf_pars)
         mean = mean[:, na]
         chol_cov = cholesky(cov)
         x = mean + chol_cov.dot(self.model.points)
-        fx = self._fcn_eval(f, x, pars)
+        fx = self._fcn_eval(f, x, fcn_pars)
         mean_f = self._mean(self.wm, fx)
         cov_f = self._covariance(self.Wc, fx, mean_f)
         cov_fx = self._cross_covariance(self.Wcc, fx, chol_cov)
@@ -43,26 +45,26 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
     # TODO: specify requirements for shape of input/output for all of these fcns
 
-    def minimum_variance_points(self, x0, hypers):
+    def minimum_variance_points(self, x0, tf_pars):
         # run optimizer to find minvar point sets using initial guess x0; requires implemented _integral_variance()
         pass
 
     @abstractmethod
-    def _weights(self):
+    def _weights(self, tf_pars):
         # no need for input args because points and hypers are in self.model.points and self.model.kernel.hypers
-        raise NotImplementedError
+        pass
 
     @abstractmethod
-    def _integral_variance(self, points, hypers):
+    def _integral_variance(self, points, tf_pars):
         # can serve for finding minimum variance point sets or hyper-parameters
         # optimizers require the first argument to be the variable, a decorator could be used to interchange the first
         # two arguments, so that we don't have to define the same function twice only w/ different signature
-        raise NotImplementedError
+        pass
 
     @abstractmethod
     def _fcn_eval(self, fcn, x, fcn_pars):
         # derived class decides whether to return derivatives also
-        raise NotImplementedError
+        pass
 
     def _mean(self, weights, fcn_evals):
         return fcn_evals.dot(weights)
@@ -82,15 +84,16 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
     def __init__(self, dim, kernel, points, kern_hyp=None, point_par=None):
         super(GPQ, self).__init__(dim, 'gp', kernel, points, kern_hyp, point_par)
 
-    def _weights(self):
-        # TODO: make transform parameters an optional input arg
+    def _weights(self, tf_pars=None):
         x = self.model.points
-        iK = self.model.kernel.eval_inv_dot(x)
-        # kernel expectations
-        q = self.model.kernel.exp_x_kx(x)
-        Q = self.model.kernel.exp_x_kxkx(x)
-        R = self.model.kernel.exp_x_xkx(x)
-        # quadrature weigts in terms of kernel expectations
+        iK = self.model.kernel.eval_inv_dot(x, tf_pars)
+
+        # Kernel expectations
+        q = self.model.kernel.exp_x_kx(x, tf_pars)
+        Q = self.model.kernel.exp_x_kxkx(x, tf_pars)
+        R = self.model.kernel.exp_x_xkx(x, tf_pars)
+
+        # BQ weights in terms of kernel expectations
         w_m = q.dot(iK)
         w_c = iK.dot(Q).dot(iK)
         w_cc = R.dot(iK)
@@ -99,7 +102,7 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
     def _fcn_eval(self, fcn, x, fcn_pars):
         return np.apply_along_axis(fcn, 0, x, fcn_pars)
 
-    def _integral_variance(self, points, hypers):
+    def _integral_variance(self, points, tf_pars):
         pass
 
 
@@ -107,14 +110,16 @@ class TPQ(BQTransform):
     def __init__(self, dim, kernel, points, kern_hyp=None, point_par=None, nu=None):
         super(TPQ, self).__init__(dim, 'tp', kernel, points, kern_hyp, point_par, nu=nu)
 
-    def _weights(self):
+    def _weights(self, tf_pars=None):
         x = self.model.points
-        iK = self.model.kernel.eval_inv_dot(x)
-        # kernel expectations
-        q = self.model.kernel.exp_x_kx(x)
-        Q = self.model.kernel.exp_x_kxkx(x)
-        R = self.model.kernel.exp_x_xkx(x)
-        # quadrature weigts in terms of kernel expectations
+        iK = self.model.kernel.eval_inv_dot(x, tf_pars)
+
+        # Kernel expectations
+        q = self.model.kernel.exp_x_kx(x, tf_pars)
+        Q = self.model.kernel.exp_x_kxkx(x, tf_pars)
+        R = self.model.kernel.exp_x_xkx(x, tf_pars)
+
+        # BQ weights in terms of kernel expectations
         w_m = q.dot(iK)
         w_c = iK.dot(Q).dot(iK)
         w_cc = R.dot(iK)
@@ -123,5 +128,5 @@ class TPQ(BQTransform):
     def _fcn_eval(self, fcn, x, fcn_pars):
         return np.apply_along_axis(fcn, 0, x, fcn_pars)
 
-    def _integral_variance(self, points, hypers):
+    def _integral_variance(self, points, tf_pars):
         pass

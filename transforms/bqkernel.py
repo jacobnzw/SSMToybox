@@ -32,7 +32,7 @@ class Kernel(object, metaclass=ABCMeta):
     # evaluation
     @abstractmethod
     def eval(self, x1, x2=None, hyp=None, diag=False):
-        raise NotImplementedError
+        pass
 
     # TODO: methods could return their byproducts, such as kernel matrix
     # TODO: other methods could optionally accept them to save computation
@@ -51,20 +51,25 @@ class Kernel(object, metaclass=ABCMeta):
     @abstractmethod
     def exp_x_xkx(self, x, hyp=None):
         pass
+
     @abstractmethod
     def exp_x_kxx(self, hyp=None):
         pass
+
     @abstractmethod
     def exp_xy_kxy(self, hyp=None):
         pass
+
     @abstractmethod
     def exp_x_kxkx(self, x, hyp=None):
         pass
+
     # derivatives
     @abstractmethod
     def der_hyp(self, x, hyp0):
         # evaluates derivative of the kernel matrix at hyp0; x is data, now acting as parameter
         pass
+
     @abstractmethod
     def _get_default_hyperparameters(self, dim):
         pass
