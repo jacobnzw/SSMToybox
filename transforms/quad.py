@@ -24,12 +24,12 @@ class MonteCarlo(MomentTransform):
         self.wm, self.Wc = self.weights(n)
         self.unit_sp = self.unit_sigma_points(dim, n)
 
-    def apply(self, f, mean, cov, pars):
+    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
         mean = mean[:, na]
         # form sigma-points from unit sigma-points
         x = mean + la.cholesky(cov).dot(self.unit_sp)
         # push sigma-points through non-linearity
-        fx = np.apply_along_axis(f, 0, x, pars)
+        fx = np.apply_along_axis(f, 0, x, fcn_pars)
         # output mean
         mean_f = (self.wm * fx).sum(axis=1)
         # output covariance

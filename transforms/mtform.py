@@ -1,5 +1,3 @@
-
-
 from abc import ABCMeta, abstractmethod
 
 import numpy as np
@@ -18,17 +16,17 @@ from numpy.linalg import cholesky
 
 class MomentTransform(metaclass=ABCMeta):
     @abstractmethod
-    def apply(self, f, mean, cov, pars):
+    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
         pass
 
 
 class SigmaPointTransform(MomentTransform, metaclass=ABCMeta):
-    def apply(self, f, mean, cov, pars):
+    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
         mean = mean[:, na]
         # form sigma-points from unit sigma-points
         x = mean + cholesky(cov).dot(self.unit_sp)
         # push sigma-points through non-linearity
-        fx = np.apply_along_axis(f, 0, x, pars)
+        fx = np.apply_along_axis(f, 0, x, fcn_pars)
         # output mean
         mean_f = fx.dot(self.wm)
         # output covariance
@@ -42,7 +40,7 @@ class SigmaPointTransform(MomentTransform, metaclass=ABCMeta):
 class SigmaPointTruncTransform(SigmaPointTransform):
     # sigma-point transform respecting effective input dimensionality
 
-    def apply(self, f, mean, cov, pars):
+    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
         mean = mean[:, na]
 
         # consider only effective dimension
@@ -54,8 +52,8 @@ class SigmaPointTruncTransform(SigmaPointTransform):
         x = mean + cholesky(cov).dot(self.unit_sp)
 
         # push sigma-points through non-linearity
-        fx_eff = np.apply_along_axis(f, 0, x_eff, pars)
-        fx = np.apply_along_axis(f, 0, x, pars)
+        fx_eff = np.apply_along_axis(f, 0, x_eff, fcn_pars)
+        fx = np.apply_along_axis(f, 0, x, fcn_pars)
 
         # output mean
         mean_f = fx_eff.dot(self.wm)

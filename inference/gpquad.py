@@ -1,4 +1,4 @@
-from inference.ssinfer import StateSpaceInference
+from inference.ssinfer import StateSpaceInference, MarginalInference
 from models.ssmodel import StateSpaceModel
 from transforms.bayesquad import GPQ
 import numpy as np
@@ -16,6 +16,17 @@ class GPQKalman(StateSpaceInference):
         t_dyn = GPQ(nq, kernel, points, kern_hyp_dyn, point_hyp)
         t_obs = GPQ(nr, kernel, points, kern_hyp_obs, point_hyp)
         super(GPQKalman, self).__init__(sys, t_dyn, t_obs)
+
+
+class GPQMKalman(MarginalInference):
+
+    def __init__(self, sys, kernel, points, kern_hyp_dyn=None, kern_hyp_obs=None, point_hyp=None):
+        assert isinstance(sys, StateSpaceModel)
+        nq = sys.xD if sys.q_additive else sys.xD + sys.qD
+        nr = sys.xD if sys.r_additive else sys.xD + sys.rD
+        t_dyn = GPQ(nq, kernel, points, kern_hyp_dyn, point_hyp)
+        t_obs = GPQ(nr, kernel, points, kern_hyp_obs, point_hyp)
+        super(GPQMKalman, self).__init__(sys, t_dyn, t_obs)
 
 
 def main():

@@ -7,9 +7,9 @@ class Taylor1stOrder(MomentTransform):
     def __init__(self, dim):
         self.dim = dim
 
-    def apply(self, f, mean, cov, pars):
-        mean_f = f(mean, pars)
-        jacobian_f = f(mean, pars, dx=True)
+    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
+        mean_f = f(mean, fcn_pars)
+        jacobian_f = f(mean, fcn_pars, dx=True)
         jacobian_f = jacobian_f.reshape(len(mean_f), self.dim)
         cov_fx = jacobian_f.dot(cov)
         cov_f = cov_fx.dot(jacobian_f.T)
@@ -17,7 +17,7 @@ class Taylor1stOrder(MomentTransform):
 
 
 class Taylor2ndOrder(MomentTransform):
-    def apply(self, f, mean, cov, pars):
+    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
         pass
 
 
@@ -37,13 +37,13 @@ class TaylorGPQD(MomentTransform):
         self.mvar_list = []
         self.ivar_list = []
 
-    def apply(self, f, mean, cov, pars):
+    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
         # TODO: equations can be optimized further
         # wm = la.det(cov.dot(self.iLam) + self.eye_d) ** -0.5
         wm = la.det(self.iLam.dot(cov) + self.eye_d) ** -0.5
-        fm = f(mean, pars)
+        fm = f(mean, fcn_pars)
         mean_f = wm * fm
-        jacobian_f = f(mean, pars, dx=True)
+        jacobian_f = f(mean, fcn_pars, dx=True)
         jacobian_f = jacobian_f.reshape(len(mean_f), self.dim)
         # wc = la.det(cov.dot(2 * self.iLam) + self.eye_d) ** -0.5
         wc = la.det(2 * self.iLam.dot(cov) + self.eye_d) ** -0.5
@@ -62,5 +62,5 @@ class Linear(MomentTransform):
     # the Jacobians would be A and H, which mean TaylorFirstOrder is exact inference for linear functions and,
     # in a sense, Kalman filter does not have to be explicitly implemented, because the ExtendedKalman becomes
     # Kalman for linear f() and h().
-    def apply(self, f, mean, cov, pars):
+    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
         pass
