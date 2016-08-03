@@ -48,7 +48,7 @@ class StateSpaceInference(object):
             self.pr_mean[..., k] = self.x_mean_pr
             self.pr_cov[..., k] = self.x_cov_pr
             self.pr_xx_cov[..., k] = self.xx_cov
-            self._measurement_update(data[:, k])
+            self._measurement_update(data[:, k], k)
             self.fi_mean[..., k], self.fi_cov[..., k] = self.x_mean_fi, self.x_cov_fi
         # set flag that filtered state sequence is available
         self.set_flag('filtered', True)
@@ -111,7 +111,7 @@ class StateSpaceInference(object):
         self.xz_cov = self.xz_cov[:, :self.ssm.xD]
         self.xx_cov = self.xx_cov[:, :self.ssm.xD]
 
-    def _measurement_update(self, y):
+    def _measurement_update(self, y, time=None):
         gain = cho_solve(cho_factor(self.z_cov_pred), self.xz_cov).T
         self.x_mean_fi = self.x_mean_pr + gain.dot(y - self.z_mean_pred)
         self.x_cov_fi = self.x_cov_pr - gain.dot(self.z_cov_pred).dot(gain.T)
@@ -134,9 +134,14 @@ class MarginalInference(StateSpaceInference):
     def __init__(self, ssm, transf_dyn, transf_meas):
         super(MarginalInference, self).__init__(ssm, transf_dyn, transf_meas)
 
+        # Number of parameters for each moment transform and total number of parameters
+        # TODO: Generalize, transform should provide number of parameters (sum of kernel, model and point parameters)
+        self.param_dyn_dim = self.ssm.xD + 1
+        self.param_obs_dim = self.ssm.xD + 1
+        self.param_dim = self.param_dyn_dim + self.param_obs_dim
+
         # Prior parameter mean and covariance
-        self.param_dim = 2 * (self.ssm.xD + 1)  # FIXME: not general, assumes 2*(xD + 1) parameters
-        self.param_mean = np.zeros(self.param_dim, )
+        self.param_mean = np.zeros(self.param_dim, ) + 1
         self.param_cov = np.eye(self.param_dim)
 
         # Spherical-radial quadrature rule for marginalizing transform parameters
@@ -170,11 +175,11 @@ class MarginalInference(StateSpaceInference):
         # Marginalization of moment transform parameters
         param_cov_chol = la.cholesky(self.param_cov)
         param_pts = self.param_mean[:, na] + param_cov_chol.dot(self.param_upts)
-        mean = np.zeros(self.param_dim, self.param_pts_num)
-        cov = np.zeros(self.param_dim, self.param_dim, self.param_pts_num)
+        mean = np.zeros((self.ssm.xD, self.param_pts_num))
+        cov = np.zeros((self.ssm.xD, self.ssm.xD, self.param_pts_num))
 
         # Evaluate state posterior with different values of transform parameters
-        for i in range(self.param_upts.shape[1]):
+        for i in range(self.param_pts_num):
             mean[:, i], cov[:, :, i] = self._state_posterior_moments(param_pts[:, i], y, time)
 
         # Weighted sum of means and covariances approximates Gaussian mixture state posterior
@@ -201,7 +206,7 @@ class MarginalInference(StateSpaceInference):
         """
 
         # Dynamics and observation model parameters
-        theta_dyn, theta_obs = np.exp(theta[:self.param_dim]), np.exp(theta[self.param_dim:])
+        theta_dyn, theta_obs = np.exp(theta[:self.param_dyn_dim]), np.exp(theta[self.param_dyn_dim:])
 
         # Moments of the joint N(x_k, y_k | y_1:k-1, theta)
         self._time_update(k, theta_dyn, theta_obs)
@@ -231,7 +236,7 @@ class MarginalInference(StateSpaceInference):
         """
 
         # Dynamics and observation model parameters
-        theta_dyn, theta_obs = np.exp(theta[:self.param_dim]), np.exp(theta[self.param_dim:])
+        theta_dyn, theta_obs = np.exp(theta[:self.param_dyn_dim]), np.exp(theta[self.param_dyn_dim:])
 
         # in non-additive case, augment mean and covariance
         mean = self.x_mean_fi if self.ssm.q_additive else np.hstack((self.x_mean_fi, self.q_mean))
