@@ -5,6 +5,7 @@ import numpy.linalg as la
 
 from inference.gpquad import GPQMKalman
 from models.ungm import UNGM
+from models.pendulum import Pendulum
 
 
 class GPQMarginalizedTest(TestCase):
@@ -33,9 +34,14 @@ class GPQMarginalizedTest(TestCase):
         alg = GPQMKalman(ssm, 'rbf', 'sr')
         alg._measurement_update(ssm_observations[:, 0, 0], 1)
 
-    def test_filtering(self):
+    def test_filtering_ungm(self):
         ssm = UNGM()
-        ssm_state, ssm_observations = ssm.simulate(50)
-        alg = GPQMKalman(ssm, 'rbf', 'ut')
+        ssm_state, ssm_observations = ssm.simulate(100)
+        alg = GPQMKalman(ssm, 'rbf', 'sr')
         alg.forward_pass(ssm_observations[..., 0])
-        pass
+
+    def test_filtering_pendulum(self):
+        ssm = Pendulum()
+        ssm_state, ssm_observations = ssm.simulate(100)
+        alg = GPQMKalman(ssm, 'rbf', 'sr')
+        alg.forward_pass(ssm_observations[..., 0])

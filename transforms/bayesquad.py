@@ -19,7 +19,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
     def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
         # Re-compute weights if transform parameter tf_pars explicitly given
         if tf_pars is not None:
-            self._weights(tf_pars)
+            self.wm, self.Wc, self.Wcc = self._weights(tf_pars)
         mean = mean[:, na]
         chol_cov = cholesky(cov)
         x = mean + chol_cov.dot(self.model.points)

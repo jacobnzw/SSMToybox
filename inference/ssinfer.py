@@ -140,9 +140,14 @@ class MarginalInference(StateSpaceInference):
         self.param_obs_dim = self.ssm.xD + 1
         self.param_dim = self.param_dyn_dim + self.param_obs_dim
 
-        # Prior parameter mean and covariance
-        self.param_mean = np.zeros(self.param_dim, ) + 1
-        self.param_cov = np.eye(self.param_dim)
+        # Log-parameter prior mean and covariance
+        self.param_prior_mean = np.zeros(self.param_dim, )
+        self.param_prior_cov = np.eye(self.param_dim)
+        # Log-parameter posterior moments initialized with prior
+        self.param_mean = self.param_prior_mean
+        self.param_cov = self.param_prior_cov
+        # Jitter for parameter vector
+        self.param_jitter = 1e-8 * np.eye(self.param_dim)
 
         # Spherical-radial quadrature rule for marginalizing transform parameters
         from transforms.quad import SphericalRadial
@@ -180,6 +185,7 @@ class MarginalInference(StateSpaceInference):
 
         # Evaluate state posterior with different values of transform parameters
         for i in range(self.param_pts_num):
+            # FIXME: fcn recomputes predictive estimates (x_mean_pr, x_cov_pr, ...)
             mean[:, i], cov[:, :, i] = self._state_posterior_moments(param_pts[:, i], y, time)
 
         # Weighted sum of means and covariances approximates Gaussian mixture state posterior
@@ -235,7 +241,7 @@ class MarginalInference(StateSpaceInference):
             Value of likelihood for given vector of parameters and observation.
         """
 
-        # Dynamics and observation model parameters
+        # Dynamics and observation model parameters, convert from log-space
         theta_dyn, theta_obs = np.exp(theta[:self.param_dyn_dim]), np.exp(theta[self.param_dyn_dim:])
 
         # in non-additive case, augment mean and covariance
@@ -322,6 +328,9 @@ class MarginalInference(StateSpaceInference):
 
         from scipy.optimize import minimize
         # Find theta_* = arg_max log N(y_k | m(theta), P(theta)) + log N(theta | mu, Pi)
-        # Initial guess is parameter prior mean, i.e. theta_0 = mu
-        opt_res = minimize(self._param_neg_log_posterior, self.param_mean, (y, k), method='BFGS')
-        self.param_mean, self.param_cov = opt_res.x, opt_res.hess_inv
+
+        # Initial guess is parameter prior mean (which initial guess to choose?)
+        # theta_0 = self.param_prior_mean
+        theta_0 = self.param_mean
+        opt_res = minimize(self._param_neg_log_posterior, theta_0, (y, k), method='BFGS')
+        self.param_mean, self.param_cov = opt_res.x, opt_res.hess_inv #+ self.param_jitter
