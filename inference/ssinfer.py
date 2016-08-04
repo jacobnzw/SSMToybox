@@ -8,11 +8,11 @@ from transforms.mtform import MomentTransform
 
 
 class StateSpaceInference(object):
-    def __init__(self, ssm, transf_dyn, transf_meas):
+    def __init__(self, ssm, tf_dyn, tf_meas):
         # separate moment transforms for system dynamics and measurement model
-        assert isinstance(transf_dyn, MomentTransform) and isinstance(transf_meas, MomentTransform)
-        self.tf_dyn = transf_dyn
-        self.tf_meas = transf_meas
+        assert isinstance(tf_dyn, MomentTransform) and isinstance(tf_meas, MomentTransform)
+        self.tf_dyn = tf_dyn
+        self.tf_meas = tf_meas
         # dynamical system whose state is to be estimated
         assert isinstance(ssm, StateSpaceModel)
         self.ssm = ssm
@@ -131,8 +131,8 @@ class MarginalInference(StateSpaceInference):
 
     """
 
-    def __init__(self, ssm, transf_dyn, transf_meas):
-        super(MarginalInference, self).__init__(ssm, transf_dyn, transf_meas)
+    def __init__(self, ssm, tf_dyn, tf_meas, par_mean=None, par_cov=None):
+        super(MarginalInference, self).__init__(ssm, tf_dyn, tf_meas)
 
         # Number of parameters for each moment transform and total number of parameters
         # TODO: Generalize, transform should provide number of parameters (sum of kernel, model and point parameters)
@@ -141,8 +141,8 @@ class MarginalInference(StateSpaceInference):
         self.param_dim = self.param_dyn_dim + self.param_obs_dim
 
         # Log-parameter prior mean and covariance
-        self.param_prior_mean = np.zeros(self.param_dim, )
-        self.param_prior_cov = np.eye(self.param_dim)
+        self.param_prior_mean = np.zeros(self.param_dim, ) if par_mean is None else par_mean
+        self.param_prior_cov = np.eye(self.param_dim) if par_cov is None else par_cov
         # Log-parameter posterior moments initialized with prior
         self.param_mean = self.param_prior_mean
         self.param_cov = self.param_prior_cov
@@ -154,6 +154,12 @@ class MarginalInference(StateSpaceInference):
         self.param_upts = SphericalRadial.unit_sigma_points(self.param_dim)
         self.param_wts = SphericalRadial.weights(self.param_dim)
         self.param_pts_num = self.param_upts.shape[1]
+
+    def reset(self):
+        super(MarginalInference, self).reset()
+        # Reset parameter moments to prior moments
+        self.param_mean = self.param_prior_mean
+        self.param_cov = self.param_prior_cov
 
     def _measurement_update(self, y, time=None):
         """
@@ -186,6 +192,7 @@ class MarginalInference(StateSpaceInference):
         # Evaluate state posterior with different values of transform parameters
         for i in range(self.param_pts_num):
             # FIXME: fcn recomputes predictive estimates (x_mean_pr, x_cov_pr, ...)
+            # FIXME: predictive moments should be computed by quadrature, based on param prior
             mean[:, i], cov[:, :, i] = self._state_posterior_moments(param_pts[:, i], y, time)
 
         # Weighted sum of means and covariances approximates Gaussian mixture state posterior
@@ -333,4 +340,4 @@ class MarginalInference(StateSpaceInference):
         # theta_0 = self.param_prior_mean
         theta_0 = self.param_mean
         opt_res = minimize(self._param_neg_log_posterior, theta_0, (y, k), method='BFGS')
-        self.param_mean, self.param_cov = opt_res.x, opt_res.hess_inv #+ self.param_jitter
+        self.param_mean, self.param_cov = opt_res.x, opt_res.hess_inv + self.param_jitter

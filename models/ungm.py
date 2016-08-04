@@ -132,7 +132,7 @@ def ungm_filter_demo(filt_class, *args, **kwargs):
     # create filter object, pass in additional kwargs
     filt = filt_class(system, *args, **kwargs)
     # simulate dynamic system for given number of steps and mc simulations
-    time_steps, mc = 500, 100
+    time_steps, mc = 50, 5
     x, z = system.simulate(time_steps, mc_sims=mc)
     print("Running {} filter/smoother ({} time steps, {} MC simulations) ...".format(filt_class.__name__,
                                                                                      time_steps, mc))
