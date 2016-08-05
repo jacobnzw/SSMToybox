@@ -337,9 +337,13 @@ class MarginalInference(StateSpaceInference):
         # Find theta_* = arg_max log N(y_k | m(theta), P(theta)) + log N(theta | mu, Pi)
 
         # Initial guess; PROBLEM: which initial guess to choose?
-        # theta_0 = np.random.multivariate_normal(self.param_mean, self.param_cov, 1)  # random from previous posterior
-        # theta_0 = np.random.multivariate_normal(self.param_prior_mean, self.param_prior_cov, 1)  # random from prior
+        # random from prior
+        # theta_0 = np.random.multivariate_normal(self.param_prior_mean, self.param_prior_cov, 1)
         # theta_0 = self.param_prior_mean
+        # random from previous posterior
+        # theta_0 = np.random.multivariate_normal(self.param_mean, self.param_cov, 1).squeeze()
         theta_0 = self.param_mean
+        # Solver options
+
         opt_res = minimize(self._param_neg_log_posterior, theta_0, (y, k), method='BFGS')
         self.param_mean, self.param_cov = opt_res.x, opt_res.hess_inv + self.param_jitter

@@ -31,20 +31,20 @@ class GPQMKalman(MarginalInference):
 
 def main():
     # UNGM demo
-    from models.ungm import ungm_filter_demo
     # These hyper-parameters provide visibly good GP fit (mean function follows the true function and predictive
     # variances are sufficiently large to cover the true function variation) for GH-15 points and YET the performance
     # of the filter is no better than the classical counterpart (GHKF-15). Whereas when the hyper-parameters for
     # the dynamics model are alpha=1.0, el=0.1 the GP fit looks completely ridiculous (overfit w/ low predictive
     # variance) and YET the filter outperforms the GHKF-15. How is this possible? Clearly the GP fit does not seem to
     # be decisive when it comes to filter performance.
+    from models.ungm import ungm_filter_demo
     hdyn = {'alpha': 2.5, 'el': 0.1}
     hobs = {'alpha': 1.0, 'el': 1.0 * np.ones(1)}
     ut_hyp = {'kappa': 0.0}
     # ungm_filter_demo(GPQKalman, 'rbf', 'sr', kern_hyp_dyn=hdyn, kern_hyp_obs=hobs, point_hyp=ut_hyp)
-    par_prior_mean = np.log(np.array([1, 0.1, 1, 0.1]))
-    par_prior_cov = np.diag([0.1, 5, 0.1, 5])
-    ungm_filter_demo(GPQMKalman, 'rbf', 'sr', par_mean=None, par_cov=None)
+    par_prior_mean = np.log(np.array([1, 1, 1, 1]))
+    par_prior_cov = np.diag([1, 1, 1, 1])
+    ungm_filter_demo(GPQMKalman, 'rbf', 'sr', par_mean=par_prior_mean, par_cov=par_prior_cov)
 
 
     # Pendulum demo
