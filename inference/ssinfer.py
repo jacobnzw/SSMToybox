@@ -23,7 +23,7 @@ class StateSpaceInference(object):
         self.flags = {'filtered': False, 'smoothed': False}
         self.x_mean_pr, self.x_cov_pr, = None, None
         self.x_mean_sm, self.x_cov_sm = None, None
-        self.xx_cov, self.xz_cov = None, None
+        self.xx_cov, self.xy_cov = None, None
         self.pr_mean, self.pr_cov, self.pr_xx_cov = None, None, None
         self.fi_mean, self.fi_cov = None, None
         self.sm_mean, self.sm_cov = None, None
@@ -74,14 +74,14 @@ class StateSpaceInference(object):
 
     def reset(self):
         self.x_mean_fi, self.x_cov_fi = self.ssm.get_pars('x0_mean', 'x0_cov')
-        self.flags = {'filtered': False, 'smoothed': False}
-        self.x_mean_pr, self.x_cov_pr, = None, None
+        self.x_mean_pr, self.x_cov_pr = None, None
         self.x_mean_sm, self.x_cov_sm = None, None
-        self.xx_cov, self.xz_cov = None, None
+        self.xx_cov, self.xy_cov = None, None
         self.pr_mean, self.pr_cov, self.pr_xx_cov = None, None, None
         self.fi_mean, self.fi_cov = None, None
         self.sm_mean, self.sm_cov = None, None
         self.D, self.N = None, None
+        self.flags = {'filtered': False, 'smoothed': False}
 
     def _time_update(self, time, theta_dyn=None, theta_obs=None):
         # in non-additive case, augment mean and covariance
@@ -101,20 +101,20 @@ class StateSpaceInference(object):
         assert mean.ndim == 1 and cov.ndim == 2
 
         # apply moment transform to compute measurement mean, covariance
-        self.z_mean_pred, self.z_cov_pred, self.xz_cov = self.tf_meas.apply(self.ssm.meas_eval, mean, cov,
-                                                                            self.ssm.par_fcn(time), theta_obs)
+        self.y_mean_pr, self.y_cov_pr, self.xy_cov = self.tf_meas.apply(self.ssm.meas_eval, mean, cov,
+                                                                        self.ssm.par_fcn(time), theta_obs)
         # in additive case, noise covariances need to be added
         if self.ssm.r_additive:
-            self.z_cov_pred += self.r_cov
+            self.y_cov_pr += self.r_cov
 
         # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)
-        self.xz_cov = self.xz_cov[:, :self.ssm.xD]
+        self.xy_cov = self.xy_cov[:, :self.ssm.xD]
         self.xx_cov = self.xx_cov[:, :self.ssm.xD]
 
     def _measurement_update(self, y, time=None):
-        gain = cho_solve(cho_factor(self.z_cov_pred), self.xz_cov).T
-        self.x_mean_fi = self.x_mean_pr + gain.dot(y - self.z_mean_pred)
-        self.x_cov_fi = self.x_cov_pr - gain.dot(self.z_cov_pred).dot(gain.T)
+        gain = cho_solve(cho_factor(self.y_cov_pr), self.xy_cov).T
+        self.x_mean_fi = self.x_mean_pr + gain.dot(y - self.y_mean_pr)
+        self.x_cov_fi = self.x_cov_pr - gain.dot(self.y_cov_pr).dot(gain.T)
 
     def _smoothing_update(self):
         gain = cho_solve(cho_factor(self.x_cov_pr), self.xx_cov).T
@@ -225,9 +225,9 @@ class MarginalInference(StateSpaceInference):
         self._time_update(k, theta_dyn, theta_obs)
 
         # Moments of the conditional state posterior N(x_k | y_1:k, theta)
-        gain = cho_solve(cho_factor(self.z_cov_pred), self.xz_cov).T
-        mean = self.x_mean_pr + gain.dot(y - self.z_mean_pred)
-        cov = self.x_cov_pr - gain.dot(self.z_cov_pred).dot(gain.T)
+        gain = cho_solve(cho_factor(self.y_cov_pr), self.xy_cov).T
+        mean = self.x_mean_pr + gain.dot(y - self.y_mean_pr)
+        cov = self.x_cov_pr - gain.dot(self.y_cov_pr).dot(gain.T)
         return mean, cov
 
     def _param_log_likelihood(self, theta, y, k):
@@ -336,7 +336,9 @@ class MarginalInference(StateSpaceInference):
         from scipy.optimize import minimize
         # Find theta_* = arg_max log N(y_k | m(theta), P(theta)) + log N(theta | mu, Pi)
 
-        # Initial guess is parameter prior mean (which initial guess to choose?)
+        # Initial guess; PROBLEM: which initial guess to choose?
+        # theta_0 = np.random.multivariate_normal(self.param_mean, self.param_cov, 1)  # random from previous posterior
+        # theta_0 = np.random.multivariate_normal(self.param_prior_mean, self.param_prior_cov, 1)  # random from prior
         # theta_0 = self.param_prior_mean
         theta_0 = self.param_mean
         opt_res = minimize(self._param_neg_log_posterior, theta_0, (y, k), method='BFGS')

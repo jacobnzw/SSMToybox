@@ -38,13 +38,13 @@ def main():
     # the dynamics model are alpha=1.0, el=0.1 the GP fit looks completely ridiculous (overfit w/ low predictive
     # variance) and YET the filter outperforms the GHKF-15. How is this possible? Clearly the GP fit does not seem to
     # be decisive when it comes to filter performance.
-    # hdyn = {'alpha': 2.5, 'el': 0.1}
-    # hobs = {'alpha': 1.0, 'el': 1.0 * np.ones(1)}
-    # ut_hyp = {'kappa': 0.0}
-    # # ungm_filter_demo(GPQKalman, 'rbf', 'sr', kern_hyp_dyn=hdyn, kern_hyp_obs=hobs, point_hyp=ut_hyp)
-    # par_prior_mean = np.log(np.array([1, 0.1, 1, 0.1]))
-    # par_prior_cov = np.diag([0.1, 5, 0.1, 5])
-    # ungm_filter_demo(GPQMKalman, 'rbf', 'sr', par_mean=par_prior_mean, par_cov=par_prior_cov)
+    hdyn = {'alpha': 2.5, 'el': 0.1}
+    hobs = {'alpha': 1.0, 'el': 1.0 * np.ones(1)}
+    ut_hyp = {'kappa': 0.0}
+    # ungm_filter_demo(GPQKalman, 'rbf', 'sr', kern_hyp_dyn=hdyn, kern_hyp_obs=hobs, point_hyp=ut_hyp)
+    par_prior_mean = np.log(np.array([1, 0.1, 1, 0.1]))
+    par_prior_cov = np.diag([0.1, 5, 0.1, 5])
+    ungm_filter_demo(GPQMKalman, 'rbf', 'sr', par_mean=None, par_cov=None)
 
 
     # Pendulum demo
