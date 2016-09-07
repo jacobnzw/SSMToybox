@@ -260,10 +260,24 @@ class System(object, metaclass=ABCMeta):
                 x[:, k, imc] = ode_method(self.dyn_fcn, x[:, k - 1, imc], q[:, k - 1, imc], theta, dt)
         return x
 
-    def simulate_measurements(self, x, freq=10, mc_per_step=1):
-        # x-state trajectory, freq-sampling frequency [Hz],
-        # mc_per_step-how many measurement to generate in each time step
-        pass
+    def simulate_measurements(self, x, mc_per_step=1):
+        # x - state trajectory, freq - sampling frequency [Hz],
+        # mc_per_step - how many measurement to generate in each time step
+
+        # get the system statistics
+        stats = 'r_mean', 'r_cov'
+        r_mean, r_cov = self.get_pars(*stats)
+        d, steps = x.shape
+
+        # Generate measurement noise
+        r = np.random.multivariate_normal(r_mean, r_cov, (mc_per_step, steps)).T
+        y = np.zeros((self.zD, steps, mc_per_step))
+        for imc in range(mc_per_step):
+            for k in range(1, steps):
+                theta = self.par_fcn(k - 1)
+                y[:, k, imc] = self.meas_fcn(x[:, k], r[:, k, imc], theta)
+        return y
+
 
     def _ode_euler(self, func, x, q, theta, dt):
         # Euler ODE integration
@@ -398,6 +412,8 @@ from matplotlib.gridspec import GridSpec
 sys = ReentryRadar()
 mc = 10
 x = sys.simulate_trajectory(method='rk4', dt=0.05, duration=200, mc_sims=mc)
+y = sys.simulate_measurements(x[..., 0])
+
 plt.figure()
 g = GridSpec(2, 4)
 plt.subplot(g[:, :2])
@@ -409,5 +425,5 @@ plt.plot(sys.sx, sys.sy, 'ko')
 for i in range(mc):
     plt.plot(x[0, :, i], x[1, :, i], alpha=0.35, color='r', ls='--')
 plt.subplot(g[:, 2:], polar=True)
-# plt.plot((z[1, :, 0]), z[0, :, 0], 'ko')
+plt.plot((y[1, :, 0]), y[0, :, 0], 'ko')
 plt.show()
