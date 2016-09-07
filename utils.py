@@ -10,13 +10,13 @@ D - dimension, N - time steps, M - MC simulations, ... - other optional irreleva
 """
 
 
-def rmse(x, m):
+def se(x, m):
     """
-    Root Mean Squared Error
+    Squared Error
 
     .. math::
 
-    \sqrt{\frac{1}{K}\sum\limits_{k=1}^{K}(x_k - m_k)^{\top}(x_k - m_k)}
+    SE = (x_k - m_k)^2
 
     Parameters
     ----------
@@ -33,8 +33,7 @@ def rmse(x, m):
     """
 
     dx = x[..., na] - m
-    MSE = (dx[:, 1:, ...] ** 2).mean(axis=1)  # average over time steps
-    return np.sqrt(MSE)
+    return dx[:, 1:, ...] ** 2
 
 
 def nci(x, m, P):
@@ -84,7 +83,7 @@ def nci(x, m, P):
                 dx_iP_dx = dx[:, k, s, alg].dot(np.linalg.inv(P[..., k, s, alg])).dot(dx[:, k, s, alg])
                 dx_iMSE_dx = dx[:, k, s, alg].dot(np.linalg.inv(MSE[..., k, alg])).dot(dx[:, k, s, alg])
                 NCI[..., k, s, alg] = 10 * np.log10(dx_iP_dx) - 10 * np.log10(dx_iMSE_dx)
-    return NCI[:, 1:, ...].mean(axis=1)  # average over time steps (ignore the 1st)
+    return NCI
 
 
 def nll(x, m, P):
@@ -114,7 +113,7 @@ def nll(x, m, P):
                 S = P[..., k, s, fi]
                 dx_iP_dx[:, k, s, fi] = dx[:, k, s, fi].dot(np.linalg.inv(S)).dot(dx[:, k, s, fi])
                 NLL[:, k, s, fi] = 0.5 * (np.log(np.linalg.det(S)) + dx_iP_dx[:, k, s, fi] + d * np.log(2 * np.pi))
-    return NLL[:, 1:, ...].mean(axis=1)  # average over time steps (ignore the 1st)
+    return NLL
 
 
 def kl(mean_0, cov_0, mean_1, cov_1):
