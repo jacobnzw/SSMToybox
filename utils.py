@@ -10,7 +10,7 @@ D - dimension, N - time steps, M - MC simulations, ... - other optional irreleva
 """
 
 
-def se(x, m):
+def squared_error(x, m):
     """
     Squared Error
 
@@ -32,58 +32,37 @@ def se(x, m):
 
     """
 
-    dx = x[..., na] - m
-    return dx[:, 1:, ...] ** 2
+    return (x - m) ** 2
 
 
-def nci(x, m, P):
+def mse_matrix(x, m):
     """
-    Non-credibility index of the state estimate
-
-    .. math::
-
-        \frac{10}{K}\sum\limits_{k=1}^{K} \log_10 \frac{(x - m)^{\top}P^{-1}(x - m)}{(x - m)^{\top}\Sig^{-1}(x - m)},
-
-    where the :math:`\Sig` is the MSE matrix.
+    Sample Mean Square Error matrix
 
     Parameters
     ----------
-    x:
-        True state
-    m:
-        State mean
-    P:
-        State covariance
+    x
+    m
 
     Returns
     -------
 
     """
-    # dimension of state, # time steps, # MC simulations, # inference algorithms (filters/smoothers)
-    d, time, mc_sims, algs = m.shape
-    dx = x[..., na] - m
-    # Mean Square Error matrix
-    MSE = np.empty((d, d, time, mc_sims, algs))
-    # TODO: these loops can be moved to a general function which calls the specific metric
-    for k in range(time):
-        for s in range(mc_sims):
-            for alg in range(algs):
-                MSE[..., k, s, alg] = np.outer(dx[..., k, s, alg], dx[..., k, s, alg])
-    MSE = MSE.mean(axis=3)  # average over MC simulations
 
-    # dx_iP_dx = np.empty((1, time, mc_sims, algs))
-    NCI = np.empty((1, time, mc_sims, algs))
-    for k in range(1, time):
-        for s in range(mc_sims):
-            for alg in range(algs):
-                # iP_dx = cho_solve(cho_factor(P[:, :, k, s, alg]), dx[:, k, s, alg])
-                # dx_iP_dx[:, k, s, alg] = dx[:, k, s, alg].dot(iP_dx)
-                # iMSE_dx = cho_solve(cho_factor(MSE[..., k, fi]), dx[:, k, s, alg])
-                # NCI[..., k, s, fi] = 10*np.log10(dx_iP_dx[:, k, s, fi]) - 10*np.log10(dx[:, k, s, alg].dot(iMSE_dx))
-                dx_iP_dx = dx[:, k, s, alg].dot(np.linalg.inv(P[..., k, s, alg])).dot(dx[:, k, s, alg])
-                dx_iMSE_dx = dx[:, k, s, alg].dot(np.linalg.inv(MSE[..., k, alg])).dot(dx[:, k, s, alg])
-                NCI[..., k, s, alg] = 10 * np.log10(dx_iP_dx) - 10 * np.log10(dx_iMSE_dx)
-    return NCI
+    d, mc_sims = m.shape
+    dx = x[:, na] - m
+    MSE = np.empty((d, d, mc_sims))
+    for s in range(mc_sims):
+        MSE[..., s] = np.outer(dx[..., s], dx[..., s])
+    MSE = MSE.mean(axis=2)  # average over MC simulations
+    return MSE
+
+
+def log_cred_ratio(x, m, P, MSE):
+    dx = x - m
+    dx_iP_dx = dx.dot(np.linalg.inv(P)).dot(dx)
+    dx_iMSE_dx = dx.dot(np.linalg.inv(MSE)).dot(dx)
+    return 10 * (np.log10(dx_iP_dx) - np.log10(dx_iMSE_dx))
 
 
 def nll(x, m, P):
@@ -103,17 +82,48 @@ def nll(x, m, P):
     -------
 
     """
-    d, time, mc_sims, algs = m.shape
-    dx = x[..., na] - m
-    NLL = np.empty((1, time, mc_sims, algs))
-    dx_iP_dx = np.empty((1, time, mc_sims, algs))
-    for k in range(1, time):
-        for s in range(mc_sims):
-            for fi in range(algs):
-                S = P[..., k, s, fi]
-                dx_iP_dx[:, k, s, fi] = dx[:, k, s, fi].dot(np.linalg.inv(S)).dot(dx[:, k, s, fi])
-                NLL[:, k, s, fi] = 0.5 * (np.log(np.linalg.det(S)) + dx_iP_dx[:, k, s, fi] + d * np.log(2 * np.pi))
-    return NLL
+
+    dx = x - m
+    dx_iP_dx = dx.dot(np.linalg.inv(P)).dot(dx)
+    return 0.5 * (np.log(np.linalg.det(S)) + dx_iP_dx + d * np.log(2 * np.pi))
+
+
+# def nci(x, m, P, MSE):
+#     """
+#     Non-credibility index [1]_ of the state estimate
+#
+#     .. math::
+#
+#         \frac{10}{K}\sum\limits_{n=1}^{N} \|\log_10 \rho_n \|,
+#
+#     where the :math:`\Sig` is the sample mean square error matrix and
+#
+#     .. math::
+#
+#     \rho_n = \frac{(x - m_n)^{\top}P_n^{-1}(x - m_n)}{(x - m_n)^{\top}\Sig^{-1}(x - m_n)}
+#
+#     is credibility ratio.
+#
+#     Parameters
+#     ----------
+#     x:
+#         True state
+#     m:
+#         State mean
+#     P:
+#         State covariance
+#
+#     Returns
+#     -------
+#
+#     References
+#     ----------
+#     .. [1] X. R. Li and Z. Zhao, “Measuring Estimator’s Credibility: Noncredibility Index,”
+#            in Information Fusion, 2006 9th International Conference on, 2006, pp. 1–8.
+#     """
+#
+#     log_cred_ratio(x, m, P, MSE)
+#     pass
 
 
 def kl(mean_0, cov_0, mean_1, cov_1):
@@ -178,7 +188,7 @@ def bootstrap_var(data, samples=1000):
     : float
         Bootstrap estimate of variance of the data set.
     """
-    #
+
     # data
     data = data.squeeze()
     mc_sims = data.shape[0]
