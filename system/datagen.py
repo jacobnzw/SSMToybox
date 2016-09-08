@@ -406,24 +406,29 @@ class ReentryRadar(System):
         pass
 
 
-import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
+def radar_tracking_demo():
+    import matplotlib.pyplot as plt
+    from matplotlib.gridspec import GridSpec
 
-sys = ReentryRadar()
-mc = 10
-x = sys.simulate_trajectory(method='rk4', dt=0.05, duration=200, mc_sims=mc)
-y = sys.simulate_measurements(x[..., 0])
+    sys = ReentryRadar()
+    mc = 10
+    x = sys.simulate_trajectory(method='rk4', dt=0.05, duration=200, mc_sims=mc)
+    y = sys.simulate_measurements(x[..., 0])
 
-plt.figure()
-g = GridSpec(2, 4)
-plt.subplot(g[:, :2])
-# Earth surface w/ radar position
-t = 0.02 * np.arange(-1, 4, 0.1)
-plt.plot(sys.R0 * np.cos(t), sys.R0 * np.sin(t), 'darkblue', lw=2)
-plt.plot(sys.sx, sys.sy, 'ko')
-# vehicle trajectory
-for i in range(mc):
-    plt.plot(x[0, :, i], x[1, :, i], alpha=0.35, color='r', ls='--')
-plt.subplot(g[:, 2:], polar=True)
-plt.plot((y[1, :, 0]), y[0, :, 0], 'ko')
-plt.show()
+    plt.figure()
+    g = GridSpec(2, 4)
+    plt.subplot(g[:, :2])
+    # Earth surface w/ radar position
+    t = 0.02 * np.arange(-1, 4, 0.1)
+    plt.plot(sys.R0 * np.cos(t), sys.R0 * np.sin(t), 'darkblue', lw=2)
+    plt.plot(sys.sx, sys.sy, 'ko')
+    # vehicle trajectory
+    for i in range(mc):
+        plt.plot(x[0, :, i], x[1, :, i], alpha=0.35, color='r', ls='--')
+    plt.subplot(g[:, 2:], polar=True)
+    plt.plot((y[1, :, 0]), y[0, :, 0], 'ko')
+    plt.show()
+
+
+if __name__ == '__main__':
+    radar_tracking_demo()
