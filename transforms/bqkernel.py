@@ -84,8 +84,8 @@ class RBF(Kernel):
 
     def __init__(self, dim, hypers=None, jitter=1e-8):
         super(RBF, self).__init__(dim, hypers, jitter)
-        self.alpha = self.hypers['alpha']
-        el = np.atleast_1d(self.hypers['el'])
+        self.alpha = float(self.hypers['alpha'])
+        el = np.atleast_1d(self.hypers['el']).astype(float)
         if len(el) == 1 and dim > 1:
             # if el is a list/tuple/array w/ 1 element and dim > 1
             el = el[0] * np.ones(dim, )
