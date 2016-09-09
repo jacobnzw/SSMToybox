@@ -36,12 +36,12 @@ class Kernel(object, metaclass=ABCMeta):
 
     # TODO: methods could return their byproducts, such as kernel matrix
     # TODO: other methods could optionally accept them to save computation
-    def eval_inv_dot(self, x, hyp=None, b=None):
+    def eval_inv_dot(self, x, hyp=None, b=None, ignore_alpha=False):
         # if b=None returns inverse of K
-        return Kernel._cho_inv(self.eval(x, hyp=hyp) + self.jitter * np.eye(x.shape[1]), b)
+        return Kernel._cho_inv(self.eval(x, hyp=hyp, ignore_alpha=ignore_alpha) + self.jitter * np.eye(x.shape[1]), b)
 
-    def eval_chol(self, x, hyp=None):
-        return la.cholesky(self.eval(x, hyp=hyp) + self.jitter * np.eye(x.shape[1]))
+    def eval_chol(self, x, hyp=None, ignore_alpha=False):
+        return la.cholesky(self.eval(x, hyp=hyp, ignore_alpha=ignore_alpha) + self.jitter * np.eye(x.shape[1]))
 
     # expectations
     @abstractmethod
@@ -99,12 +99,13 @@ class RBF(Kernel):
     def __str__(self):  # TODO: improve string representation
         return '{} {}'.format(self.__class__.__name__, self.hypers.update({'jitter': self.jitter}))
 
-    def eval(self, x1, x2=None, hyp=None, diag=False):
+    def eval(self, x1, x2=None, hyp=None, diag=False, ignore_alpha=False):
         # x1.shape = (D, N), x2.shape = (D, M), hyp (D+1,) array_like
         if x2 is None:
             x2 = x1
         # use hyp as hypers if given, otherwise use init hypers
         alpha, sqrt_inv_lam = self._get_hyperparameters(hyp)
+        alpha = 1.0 if ignore_alpha else alpha
 
         x1 = sqrt_inv_lam.dot(x1)
         x2 = sqrt_inv_lam.dot(x2)
@@ -115,10 +116,12 @@ class RBF(Kernel):
         else:
             return np.exp(2 * np.log(alpha) - 0.5 * self._maha(x1.T, x2.T))
 
-    def exp_x_kx(self, x, hyp=None):
+    def exp_x_kx(self, x, hyp=None, ignore_alpha=True):
         # a.k.a. kernel mean map w.r.t. standard Gaussian PDF
         # hyp (D+1,) array_like
         alpha, sqrt_inv_lam = self._get_hyperparameters(hyp)
+        alpha = 1.0 if ignore_alpha else alpha
+
         inv_lam = sqrt_inv_lam ** 2
         lam = np.diag(inv_lam.diagonal() ** -1)
 
@@ -143,8 +146,9 @@ class RBF(Kernel):
         inv_lam = sqrt_inv_lam ** 2
         return alpha ** 2 * la.det(2 * inv_lam + self.eye_d) ** -0.5
 
-    def exp_x_kxkx(self, x, hyp=None):
+    def exp_x_kxkx(self, x, hyp=None, ignore_alpha=True):
         alpha, sqrt_inv_lam = self._get_hyperparameters(hyp)
+        alpha = 1.0 if ignore_alpha else alpha
         inv_lam = sqrt_inv_lam ** 2
 
         inv_r = la.inv(2 * inv_lam + self.eye_d)

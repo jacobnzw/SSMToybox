@@ -25,6 +25,13 @@ class GPQuadTest(TestCase):
         self.assertTrue(np.array_equal(wc, wc.T))
         # print 'GP model variance: {}'.format(tf.model.exp_model_variance())
 
+    def test_weights_rbf_alpha_invariance(self):
+        dim = 5
+        tf = GPQ(dim, 'rbf', 'ut')
+        w0 = tf._weights([1] + dim * [1000])
+        w1 = tf._weights([358.0] + dim * [1000.0])
+        self.assertTrue(np.alltrue([np.array_equal(a, b) for a, b in zip(w0, w1)]))
+
     def test_apply(self):
         for ssm in self.models:
             f = ssm().dyn_eval
