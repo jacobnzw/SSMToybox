@@ -174,7 +174,7 @@ class RBF(Kernel):
             # return alpha and sqrt_inv_lambda
             return self.alpha, self.sqrt_inv_lam
         else:
-            hyp = np.asarray(hyp)
+            hyp = np.asarray(hyp, dtype=float)
             return hyp[0], np.diag(hyp[1:] ** -1)
 
     def _maha(self, x, y, V=None):
