@@ -50,19 +50,66 @@ def mse_matrix(x, m):
     """
 
     d, mc_sims = m.shape
-    dx = x[:, na] - m
-    MSE = np.empty((d, d, mc_sims))
+    dx = x - m
+    mse = np.empty((d, d, mc_sims))
     for s in range(mc_sims):
-        MSE[..., s] = np.outer(dx[..., s], dx[..., s])
-    MSE = MSE.mean(axis=2)  # average over MC simulations
-    return MSE
+        mse[..., s] = np.outer(dx[..., s], dx[..., s])
+    return mse.mean(axis=2)  # average over MC simulations
 
 
 def log_cred_ratio(x, m, P, MSE):
+    """
+    Logarithm of Credibility Ratio [1]_ is given by
+
+    .. math::
+
+    \gamma_n = 10*\log_10 \frac{(x - m_n)^{\top}P_n^{-1}(x - m_n)}{(x - m_n)^{\top}\Sig^{-1}(x - m_n)}
+
+    Parameters
+    ----------
+    x:
+        True state
+    m:
+        State mean
+    P:
+        State covariance matrix
+    MSE:
+        Mean square error matrix
+
+    Returns
+    -------
+    :float
+
+
+    Notes
+    -----
+    Log credibility ratio is defined in [1]_ and is an essential quantity for computing the inclination indicator
+
+    .. math::
+
+    I^2 = \frac{1}{N}\sum\limits_{n=1}^{N} \gamma_n,
+
+    and the non-credibility index given by
+
+    .. math::
+
+    NCI = \frac{1}{N}\sum\limits_{n=1}^{N} \| \gamma_n \|.
+
+    Since in state estimation examples one can either average over time or MC simulations, the implementation of I^2
+    and NCI is left for the user.
+
+
+    References
+    ----------
+    .. [1] X. R. Li and Z. Zhao, “Measuring Estimator’s Credibility: Noncredibility Index,”
+           in Information Fusion, 2006 9th International Conference on, 2006, pp. 1–8.
+
+    """
+
     dx = x - m
-    dx_iP_dx = dx.dot(np.linalg.inv(P)).dot(dx)
-    dx_iMSE_dx = dx.dot(np.linalg.inv(MSE)).dot(dx)
-    return 10 * (np.log10(dx_iP_dx) - np.log10(dx_iMSE_dx))
+    dx_icov_dx = dx.dot(np.linalg.inv(P)).dot(dx)
+    dx_imse_dx = dx.dot(np.linalg.inv(MSE)).dot(dx)
+    return 10 * (np.log10(dx_icov_dx) - np.log10(dx_imse_dx))
 
 
 def nll(x, m, P):
@@ -84,46 +131,10 @@ def nll(x, m, P):
     """
 
     dx = x - m
+    d = x.shape[0]
     dx_iP_dx = dx.dot(np.linalg.inv(P)).dot(dx)
-    return 0.5 * (np.log(np.linalg.det(S)) + dx_iP_dx + d * np.log(2 * np.pi))
-
-
-# def nci(x, m, P, MSE):
-#     """
-#     Non-credibility index [1]_ of the state estimate
-#
-#     .. math::
-#
-#         \frac{10}{K}\sum\limits_{n=1}^{N} \|\log_10 \rho_n \|,
-#
-#     where the :math:`\Sig` is the sample mean square error matrix and
-#
-#     .. math::
-#
-#     \rho_n = \frac{(x - m_n)^{\top}P_n^{-1}(x - m_n)}{(x - m_n)^{\top}\Sig^{-1}(x - m_n)}
-#
-#     is credibility ratio.
-#
-#     Parameters
-#     ----------
-#     x:
-#         True state
-#     m:
-#         State mean
-#     P:
-#         State covariance
-#
-#     Returns
-#     -------
-#
-#     References
-#     ----------
-#     .. [1] X. R. Li and Z. Zhao, “Measuring Estimator’s Credibility: Noncredibility Index,”
-#            in Information Fusion, 2006 9th International Conference on, 2006, pp. 1–8.
-#     """
-#
-#     log_cred_ratio(x, m, P, MSE)
-#     pass
+    sign, logdet = np.linalg.slogdet(P)
+    return 0.5 * (sign*logdet + dx_iP_dx + d * np.log(2 * np.pi))
 
 
 def kl(mean_0, cov_0, mean_1, cov_1):
