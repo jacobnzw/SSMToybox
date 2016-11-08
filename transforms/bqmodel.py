@@ -156,6 +156,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         var = np.squeeze(kxx - np.einsum('im,mn,mi->i', kx, iK, kx.T))
         return mean, var
 
+    # TODO: push these methods down to Kernel (each kernel can provide it's own efficient implementation)
     def exp_model_variance(self, fcn_obs, hyp=None):
         q_bar = self.kernel.exp_x_kxx(hyp=hyp)
         Q = self.kernel.exp_x_kxkx(self.points, hyp=hyp)
@@ -163,7 +164,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         return q_bar - np.trace(Q.dot(iK))
 
     def integral_variance(self, fcn_obs, hyp=None):
-        kbar = self.kernel.exp_x_kxx(hyp)
+        kbar = self.kernel.exp_xy_kxy(hyp)
         q = self.kernel.exp_x_kx(self.points, hyp)
         iK = self.kernel.eval_inv_dot(self.points, hyp=hyp)
         return kbar - q.T.dot(iK).dot(q)
