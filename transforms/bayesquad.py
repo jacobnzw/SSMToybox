@@ -70,8 +70,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         return fcn_evals.dot(weights)
 
     def _covariance(self, weights, fcn_evals, mean_out):
-        # TODO: pre-compute EMV during init, when using TPQ multiply by factor based on fcn_evals
-        expected_model_var = self.model.exp_model_variance(fcn_evals)
+        expected_model_var = self.model.emv
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + expected_model_var
 
     def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
@@ -128,6 +127,10 @@ class TPQ(BQTransform):
 
     def _fcn_eval(self, fcn, x, fcn_pars):
         return np.apply_along_axis(fcn, 0, x, fcn_pars)
+
+    def _covariance(self, weights, fcn_evals, mean_out):
+        expected_model_var = self.model.exp_model_variance(fcn_evals)
+        return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + expected_model_var
 
     def _integral_variance(self, points, tf_pars):
         pass

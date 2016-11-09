@@ -17,10 +17,6 @@ class Model(object, metaclass=ABCMeta):
     _supported_kernels_ = ['rbf']
 
     def __init__(self, dim, kernel, points, kern_hyp=None, point_hyp=None):
-        if kern_hyp is None:
-            kern_hyp = {}
-        if point_hyp is None:
-            point_hyp = {}
         # init kernel and sigma-points
         self.kernel = Model.get_kernel(dim, kernel, kern_hyp)
         self.points = Model.get_points(dim, points, point_hyp)
@@ -30,6 +26,8 @@ class Model(object, metaclass=ABCMeta):
         # may no longer be necessary now that jitter is in kernel
         self.d, self.n = self.points.shape
         self.eye_d, self.eye_n = np.eye(self.d), np.eye(self.n)
+        self.emv = self.kernel.exp_model_variance(self.points)
+        self.ivar = self.kernel.integral_variance(self.points)
 
     def __str__(self):
         return '{}\n{} {}'.format(self.kernel, self.str_pts, self.str_pts_hyp)
@@ -116,19 +114,21 @@ class Model(object, metaclass=ABCMeta):
         plt.show()
 
     @staticmethod
-    def get_points(dim, points, kwargs):
+    def get_points(dim, points, point_hyp):
         points = points.lower()
         # make sure points is supported
         if points not in Model._supported_points_:
             print('Points {} not supported. Supported points are {}.'.format(points, Model._supported_points_))
             return None
+        if point_hyp is None:
+            point_hyp = {}
         # create chosen points
         if points == 'sr':
             return SphericalRadial.unit_sigma_points(dim)
         elif points == 'ut':
-            return Unscented.unit_sigma_points(dim, **kwargs)
+            return Unscented.unit_sigma_points(dim, **point_hyp)
         elif points == 'gh':
-            return GaussHermite.unit_sigma_points(dim, **kwargs)
+            return GaussHermite.unit_sigma_points(dim, **point_hyp)
 
     @staticmethod
     def get_kernel(dim, kernel, hypers):
@@ -156,18 +156,11 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         var = np.squeeze(kxx - np.einsum('im,mn,mi->i', kx, iK, kx.T))
         return mean, var
 
-    # TODO: push these methods down to Kernel (each kernel can provide it's own efficient implementation)
     def exp_model_variance(self, fcn_obs, hyp=None):
-        q_bar = self.kernel.exp_x_kxx(hyp=hyp)
-        Q = self.kernel.exp_x_kxkx(self.points, hyp=hyp)
-        iK = self.kernel.eval_inv_dot(self.points, hyp=hyp)
-        return q_bar - np.trace(Q.dot(iK))
+        return self.kernel.exp_model_variance(self.points, hyp=hyp)
 
     def integral_variance(self, fcn_obs, hyp=None):
-        kbar = self.kernel.exp_xy_kxy(hyp)
-        q = self.kernel.exp_x_kx(self.points, hyp)
-        iK = self.kernel.eval_inv_dot(self.points, hyp=hyp)
-        return kbar - q.T.dot(iK).dot(q)
+        return self.kernel.integral_variance(self.points, hyp=hyp)
 
     def neg_log_marginal_likelihood(self, log_hyp, fcn_obs):
         # marginal log-likelihood of GP, uses log-hypers for optimization reasons
@@ -213,19 +206,15 @@ class StudentTProcess(Model):
 
     def exp_model_variance(self, fcn_obs, hyp=None):
         fcn_obs = np.squeeze(fcn_obs)
-        q_bar = self.kernel.exp_x_kxx()
-        Q = self.kernel.exp_x_kxkx(self.points)
         iK = self.kernel.eval_inv_dot(self.points)
         scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.n)
-        return scale * (q_bar - np.trace(Q.dot(iK)))
+        return scale * self.kernel.exp_model_variance(self.points, hyp=hyp)
 
     def integral_variance(self, fcn_obs, hyp=None):
         fcn_obs = np.squeeze(fcn_obs)
-        kbar = self.kernel.exp_x_kxx(hyp)
-        q = self.kernel.exp_x_kx(self.points, hyp)
         iK = self.kernel.eval_inv_dot(self.points, hyp=hyp)
         scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.n)
-        return scale * (kbar - q.T.dot(iK).dot(q))
+        return scale * self.kernel.integral_variance(self.points, hyp=hyp)
 
     def neg_log_marginal_likelihood(self, log_hyp, fcn_obs):
         # marginal log-likelihood of TP, uses log-hypers for optimization reasons

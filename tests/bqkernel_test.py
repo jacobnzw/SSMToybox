@@ -78,6 +78,18 @@ class RBFKernelTest(TestCase):
         self.assertTrue(np.array_equal(q, q.T))
         la.cholesky(q)
 
+    def test_exp_model_variance(self):
+        emv = self.kern_rbf_1d.exp_model_variance(self.data_1d)
+        self.assertTrue(emv >= 0)
+        emv = self.kern_rbf_2d.exp_model_variance(self.data_2d)
+        self.assertTrue(emv >= 0)
+
+    def test_integral_variance(self):
+        ivar = self.kern_rbf_1d.integral_variance(self.data_1d)
+        self.assertTrue(ivar >= 0)
+        ivar = self.kern_rbf_2d.integral_variance(self.data_2d)
+        self.assertTrue(ivar >= 0)
+
 # class AffineKernelTest(TestCase):
 #     def test_eval(self):
 #         pass

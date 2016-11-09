@@ -64,6 +64,14 @@ class Kernel(object, metaclass=ABCMeta):
     def exp_x_kxkx(self, x, hyp=None):
         pass
 
+    @abstractmethod
+    def exp_model_variance(self, x, hyp=None):
+        pass
+
+    @abstractmethod
+    def integral_variance(self, x, hyp=None):
+        pass
+
     # derivatives
     @abstractmethod
     def der_hyp(self, x, hyp0):
@@ -157,6 +165,18 @@ class RBF(Kernel):
         x = inv_lam.dot(x)
         n = (xi[:, na] + xi[na, :]) + 0.5 * self._maha(x.T, -x.T, V=inv_r)
         return la.det(inv_r) ** 0.5 * np.exp(n)
+
+    def exp_model_variance(self, x, hyp=None):
+        alpha, sqrt_inv_lam = self._get_hyperparameters(hyp)
+        Q = self.exp_x_kxkx(x, hyp=hyp)
+        iK = self.eval_inv_dot(x, hyp=hyp, ignore_alpha=True)
+        return alpha**2 * (1 - np.trace(Q.dot(iK)))
+
+    def integral_variance(self, x, hyp=None):
+        alpha, sqrt_inv_lam = self._get_hyperparameters(hyp)
+        q = self.exp_x_kx(x, hyp)
+        iK = self.eval_inv_dot(x, hyp=hyp, ignore_alpha=True)
+        return alpha**2 * (la.det(2 * sqrt_inv_lam ** 2 + self.eye_d) ** -0.5 - q.T.dot(iK).dot(q))
 
     def der_hyp(self, x, hyp0):  # K as kwarg would save computation (would have to be evaluated w/ hyp0)
         # hyp0: array_like [alpha, el_1, ..., el_D]
