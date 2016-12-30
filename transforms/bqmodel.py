@@ -13,10 +13,59 @@ from .quad import SphericalRadial, Unscented, GaussHermite
 
 
 class Model(object, metaclass=ABCMeta):
+    """
+    A parent class for all models of the integrated function in the BQ quadrature context. It is intended to be used
+    by the subclasses of the `BQTransform` (i.e. Gaussian process and t-process quadrature moment transforms). The
+    Model class ties together the kernel and the point-set used by the underlying quadrature rule. In modelling
+    terms, the Model is composed of a kernel and point-set, that is, `Model` *has-a* `Kernel` and `points`.
+
+    Assumptions
+    -----------
+      - The model of the integrand relies on a Kernel class, that is, it is either a GP or TP regression model.
+      - The regression models use single set of kernel parameters for all every output of the integrand.
+
+    Attributes
+    ----------
+    _supported_points_ : list of strings
+    _supported_kernels_ : list of kernels
+    kernel : Kernel
+        Kernel used by the Model.
+    points : numpy.ndarray
+        Quadrature rule point-set.
+    str_pts : string
+    str_pts_hyp : string
+        String representation of the kernel parameter values.
+    emv : float
+        Expected model variance.
+    ivar : float
+        Variance of the integral.
+    d : int
+        Dimension of the point-set.
+    n : int
+        Number of points.
+    eye_d
+    eye_n : numpy.ndarray
+        Pre-allocated identity matrices to ease the computations.
+    """
     _supported_points_ = ['sr', 'ut', 'gh']
     _supported_kernels_ = ['rbf']
 
     def __init__(self, dim, kernel, points, kern_hyp=None, point_hyp=None):
+        """
+
+        Parameters
+        ----------
+        dim : int
+            Dimension of the points (integration domain).
+        kernel : string
+            String abbreviation for the kernel.
+        points : string
+            String abbreviation for the point-set.
+        kern_hyp : numpy.ndarray
+            Kernel parameters in a vector.
+        point_hyp : numpy.ndarray
+            Any parameters for constructing desired point-set.
+        """
         # init kernel and sigma-points
         self.kernel = Model.get_kernel(dim, kernel, kern_hyp)
         self.points = Model.get_points(dim, points, point_hyp)
@@ -30,25 +79,112 @@ class Model(object, metaclass=ABCMeta):
         self.ivar = self.kernel.integral_variance(self.points)
 
     def __str__(self):
+        """
+        Prettier string representation.
+
+        Returns
+        -------
+            String representation including short name of the point-set, the kernel and its parameter values
+        """
         return '{}\n{} {}'.format(self.kernel, self.str_pts, self.str_pts_hyp)
 
     @abstractmethod
     def predict(self, test_data, fcn_obs, hyp=None):
-        # model predictive mean and variance to be implemented by GP and TP classes
+        """
+        Model predictions based on test points and the kernel parameters.
+
+        Notes
+        -----
+        This is an abstract method. Implementation needs to be provided by the subclass.
+
+        Parameters
+        ----------
+        test_data : numpy.ndarray
+            Test points where to generate data.
+        fcn_obs : numpy.ndarray
+            Observed function values at the point-set locations.
+        hyp : numpy.ndarray
+            Kernel parameters, default `hyp=None`.
+
+        Returns
+        -------
+        predict : (mean, var)
+            Model predictive mean and variance at the test point locations.
+        """
         pass
 
     @abstractmethod
     def exp_model_variance(self, fcn_obs, hyp=None):
-        # each model has to implement this using kernel expectations
+        """
+        Expected model variance given the function observations and the kernel parameters.
+
+        Notes
+        -----
+        This is an abstract method. Implementation needs to be provided by the subclass and should be easily
+        accomplished using the kernel expectation method from the `Kernel` class.
+
+        Parameters
+        ----------
+        fcn_obs : numpy.ndarray
+            Observed function values at the point-set locations.
+        hyp : numpy.ndarray
+            Kernel parameters, default `hyp=None`.
+
+        Returns
+        -------
+            emv : float
+                Expected model variance.
+        """
         pass
 
     @abstractmethod
     def integral_variance(self, fcn_obs, hyp=None):
+        """
+        Integral variance given the function value observations and the kernel parameters.
+
+        Notes
+        -----
+        This is an abstract method. Implementation needs to be provided by the subclass and should be easily
+        accomplished using the kernel expectation method from the `Kernel` class.
+
+        Parameters
+        ----------
+        fcn_obs : numpy.ndarray
+            Observed function values at the point-set locations.
+        hyp : numpy.ndarray
+            Kernel parameters, default `hyp=None`.
+
+        Returns
+        -------
+            emv : float
+                Variance of the integral.
+        """
         pass
 
     @abstractmethod
     def neg_log_marginal_likelihood(self, log_hyp, fcn_obs):
-        # model specific marginal likelihood, will serve as an objective function passed into the optimizer
+        """
+        Negative logarithm of marginal likelihood of the model given the kernel parameters and the function
+        observations.
+
+        Notes
+        -----
+        Intends to be used as an objective function passed into the optimizer, thus it needs to subscribe to certain
+        implementation conventions.
+
+        Parameters
+        ----------
+        log_hyp : numpy.ndarray
+            Logarithm of the kernel parameters.
+        fcn_obs : numpy.ndarray
+            Observed function values at the point-set locations.
+
+        Returns
+        -------
+            nlml : float
+                Negative log marginal likelihood.
+
+        """
         pass
 
     def likelihood_reg_emv(self, log_hyp, fcn_obs):
@@ -69,14 +205,43 @@ class Model(object, metaclass=ABCMeta):
         return nlml + reg
 
     def optimize(self, log_hyp0, fcn_obs, crit='NLML', method='BFGS', **kwargs):
-        # general routine minimizing chosen criterion w.r.t. hyper-parameters
-        # loghyp: 1d ndarray - logarithm of hyper-parameters
-        # crit determines which criterion to minimize:
-        # 'nlml' - negative marginal log-likelihood
-        # 'nlml+emv' - NLML with expected model variance as regularizer
-        # 'nlml+ivar' - NLML with integral variance as regularizer
-        # **kwargs - passed into the solver
-        # returns scipy.optimize.OptimizeResult dict
+        """
+        Find optimal values of kernel parameters by minimizing chosen criterion given the point-set and  the function
+        observations.
+
+        Parameters
+        ----------
+        log_hyp0 : numpy.ndarray
+            Initial guess of the kernel log-parameters.
+        fcn_obs : numpy.ndarray
+            Observed function values at the point-set locations.
+        crit : string
+            Objective function to use as a criterion for finding optimal setting of kernel parameters. Possible
+            values are:
+              - 'nlml' : negative marginal log-likelihood,
+              - 'nlml+emv' : NLML with expected model variance as regularizer,
+              - 'nlml+ivar' : NLML with integral variance as regularizer.
+        method : string
+            Optimization method for `scipy.optimize.minimize`, default method='BFGS'.
+        kwargs :
+            Keyword arguments for the `scipy.optimize.minimize`.
+
+        Returns
+        -------
+            : scipy.optimize.OptimizeResult
+            Results of the optimization in a dict-like structure returned by `scipy.optimize.minimize`.
+
+        Notes
+        -----
+        The criteria using expected model variance and integral variance as regularizers ('nlml+emv', 'nlml+ivar')
+        are somewhat experimental. I did not operate under any sound theoretical justification when implementing
+        those. Just curious to see what happens, thus might be removed in the future.
+
+        See Also
+        --------
+        scipy.optimize.minimize
+
+        """
         crit = crit.lower()
         if crit == 'nlml':
             obj_func = self.neg_log_marginal_likelihood
@@ -92,7 +257,31 @@ class Model(object, metaclass=ABCMeta):
         return minimize(obj_func, log_hyp0, fcn_obs, method=method, jac=jac, **kwargs)
 
     def plot_model(self, test_data, fcn_obs, hyp=None, fcn_true=None, in_dim=0):
-        # general plotting routine for all models defined in terms of model's predictive mean and variance
+        """
+        Plot of predictive mean and variance of the fitted model of the integrand. Since we're plotting a function with
+        multiple inputs and outputs, we need to specify which is to be plotted.
+
+        Notes
+        -----
+        Not tested very much, likely to misbehave.
+
+        Parameters
+        ----------
+        test_data : numpy.ndarray
+            1D array of locations, where the function is to be evaluated for plotting.
+        fcn_obs : numpy.ndarray
+            Observed function values at the point-set locations.
+        hyp : numpy.ndarray
+            Kernel parameters, default `hyp=None`.
+        fcn_true :
+            True function values
+        in_dim : int
+            Index of the input dimension to plot.
+
+        Returns
+        -------
+
+        """
         assert in_dim <= self.d - 1
 
         fcn_obs = np.squeeze(fcn_obs)
@@ -115,6 +304,18 @@ class Model(object, metaclass=ABCMeta):
 
     @staticmethod
     def get_points(dim, points, point_hyp):
+        """
+
+        Parameters
+        ----------
+        dim
+        points
+        point_hyp
+
+        Returns
+        -------
+
+        """
         points = points.lower()
         # make sure points is supported
         if points not in Model._supported_points_:
@@ -132,6 +333,18 @@ class Model(object, metaclass=ABCMeta):
 
     @staticmethod
     def get_kernel(dim, kernel, hypers):
+        """
+
+        Parameters
+        ----------
+        dim
+        kernel
+        hypers
+
+        Returns
+        -------
+
+        """
         kernel = kernel.lower()
         # make sure kernel is supported
         if kernel not in Model._supported_kernels_:
@@ -146,9 +359,31 @@ class Model(object, metaclass=ABCMeta):
 
 class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/GPRegression, same for TP
     def __init__(self, dim, kernel='rbf', points='ut', kern_hyp=None, point_hyp=None):
+        """
+
+        Parameters
+        ----------
+        dim
+        kernel
+        points
+        kern_hyp
+        point_hyp
+        """
         super(GaussianProcess, self).__init__(dim, kernel, points, kern_hyp, point_hyp)
 
     def predict(self, test_data, fcn_obs, hyp=None):
+        """
+
+        Parameters
+        ----------
+        test_data
+        fcn_obs
+        hyp
+
+        Returns
+        -------
+
+        """
         iK = self.kernel.eval_inv_dot(self.points, hyp=hyp)
         kx = self.kernel.eval(test_data, self.points, hyp=hyp)
         kxx = self.kernel.eval(test_data, test_data, diag=True, hyp=hyp)
@@ -157,12 +392,45 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         return mean, var
 
     def exp_model_variance(self, fcn_obs, hyp=None):
+        """
+
+        Parameters
+        ----------
+        fcn_obs
+        hyp
+
+        Returns
+        -------
+
+        """
         return self.kernel.exp_model_variance(self.points, hyp=hyp)
 
     def integral_variance(self, fcn_obs, hyp=None):
+        """
+
+        Parameters
+        ----------
+        fcn_obs
+        hyp
+
+        Returns
+        -------
+
+        """
         return self.kernel.integral_variance(self.points, hyp=hyp)
 
     def neg_log_marginal_likelihood(self, log_hyp, fcn_obs):
+        """
+
+        Parameters
+        ----------
+        log_hyp
+        fcn_obs
+
+        Returns
+        -------
+
+        """
         # marginal log-likelihood of GP, uses log-hypers for optimization reasons
         # N - # points, E - # function outputs
         # fcn_obs (N, E), hypers (num_hyp, )
@@ -188,12 +456,36 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
 class StudentTProcess(Model):
     def __init__(self, dim, kernel='rbf', points='ut', kern_hyp=None, point_hyp=None, nu=None):
+        """
+
+        Parameters
+        ----------
+        dim
+        kernel
+        points
+        kern_hyp
+        point_hyp
+        nu
+        """
         super(StudentTProcess, self).__init__(dim, kernel, points, kern_hyp, point_hyp)
         nu = 3.0 if nu is None else nu
         assert nu > 2, 'Degrees of freedom (nu) must be > 2.'
         self.nu = nu
 
     def predict(self, test_data, fcn_obs, hyp=None, nu=None):
+        """
+
+        Parameters
+        ----------
+        test_data
+        fcn_obs
+        hyp
+        nu
+
+        Returns
+        -------
+
+        """
         if nu is None:
             nu = self.nu
         iK = self.kernel.eval_inv_dot(self.points)
@@ -205,18 +497,51 @@ class StudentTProcess(Model):
         return mean, scale * var
 
     def exp_model_variance(self, fcn_obs, hyp=None):
+        """
+
+        Parameters
+        ----------
+        fcn_obs
+        hyp
+
+        Returns
+        -------
+
+        """
         fcn_obs = np.squeeze(fcn_obs)
         iK = self.kernel.eval_inv_dot(self.points)
         scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.n)
         return scale * self.kernel.exp_model_variance(self.points, hyp=hyp)
 
     def integral_variance(self, fcn_obs, hyp=None):
+        """
+
+        Parameters
+        ----------
+        fcn_obs
+        hyp
+
+        Returns
+        -------
+
+        """
         fcn_obs = np.squeeze(fcn_obs)
         iK = self.kernel.eval_inv_dot(self.points, hyp=hyp)
         scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.n)
         return scale * self.kernel.integral_variance(self.points, hyp=hyp)
 
     def neg_log_marginal_likelihood(self, log_hyp, fcn_obs):
+        """
+
+        Parameters
+        ----------
+        log_hyp
+        fcn_obs
+
+        Returns
+        -------
+
+        """
         # marginal log-likelihood of TP, uses log-hypers for optimization reasons
         # N - # points, E - # function outputs
         # fcn_obs (N, E), hypers (num_hyp, )
