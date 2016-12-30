@@ -52,6 +52,7 @@ class Model(object, metaclass=ABCMeta):
 
     def __init__(self, dim, kernel, points, kern_hyp=None, point_hyp=None):
         """
+        Initialize model of the integrand with specified kernel and point set.
 
         Parameters
         ----------
@@ -84,7 +85,8 @@ class Model(object, metaclass=ABCMeta):
 
         Returns
         -------
-            String representation including short name of the point-set, the kernel and its parameter values
+        string
+            String representation including short name of the point-set, the kernel and its parameter values.
         """
         return '{}\n{} {}'.format(self.kernel, self.str_pts, self.str_pts_hyp)
 
@@ -108,7 +110,7 @@ class Model(object, metaclass=ABCMeta):
 
         Returns
         -------
-        predict : (mean, var)
+        (mean, var)
             Model predictive mean and variance at the test point locations.
         """
         pass
@@ -132,8 +134,8 @@ class Model(object, metaclass=ABCMeta):
 
         Returns
         -------
-            emv : float
-                Expected model variance.
+        float
+            Expected model variance.
         """
         pass
 
@@ -156,8 +158,8 @@ class Model(object, metaclass=ABCMeta):
 
         Returns
         -------
-            emv : float
-                Variance of the integral.
+        float
+            Variance of the integral.
         """
         pass
 
@@ -181,32 +183,58 @@ class Model(object, metaclass=ABCMeta):
 
         Returns
         -------
-            nlml : float
-                Negative log marginal likelihood.
+        float
+            Negative log marginal likelihood.
 
         """
         pass
 
     def likelihood_reg_emv(self, log_hyp, fcn_obs):
+        """
+        Negative marginal log-likelihood with a expected model variance as regularizer.
+
+        Parameters
+        ----------
+        log_hyp : numpy.ndarray
+            Logarithm of the kernel parameters.
+        fcn_obs : numpy.ndarray
+            Observed function values at the point-set locations.
+
+        Returns
+        -------
+            Sum of negative marginal log-likelihood and expected model variance.
+        """
         # negative marginal log-likelihood w/ additional regularizing term
         # regularizing terms: integral variance, expected model variance or both, prior on hypers
         nlml, nlml_grad = self.neg_log_marginal_likelihood(log_hyp, fcn_obs)
         # NOTE: not entirely sure regularization is usefull, because the regularized ML-II seems to give very similar
-        # results to ML-II; this regularizer tends to prefer longer lengthscales, which proves usefull when
+        # results to ML-II; this regularizer tends to prefer longer lengthscales
         reg = self.exp_model_variance(fcn_obs, hyp=np.exp(log_hyp))
         return nlml + reg
 
     def likelihood_reg_ivar(self, log_hyp, fcn_obs):
+        """
+        Negative marginal log-likelihood with a integral variance as regularizer.
+
+        Parameters
+        ----------
+        log_hyp : numpy.ndarray
+            Logarithm of the kernel parameters.
+        fcn_obs : numpy.ndarray
+            Observed function values at the point-set locations.
+
+        Returns
+        -------
+            Sum of negative marginal log-likelihood and integral variance.
+        """
         # negative marginal log-likelihood w/ additional regularizing term
-        # regularizing terms: integral variance, expected model variance or both, prior on hypers
         nlml, nlml_grad = self.neg_log_marginal_likelihood(log_hyp, fcn_obs)
-        # NOTE:
         reg = self.integral_variance(fcn_obs, hyp=np.exp(log_hyp))
         return nlml + reg
 
     def optimize(self, log_hyp0, fcn_obs, crit='NLML', method='BFGS', **kwargs):
         """
-        Find optimal values of kernel parameters by minimizing chosen criterion given the point-set and  the function
+        Find optimal values of kernel parameters by minimizing chosen criterion given the point-set and the function
         observations.
 
         Parameters
@@ -223,12 +251,12 @@ class Model(object, metaclass=ABCMeta):
               - 'nlml+ivar' : NLML with integral variance as regularizer.
         method : string
             Optimization method for `scipy.optimize.minimize`, default method='BFGS'.
-        kwargs :
+        **kwargs
             Keyword arguments for the `scipy.optimize.minimize`.
 
         Returns
         -------
-            : scipy.optimize.OptimizeResult
+        scipy.optimize.OptimizeResult
             Results of the optimization in a dict-like structure returned by `scipy.optimize.minimize`.
 
         Notes
@@ -240,7 +268,6 @@ class Model(object, metaclass=ABCMeta):
         See Also
         --------
         scipy.optimize.minimize
-
         """
         crit = crit.lower()
         if crit == 'nlml':
@@ -305,16 +332,25 @@ class Model(object, metaclass=ABCMeta):
     @staticmethod
     def get_points(dim, points, point_hyp):
         """
+        Construct desired point-set for integration. Calls methods of classical quadrature classes.
 
         Parameters
         ----------
-        dim
-        points
-        point_hyp
+        dim : int
+
+        points : string
+            String abbreviation for the point-set.
+        point_hyp : numpy.ndarray
+            Parameters for constructing desired point-set.
 
         Returns
         -------
+        numpy.ndarray
+            Point set in (D, N) array, where D is dimension and N number of points.
 
+        Notes
+        -----
+        List of supported points is kept in ``_supported_points_`` class variable.
         """
         points = points.lower()
         # make sure points is supported
@@ -334,16 +370,25 @@ class Model(object, metaclass=ABCMeta):
     @staticmethod
     def get_kernel(dim, kernel, hypers):
         """
+        Initializes desired kernel.
 
         Parameters
         ----------
-        dim
-        kernel
-        hypers
+        dim : int
+            Dimension of input (integration domain).
+        kernel : string
+            String abbreviation of the kernel.
+        hypers : numpy.ndarray
+            Parameters of the kernel.
 
         Returns
         -------
+        numpy.ndarray
+            Point set in (D, N) array, where D is dimension and N number of points.
 
+        Notes
+        -----
+        List of supported kernels is kept in ``_supported_kernels_`` class variable.
         """
         kernel = kernel.lower()
         # make sure kernel is supported
