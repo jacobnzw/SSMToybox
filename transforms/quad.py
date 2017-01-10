@@ -153,3 +153,87 @@ class GaussHermiteTrunc(SigmaPointTruncTransform):
         # weights & points for input-output covariance
         self.Wcc = np.diag(GaussHermite.weights(dim, degree))
         self.unit_sp = GaussHermite.unit_sigma_points(dim, degree)
+
+
+class FullySymmetricStudent(SigmaPointTransform):
+    """
+    Moment transform for Student-t distributions based on fully symmetric integration rule from [1]_. The weights are
+    coded for rule orders (degrees) 3 and 5 only. The 3rd order weights converge to UT weights for nu -> \infty.
+
+    .. [1] J. McNamee and F. Stenger, “Construction of fully symmetric numerical integration formulas,”
+           Numer. Math., vol. 10, no. 4, pp. 327–344, 1967.
+    """
+
+    def __init__(self, dim, degree=3, kappa=None, dof=4):
+        self.degree = degree
+        self.dof = 4
+        self.wm = self.weights(dim, degree, kappa, dof)
+        self.Wc = np.diag(self.wm)
+        self.unit_sp = self.unit_sigma_points(dim, degree, kappa, dof)
+
+    @staticmethod
+    def weights(dim, degree=3, kappa=None, dof=4):
+        """
+        Weights of the fully symmetric rule for Student-t distribution.
+
+        Parameters
+        ----------
+        dim : int
+            Dimension of the input random variable (Dimension of the integration domain)
+        degree : int
+            Order of the quadrature rule, only `degree=3` or `degree=5` implemented.
+        kappa : float
+            Tuning parameter controlling spread of points from the center.
+        dof : float
+            Degree of freedom parameter for the Student distribution.
+
+        Returns
+        -------
+
+        """
+
+        # ensure non-negative kappa
+        kappa = np.max([3.0 - dim, 0.0]) if kappa is None else kappa
+
+        # default to degree 3 if not 3 or 5 given
+        if degree != 3 | degree != 5:
+            print("Order {} not supported. FS rule supports orders 3 and 5 only. Defaulting to order 3 rule.", degree)
+            degree = 3
+
+        if degree == 3:  # code for 3rd order rule
+
+            # dof > 2 for 3rd order rule
+            dof = np.max(dof, 3)
+
+            # number of points for 3rd-order rule
+            n = 2*dim + 1
+
+            # weights are parametrized so that ST-3 -> UT-3 for dof -> inf
+            w = ((dim + kappa) / 2) * np.ones(n)
+            w[0] = kappa / (dim + kappa)
+            return w
+        else:
+            # dof > 4 for 5th order rule
+            dof = np.max(dof, 5)
+            # code for 5th order rule
+
+
+    @staticmethod
+    def unit_sigma_points(dim, degree=3, kappa=None, dof=4):
+
+        # ensure non-negative kappa
+        kappa = np.max([3.0 - dim, 0.0]) if kappa is None else kappa
+
+        # default to degree 3 if not 3 or 5 given
+        if degree != 3 | degree != 5:
+            print("Order {} not supported. FS rule supports orders 3 and 5 only. Defaulting to order 3 rule.", degree)
+            degree = 3
+
+        if degree == 3:  # code for 3rd order rule
+            # pre-computed integrals, check McNamee & Stenger, 1967
+            I2 = dof / (dof - 2)
+            u = np.sqrt(I2 * (dim + kappa))
+            return u * np.hstack((np.zeros((dim, 1)), np.eye(dim), -np.eye(dim)))
+        else:  # code for 5th-order rule
+            pass
+
