@@ -200,7 +200,7 @@ class FullySymmetricStudent(SigmaPointTransform):
             print("Order {} not supported. FS rule supports orders 3 and 5 only. Defaulting to order 3 rule.", degree)
             degree = 3
 
-        if degree == 3:  # code for 3rd order rule
+        if degree == 3:  # code for 3rd-order rule
 
             # dof > 2 for 3rd order rule
             dof = np.max(dof, 3)
@@ -209,13 +209,14 @@ class FullySymmetricStudent(SigmaPointTransform):
             n = 2*dim + 1
 
             # weights are parametrized so that ST-3 -> UT-3 for dof -> inf
-            w = ((dim + kappa) / 2) * np.ones(n)
+            w = 1 / (2 * (dim + kappa)) * np.ones(n)
             w[0] = kappa / (dim + kappa)
             return w
-        else:
+        else:  # code for 5th-order rule
+
             # dof > 4 for 5th order rule
             dof = np.max(dof, 5)
-            # code for 5th order rule
+
 
 
     @staticmethod
