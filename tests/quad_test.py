@@ -5,7 +5,7 @@ import scipy as sp
 import numpy as np
 import numpy.linalg as la
 from numpy import newaxis as na
-from transforms.quad import MonteCarlo, SphericalRadialTrunc
+from transforms.quad import MonteCarlo, SphericalRadialTrunc, FullySymmetricStudent
 from models.ungm import UNGM
 
 
@@ -59,3 +59,49 @@ class MonteCarloTest(TestCase):
         # does it crash ?
         for t in tmc:
             print(t.apply(f, mean, cov, np.atleast_1d(1.0)))
+
+
+class FullySymmetricStudentTest(TestCase):
+
+    def test_symmetric_set(self):
+
+        # 1D points
+        dim = 1
+        sp = FullySymmetricStudent.symmetric_set(dim, [])
+        self.assertEqual(sp.ndim, 2)
+        self.assertEqual(sp.shape, (dim, 1))
+        sp = FullySymmetricStudent.symmetric_set(dim, [1])
+        self.assertEqual(sp.shape, (dim, 2*dim))
+        sp = FullySymmetricStudent.symmetric_set(dim, [1, 1])
+        self.assertEqual(sp.shape, (dim, 2*dim*(dim-1)))
+
+        # 2D points
+        dim = 2
+        sp = FullySymmetricStudent.symmetric_set(dim, [])
+        self.assertEqual(sp.shape, (dim, 1))
+        sp = FullySymmetricStudent.symmetric_set(dim, [1])
+        self.assertEqual(sp.shape, (dim, 2*dim))
+        sp = FullySymmetricStudent.symmetric_set(dim, [1, 1])
+        self.assertEqual(sp.shape, (dim, 2 * dim * (dim - 1)))
+
+        # 3D points
+        dim = 3
+        sp = FullySymmetricStudent.symmetric_set(dim, [1, 1])
+        self.assertEqual(sp.shape, (dim, 2 * dim * (dim - 1)))
+
+    def test_crash(self):
+        dim = 1
+        mt = FullySymmetricStudent(dim, degree=3)
+        f = UNGM().dyn_eval
+        mean = np.zeros(dim)
+        cov = np.eye(dim)
+        # does it crash ?
+        mt.apply(f, mean, cov, np.atleast_1d(1.0))
+
+        dim = 2
+        mt = FullySymmetricStudent(dim, degree=5)
+        f = sum_of_squares
+        mean = np.zeros(dim)
+        cov = np.eye(dim)
+        # does it crash ?
+        mt.apply(f, mean, cov, np.atleast_1d(1.0))

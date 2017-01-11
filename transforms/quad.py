@@ -164,6 +164,8 @@ class FullySymmetricStudent(SigmaPointTransform):
            Numer. Math., vol. 10, no. 4, pp. 327–344, 1967.
     """
 
+    _supported_degrees_ = [3, 5]
+
     def __init__(self, dim, degree=3, kappa=None, dof=4):
         self.degree = degree
         self.dof = 4
@@ -192,18 +194,18 @@ class FullySymmetricStudent(SigmaPointTransform):
 
         """
 
-        # ensure non-negative kappa
-        kappa = np.max([3.0 - dim, 0.0]) if kappa is None else kappa
-
-        # default to degree 3 if not 3 or 5 given
-        if degree != 3 | degree != 5:
-            print("Order {} not supported. FS rule supports orders 3 and 5 only. Defaulting to order 3 rule.", degree)
+        if degree not in FullySymmetricStudent._supported_degrees_:
+            print("Defaulting to degree 3. Supplied degree {} not supported. Supported degrees: {}", degree,
+                  FullySymmetricStudent._supported_degrees_)
             degree = 3
 
-        if degree == 3:  # code for 3rd-order rule
+        # use kappa = 3 - dim if kappa not given
+        kappa = np.max([3.0 - dim, 0.0]) if kappa is None else kappa
 
-            # dof > 2 for 3rd order rule
-            dof = np.max(dof, 3)
+        # dof > 2p, where degree = 2p+1
+        dof = np.max((dof, degree))
+
+        if degree == 3:  # code for 3rd-order rule
 
             # number of points for 3rd-order rule
             n = 2*dim + 1
@@ -212,29 +214,106 @@ class FullySymmetricStudent(SigmaPointTransform):
             w = 1 / (2 * (dim + kappa)) * np.ones(n)
             w[0] = kappa / (dim + kappa)
             return w
+
         else:  # code for 5th-order rule
 
-            # dof > 4 for 5th order rule
-            dof = np.max(dof, 5)
+            # compute weights in accordance to McNamee & Stenger (1967)
+            I0 = 1
+            I2 = dof / (dof - 2)
+            I22 = dof ** 2 / ((dof - 2) * (dof - 4))
+            I4 = 3 * I22
 
+            A0 = I0 - dim * (I2 / I4) ** 2 * (I4 - 0.5 * (dim - 1) * I22)
+            A1 = 0.5 * (I2 / I4) ** 2 * (I4 - (dim - 1) * I22)
+            A11 = 0.25 * (I2 / I4) ** 2 * I22
 
+            return np.hstack((A0, A1 * np.ones(2*dim), A11 * np.ones(2*dim*(dim-1))))
 
     @staticmethod
     def unit_sigma_points(dim, degree=3, kappa=None, dof=4):
 
-        # ensure non-negative kappa
-        kappa = np.max([3.0 - dim, 0.0]) if kappa is None else kappa
-
-        # default to degree 3 if not 3 or 5 given
-        if degree != 3 | degree != 5:
-            print("Order {} not supported. FS rule supports orders 3 and 5 only. Defaulting to order 3 rule.", degree)
+        if degree not in FullySymmetricStudent._supported_degrees_:
+            print("Defaulting to degree 3. Supplied degree {} not supported. Supported degrees: {}", degree,
+                  FullySymmetricStudent._supported_degrees_)
             degree = 3
 
+        # use kappa = 3 - dim if kappa not given
+        kappa = np.max([3.0 - dim, 0.0]) if kappa is None else kappa
+
+        # dof > 2p, where degree = 2p+1
+        dof = np.max((dof, degree))
+
         if degree == 3:  # code for 3rd order rule
+
             # pre-computed integrals, check McNamee & Stenger, 1967
             I2 = dof / (dof - 2)
             u = np.sqrt(I2 * (dim + kappa))
             return u * np.hstack((np.zeros((dim, 1)), np.eye(dim), -np.eye(dim)))
-        else:  # code for 5th-order rule
-            pass
 
+        else:  # code for 5th-order rule
+
+            I2 = dof / (dof - 2)
+            I4 = 3 * dof ** 2 / ((dof - 2) * (dof - 4))
+            u = np.sqrt(I4 / I2)
+
+            sp0 = FullySymmetricStudent.symmetric_set(dim, [])
+            sp1 = FullySymmetricStudent.symmetric_set(dim, [u])
+            sp2 = FullySymmetricStudent.symmetric_set(dim, [u, u])
+
+            return np.hstack((sp0, sp1, sp2))
+
+    @staticmethod
+    def symmetric_set(dim, gen):
+        """
+        Symmetric point set.
+
+        Parameters
+        ----------
+        dim : int
+            Dimension
+        gen : array_like (1 dimensional)
+            Generator
+
+        Notes
+        -----
+        Unscented transform points can be recovered by
+            a0 = symmetric_set(dim, [])
+            a1 = symmetric_set(dim, [1])
+            ut = np.hstack((a0, a1))
+
+        Returns
+        -------
+
+        """
+
+        # if generator has no element
+        nzeros = np.zeros((dim, 1))
+        if not gen:
+            return nzeros
+
+        gen = np.asarray(gen)
+        assert gen.ndim == 1, "Generator must be in 1d array_like."
+
+        uind = np.arange(dim)  # indices of variable u for easier indexing
+        eps = np.spacing(1.0)  # machine precision for comparisons
+        sp = np.empty(shape=(dim, 0))
+
+        for i in range(dim):
+            u = nzeros.copy()
+            u[i] = gen[0]
+
+            if len(gen) > 1:
+                if np.abs(gen[0] - gen[1]) < eps:
+                    V = FullySymmetricStudent.symmetric_set(dim-i-1, gen[1:])
+                    for j in range(V.shape[1]):
+                        u[i+1:, 0] = V[:, j]
+                        sp = np.hstack((sp, u, -u))
+                else:
+                    V = FullySymmetricStudent.symmetric_set(dim-1, gen[1:])
+                    for j in range(V.shape[1]):
+                        u[uind != i, 0] = V[:, j]
+                        sp = np.hstack((sp, u, -u))
+            else:
+                sp = np.hstack((sp, u, -u))
+
+        return sp
