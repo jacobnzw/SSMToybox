@@ -122,6 +122,37 @@ class StateSpaceInference(object):
         self.x_cov_sm = self.x_cov_fi + gain.dot(self.x_cov_sm - self.x_cov_pr).dot(gain.T)
 
 
+class StudentInference(StateSpaceInference):
+    """
+    Student's t filter as described in Filip Tronarp's paper.
+    """
+
+    def __init__(self, ssm, tf_dyn, tf_meas, nu=3):
+        super(StudentInference, self).__init__(ssm, tf_dyn, tf_meas)
+        self.nu = nu
+
+    def _measurement_update(self, y, time=None):
+
+        # scale the covariance matrices
+        scale = (self.nu - 2) / self.nu
+        self.y_cov_pr *= scale
+        self.xy_cov *= scale
+
+        # call the Kalman update
+        super(StudentInference, self)._measurement_update(y, time)
+
+        # filtered state covariance
+        # Note, that even though Student's t distribution is not parametrized by the covariance matrix like the
+        # Gaussian, the filter still produces mean and covariance of the state.
+        delta = cho_solve(cho_factor(self.y_cov_pr), y - self.y_mean_pr)
+        scale = (self.nu + delta.T.dot(delta)) / (self.nu + self.ssm.zD)
+        self.x_cov_fi *= scale
+
+        # update degrees of freedom
+        self.nu += self.ssm.zD
+
+
+
 class MarginalInference(StateSpaceInference):
     """
     Kalman state-space inference with marginalized moment transform parameters. Standard Gaussian is used as a
