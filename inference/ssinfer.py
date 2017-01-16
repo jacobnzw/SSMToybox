@@ -125,16 +125,60 @@ class StateSpaceInference(object):
 class StudentInference(StateSpaceInference):
     """
     Student's t filter as described in Filip Tronarp's paper.
+
+    Note, that even though Student's t distribution is not parametrized by the covariance matrix like the Gaussian,
+    the filter still produces mean and covariance of the state.
     """
 
-    def __init__(self, ssm, tf_dyn, tf_meas, nu=3):
+    def __init__(self, ssm, tf_dyn, tf_meas, nu=3, fixed_dof=True):
+        """
+
+        Parameters
+        ----------
+        ssm : StateSpaceModel
+            State space model to perform inference on. Must implement the 'q_dof' and 'r_dof' properties.
+        tf_dyn : MomentTransform
+            Moment transform for system dynamics
+        tf_meas : MomentTransform
+            Moment transform for measurement function
+        nu : float
+            DOF of the filtered scale matrix
+        fixed_dof : bool
+            If True, DOF will be fixed for all time steps, which preserves the heavy-tailed behaviour of the filter.
+            If False, DOF will be increasing after each measurement update, which means the heavy-tailed behaviour is
+            not preserved and therefore converges to a Gaussian filter.
+        """
         super(StudentInference, self).__init__(ssm, tf_dyn, tf_meas)
-        self.nu = nu
+        self.q_dof, self.r_dof = ssm.get_pars('q_dof', 'r_dof')  # state and measurement noise DOF
+        self.dof = nu
+        self.fixed_dof = fixed_dof
+
+    def _time_update(self, time, theta_dyn=None, theta_obs=None):
+
+        if self.fixed_dof:  # fixed-DOF version
+
+            # pick the smallest DOF
+            dof_pr = np.min((self.dof, self.ssm.nu_q, self.ssm.nu_r))
+
+            # rescale filtered covariance and noise scale matrices
+            scale = (dof_pr - 2) / dof_pr
+            self.fi_cov *= scale
+            self.q_cov *= scale * self.q_dof / (self.q_dof - 2)
+            self.r_cov *= scale * self.r_dof / (self.r_dof - 2)
+
+        else:  # increasing DOF version
+            scale = (self.dof - 2) / self.dof
+
+        # call the Kalman time update
+        super(StudentInference, self)._time_update(time, theta_dyn, theta_obs)
+
+        # scale the predicted covariance
+        self.pr_cov *= scale
 
     def _measurement_update(self, y, time=None):
 
         # scale the covariance matrices
-        scale = (self.nu - 2) / self.nu
+        scale = (self.dof - 2) / self.dof
         self.y_cov_pr *= scale
         self.xy_cov *= scale
 
@@ -142,15 +186,12 @@ class StudentInference(StateSpaceInference):
         super(StudentInference, self)._measurement_update(y, time)
 
         # filtered state covariance
-        # Note, that even though Student's t distribution is not parametrized by the covariance matrix like the
-        # Gaussian, the filter still produces mean and covariance of the state.
         delta = cho_solve(cho_factor(self.y_cov_pr), y - self.y_mean_pr)
-        scale = (self.nu + delta.T.dot(delta)) / (self.nu + self.ssm.zD)
+        scale = (self.dof + delta.T.dot(delta)) / (self.dof + self.ssm.zD)
         self.x_cov_fi *= scale
 
         # update degrees of freedom
-        self.nu += self.ssm.zD
-
+        self.dof += self.ssm.zD
 
 
 class MarginalInference(StateSpaceInference):
