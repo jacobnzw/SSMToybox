@@ -80,6 +80,7 @@ class Kernel(object, metaclass=ABCMeta):
 
     @abstractmethod
     def _get_default_hyperparameters(self, dim):
+        # TODO: rename 'hyperparameters' to 'parameters'
         pass
 
     @abstractmethod
@@ -92,13 +93,18 @@ class RBF(Kernel):
 
     def __init__(self, dim, hypers=None, jitter=1e-8):
         super(RBF, self).__init__(dim, hypers, jitter)
+
+        # ensure float
         self.alpha = float(self.hypers['alpha'])
         el = np.atleast_1d(self.hypers['el']).astype(float)
+
+        # if single 'el' given, assume the same 'el' will be used for all inputs
         if len(el) == 1 and dim > 1:
             # if el is a list/tuple/array w/ 1 element and dim > 1
             el = el[0] * np.ones(dim, )
         self.el = el
-        # pre-computation for convenience
+
+        # pre-compute handy quantities for convenience
         self.lam = np.diag(self.el ** 2)
         self.inv_lam = np.diag(self.el ** -2)
         self.sqrt_inv_lam = np.diag(self.el ** -1)
@@ -155,6 +161,7 @@ class RBF(Kernel):
         return alpha ** 2 * la.det(2 * inv_lam + self.eye_d) ** -0.5
 
     def exp_x_kxkx(self, x, hyp=None, ignore_alpha=True):
+        # TODO: make two kwargs for hypers,
         alpha, sqrt_inv_lam = self._get_hyperparameters(hyp)
         alpha = 1.0 if ignore_alpha else alpha
         inv_lam = sqrt_inv_lam ** 2
