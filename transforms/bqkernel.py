@@ -61,7 +61,7 @@ class Kernel(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def exp_x_kxkx(self, x, hyp=None):
+    def exp_x_kxkx(self, x, hyp=None, hyp_1=None):
         pass
 
     @abstractmethod
@@ -92,6 +92,24 @@ class RBF(Kernel):
     _hyperparameters_ = ['alpha', 'el']
 
     def __init__(self, dim, hypers=None, jitter=1e-8):
+        """
+        Radial Basis Function kernel.
+
+        Parameters
+        ----------
+        dim : int
+            Input dimension
+        hypers : dict
+            'alpha' : np.array of shape (d, )
+            'el' : np.array of shape (d, )
+        jitter : float
+            Jitter for stabilizing inversion of the kernel matrix. Default ``jitter=1e-8``.
+
+        Notes
+        -----
+        The kernel is also known as Squared Exponential (popular, but wrong), Exponentiated Quadratic (too mouthful)
+        or Gaussian (conflicts with terminology for PDFs).
+        """
         super(RBF, self).__init__(dim, hypers, jitter)
 
         # ensure float
@@ -160,18 +178,50 @@ class RBF(Kernel):
         inv_lam = sqrt_inv_lam ** 2
         return alpha ** 2 * la.det(2 * inv_lam + self.eye_d) ** -0.5
 
-    def exp_x_kxkx(self, x, hyp=None, ignore_alpha=True):
-        # TODO: make two kwargs for hypers,
-        alpha, sqrt_inv_lam = self._get_hyperparameters(hyp)
-        alpha = 1.0 if ignore_alpha else alpha
-        inv_lam = sqrt_inv_lam ** 2
+    def exp_x_kxkx(self, x, hyp=None, hyp_1=None, ignore_alpha=True):
+        """
+        "Correlation" matrix of kernels with elements
 
-        inv_r = la.inv(2 * inv_lam + self.eye_d)
-        xi = sqrt_inv_lam.dot(x)
-        xi = 2 * np.log(alpha) - 0.5 * np.sum(xi * xi, axis=0)
-        x = inv_lam.dot(x)
-        n = (xi[:, na] + xi[na, :]) + 0.5 * self._maha(x.T, -x.T, V=inv_r)
-        return la.det(inv_r) ** 0.5 * np.exp(n)
+        .. math:
+        \[
+            \mathbb{E}[k(x, x_i), k(x, x_j)]
+        \]
+
+        Parameters
+        ----------
+        x : numpy.ndarray of shape (D, N)
+        hyp : numpy.ndarray of shape (D, )
+        hyp_1 : numpy.ndarray of shape (D, )
+        ignore_alpha : bool
+
+
+        Returns
+        -------
+
+        """
+        alpha, sqrt_inv_lam = self._get_hyperparameters(hyp)
+        alpha_1, sqrt_inv_lam_1 = self._get_hyperparameters(hyp_1)
+        alpha, alpha_1 = (1.0, 1.0) if ignore_alpha else alpha, alpha_1
+        inv_lam = sqrt_inv_lam ** 2
+        inv_lam_1 = sqrt_inv_lam_1 ** 2
+
+        # \xi_i^T * \Lambda_m * \xi_i
+        xi = sqrt_inv_lam.dot(x)  # (D, N)
+        xi = 2 * np.log(alpha) - 0.5 * np.sum(xi * xi, axis=0)  # (N, )
+
+        # \xi_j^T * \Lambda_n * \xi_j
+        xi_1 = sqrt_inv_lam_1.dot(x)  # (D, N)
+        xi_1 = 2 * np.log(alpha_1) - 0.5 * np.sum(xi_1 * xi_1, axis=0)  # (N, )
+
+        # \Lambda^{-1} * x
+        x = inv_lam.dot(x)  # (D, N)
+        x_1 = inv_lam_1.dot(x)
+
+        # R^{-1} = (\Lambda_m^{-1} + \Lambda_n^{-1} + \eye)^{-1}
+        r = inv_lam + inv_lam_1 + self.eye_d  # (D, D)
+
+        n = (xi[:, na] + xi_1[na, :]) + 0.5 * self._maha(x.T, -x_1.T, V=la.inv(r))  # (N, N)
+        return la.det(r) ** -0.5 * np.exp(n)
 
     def exp_model_variance(self, x, hyp=None):
         alpha, sqrt_inv_lam = self._get_hyperparameters(hyp)
@@ -242,7 +292,7 @@ class Affine(Kernel):
     def exp_xy_kxy(self, hyp=None):
         pass
 
-    def exp_x_kxkx(self, x, hyp=None):
+    def exp_x_kxkx(self, x, hyp=None, hyp_1=None):
         pass
 
     def _get_default_hyperparameters(self, dim):

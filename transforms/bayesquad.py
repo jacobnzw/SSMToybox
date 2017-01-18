@@ -8,7 +8,9 @@ from .mtform import MomentTransform
 
 
 class BQTransform(MomentTransform, metaclass=ABCMeta):
-    _supported_models_ = ['gp', 'tp']  # mgp, gpder, ...
+
+    # list of supported models for the integrand
+    _supported_models_ = ['gp', 'gp-mo', 'tp']  # mgp, gpder, ...
 
     def __init__(self, dim, model='gp', kernel=None, points=None, kern_hyp=None, point_par=None, **kwargs):
         self.model = BQTransform._get_model(dim, model, kernel, points, kern_hyp, point_par, **kwargs)
@@ -39,7 +41,9 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
             return None
         # initialize the chosen model
         if model == 'gp':
-            return GaussianProcess(dim, kernel, points, hypers, point_pars, **kwargs)
+            return GaussianProcess(dim, kernel, points, hypers, point_pars)
+        elif model == 'gp-mo':
+            return GaussianProcess(dim, kernel, points, hypers, point_pars, multi_output=True)
         elif model == 'tp':
             return StudentTProcess(dim, kernel, points, hypers, point_pars, **kwargs)
 
@@ -81,6 +85,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
 
 class GPQ(BQTransform):  # consider renaming to GPQTransform
+    # TODO: multi-output option could be taken care of here via kwarg
     def __init__(self, dim, kernel, points, kern_hyp=None, point_par=None):
         super(GPQ, self).__init__(dim, 'gp', kernel, points, kern_hyp, point_par)
 
@@ -104,6 +109,7 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
 
     def _integral_variance(self, points, tf_pars):
         pass
+
 
 
 class TPQ(BQTransform):

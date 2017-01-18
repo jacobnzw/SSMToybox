@@ -403,16 +403,22 @@ class Model(object, metaclass=ABCMeta):
 
 
 class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/GPRegression, same for TP
-    def __init__(self, dim, kernel='rbf', points='ut', kern_hyp=None, point_hyp=None):
+    def __init__(self, dim, kernel='rbf', points='ut', kern_hyp=None, point_hyp=None, multi_output=False):
         """
+        Gaussian process model
 
         Parameters
         ----------
-        dim
-        kernel
-        points
-        kern_hyp
-        point_hyp
+        dim : int
+            Number of input dimensions
+        kernel : string
+            Acronym of the covariance function of the Gaussian process model.
+        points : string
+            Acronym for the sigma-point set to use in BQ.
+        kern_hyp : dict
+            Kernel parameters in dictionary.
+        point_hyp : dict
+            Parameters of the sigma-point set.
         """
         super(GaussianProcess, self).__init__(dim, kernel, points, kern_hyp, point_hyp)
 
