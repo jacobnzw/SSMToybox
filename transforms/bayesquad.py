@@ -85,7 +85,6 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
 
 class GPQ(BQTransform):  # consider renaming to GPQTransform
-    # TODO: multi-output option could be taken care of here via kwarg
     def __init__(self, dim, kernel, points, kern_hyp=None, point_par=None):
         super(GPQ, self).__init__(dim, 'gp', kernel, points, kern_hyp, point_par)
 
@@ -110,6 +109,47 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
     def _integral_variance(self, points, tf_pars):
         pass
 
+
+class GPQMO(BQTransform):
+    def __init__(self, dim, dim_out, kernel, points, kern_hyp=None, point_par=None):
+        super(GPQMO, self).__init__(dim, 'gp-mo', kernel, points, kern_hyp, point_par)
+
+        # output dimension (number of outputs)
+        self.e = dim_out
+
+    def _weights(self, tf_pars=None):
+        """
+        Weights of the multi-output Gaussian process quadrature.
+
+        Parameters
+        ----------
+        tf_pars : numpy.ndarray of shape (E, num_par)
+            Kernel parameters in a matrix, where e-th row contains parameters for e-th output.
+
+        Returns
+        -------
+        : tuple (w_m, w_c, w_cc)
+            GP quadrature weights for the mean (w_m), covariance (w_c) and cross-covariance (w_cc).
+            w_m : numpy.ndarray of shape (N, E)
+            w_c : numpy.ndarray of shape (N, N, E, E)
+            w_cc : numpy.ndarray of shape (D, N, E)
+
+        """
+        x = self.model.points
+        iK = np.zeros((self.n, self.n, self.e))
+
+        # Kernel expectations
+        q = np.zeros((self.n, self.e))
+        Q = np.zeros((self.n, self.n, self.e, self.e))
+        R = np.zeros((self.d, self.n, self.e))
+        for i in np.arange(self.e):
+            for j in np.arange(self.e):
+                # NOTE: Can't access parameters for Kernel from here; how about I create a lower-level method in GPMO
+                # model to return the kernel expectations,
+                # Alternatively it might be solved by creating RBF_MO class, which would return iK, q, Q,
+                # R calculated for multiple parameters.
+                # A well structured solution, would require re-design of the expectations to Kernel and Model
+                iK = self.model.kernel.eval_inv_dot(x, tf_pars, ignore_alpha=True)
 
 
 class TPQ(BQTransform):
