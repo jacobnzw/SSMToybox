@@ -6,6 +6,8 @@ from numpy.linalg import cholesky
 
 from .mtform import MomentTransform
 
+# TODO: docstrings
+
 
 class BQTransform(MomentTransform, metaclass=ABCMeta):
 
@@ -33,21 +35,23 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
     @staticmethod
     def _get_model(dim, model, kernel, points, hypers, point_pars, **kwargs):
-        from .bqmodel import GaussianProcess, StudentTProcess  # import must be after SigmaPointTransform
+
+        # import must be after SigmaPointTransform
+        from .bqmodel import GaussianProcess, StudentTProcess, GaussianProcessMO
         model = model.lower()
+
         # make sure kernel is supported
         if model not in BQTransform._supported_models_:
             print('Model {} not supported. Supported models are {}.'.format(model, BQTransform._supported_models_))
             return None
+
         # initialize the chosen model
         if model == 'gp':
             return GaussianProcess(dim, kernel, points, hypers, point_pars)
         elif model == 'gp-mo':
-            return GaussianProcess(dim, kernel, points, hypers, point_pars, multi_output=True)
+            return GaussianProcessMO(dim, kernel, points, hypers, point_pars)
         elif model == 'tp':
             return StudentTProcess(dim, kernel, points, hypers, point_pars, **kwargs)
-
-    # TODO: specify requirements for shape of input/output for all of these fcns
 
     def minimum_variance_points(self, x0, tf_pars):
         # run optimizer to find minvar point sets using initial guess x0; requires implemented _integral_variance()
@@ -135,13 +139,22 @@ class GPQMO(BQTransform):
             w_cc : numpy.ndarray of shape (D, N, E)
 
         """
+
+        par = self.model.kernel.get_hyperparameters(tf_pars)
+
         x = self.model.points
-        iK = self.model.kernel.eval_inv_dot(x, tf_pars, ignore_alpha=True)  # (N, N, E)
 
         # Kernel expectations
-        q = self.model.kernel.mean(x)  # (N, E)
-        Q = self.model.kernel.covariance(x)  # (N, N, E, E)
-        R = self.model.kernel.crosscovariance(x)  # (D, N, E)
+        q = np.zeros((self.n, self.e))
+        Q = np.zeros((self.n, self.n, self.e, self.e))
+        R = np.zeros((self.d, self.n, self.e))
+        iK = np.zeros((self.n, self.n, self.e))
+        for i in range(self.e):
+            q[:, i] = self.model.kernel.exp_x_kx(x, par[i, :])
+            R[..., i] = self.model.kernel.exp_x_xkx(x, par[i, :])
+            iK[..., i] = self.model.kernel.eval_inv_dot(x, par[i, :], scaling=True)
+            for j in range(self.e):
+                Q[..., i, j] = self.model.kernel.exp_x_kxkx(x, par[i, :], par[j, :])
 
         # weights
         # w_m = q iK

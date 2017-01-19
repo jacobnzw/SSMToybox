@@ -69,17 +69,18 @@ class Model(object, metaclass=ABCMeta):
         point_hyp : numpy.ndarray
             Any parameters for constructing desired point-set.
         """
+
         # init kernel and sigma-points
         self.kernel = Model.get_kernel(dim, kernel, kern_hyp)
         self.points = Model.get_points(dim, points, point_hyp)
+
         # save for printing
         self.str_pts = points
         self.str_pts_hyp = str(point_hyp)
+
         # may no longer be necessary now that jitter is in kernel
         self.d, self.n = self.points.shape
         self.eye_d, self.eye_n = np.eye(self.d), np.eye(self.n)
-        self.emv = self.kernel.exp_model_variance(self.points)
-        self.ivar = self.kernel.integral_variance(self.points)
 
     def __str__(self):
         """
@@ -385,8 +386,8 @@ class Model(object, metaclass=ABCMeta):
 
         Returns
         -------
-        numpy.ndarray
-            Point set in (D, N) array, where D is dimension and N number of points.
+        : Kernel
+            A subclass of Kernel.
 
         Notes
         -----
@@ -405,7 +406,11 @@ class Model(object, metaclass=ABCMeta):
 
 
 class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/GPRegression, same for TP
-    def __init__(self, dim, kernel='rbf', points='ut', kern_hyp=None, point_hyp=None, multi_output=False):
+    """
+    Gaussian process regression model of the integrand in the Bayesian quadrature.
+    """
+
+    def __init__(self, dim, kernel='rbf', points='ut', kern_hyp=None, point_hyp=None):
         """
         Gaussian process model
 
@@ -437,9 +442,12 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         -------
 
         """
-        iK = self.kernel.eval_inv_dot(self.points, hyp=hyp)
-        kx = self.kernel.eval(test_data, self.points, hyp=hyp)
-        kxx = self.kernel.eval(test_data, test_data, diag=True, hyp=hyp)
+
+        iK = self.kernel.eval_inv_dot(hyp, self.points)
+        kx = self.kernel.eval(hyp, test_data, self.points)
+        kxx = self.kernel.eval(hyp, test_data, test_data, diag=True)
+
+        # GP mean and predictive variance
         mean = np.squeeze(kx.dot(iK).dot(fcn_obs.T))
         var = np.squeeze(kxx - np.einsum('im,mn,mi->i', kx, iK, kx.T))
         return mean, var
@@ -456,7 +464,11 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         -------
 
         """
-        return self.kernel.exp_model_variance(self.points, hyp=hyp)
+
+        hyp = self.kernel.get_hyperparameters(hyp)
+        Q = self.kernel.exp_x_kxkx(self.points, hyp, hyp)
+        iK = self.kernel.eval_inv_dot(hyp, self.points, scaling=False)
+        return self.kernel.scale ** 2 * (1 - np.trace(Q.dot(iK)))
 
     def integral_variance(self, fcn_obs, hyp=None):
         """
@@ -470,7 +482,12 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         -------
 
         """
-        return self.kernel.integral_variance(self.points, hyp=hyp)
+
+        hyp = self.kernel.get_hyperparameters(hyp)
+        q = self.kernel.exp_x_kx(self.points, hyp)
+        iK = self.kernel.eval_inv_dot(hyp, self.points, scaling=False)
+        kbar = self.kernel.exp_x_kxx(hyp)
+        return kbar - q.T.dot(iK).dot(q)
 
     def neg_log_marginal_likelihood(self, log_hyp, fcn_obs):
         """
@@ -507,7 +524,47 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         return nlml, dnlml_dtheta
 
 
+class GaussianProcessMO(Model):
+    """
+    Multi-output Gaussian process regression model of the integrand in the Bayesian quadrature.
+    """
+
+    def __init__(self, dim, kernel='rbf', points='ut', kern_hyp=None, point_hyp=None):
+        pass
+
+    def predict(self, test_data, fcn_obs, hyp=None):
+        pass
+
+    def exp_model_variance(self, fcn_obs, hyp=None):
+        hyp = self.kernel.get_hyperparameters(hyp)
+
+        emv = np.zeros((self.e, ))
+        for i in range(self.e):
+            iK = self.kernel.eval_inv_dot(hyp[i, :], self.points, scaling=False)
+            Q = self.kernel.exp_x_kxkx(self.points, hyp[i, :], hyp[i, :])
+            emv[i] = self.kernel.scale[i] ** 2 * (1 - np.trace(Q.dot(iK)))
+        return emv
+
+    def integral_variance(self, fcn_obs, hyp=None):
+        hyp = self.kernel.get_hyperparameters(hyp)
+
+        ivar = np.zeros((self.e, ))
+        for i in range(self.e):
+            q = self.kernel.exp_x_kx(self.points, hyp[i, :])
+            iK = self.kernel.eval_inv_dot(hyp[i, :], self.points, scaling=False)
+            kbar = self.kernel.exp_x_kxx(hyp[i, :])
+            ivar[i] = kbar - q.T.dot(iK).dot(q)
+        return ivar
+
+    def neg_log_marginal_likelihood(self, log_hyp, fcn_obs):
+        pass
+
+
 class StudentTProcess(Model):
+    """
+    Student t process regression model of the integrand in the Bayesian quadrature.
+    """
+
     def __init__(self, dim, kernel='rbf', points='ut', kern_hyp=None, point_hyp=None, nu=None):
         """
 
@@ -521,8 +578,8 @@ class StudentTProcess(Model):
         nu
         """
         super(StudentTProcess, self).__init__(dim, kernel, points, kern_hyp, point_hyp)
-        nu = 3.0 if nu is None else nu
         assert nu > 2, 'Degrees of freedom (nu) must be > 2.'
+        nu = 3.0 if nu is None else nu
         self.nu = nu
 
     def predict(self, test_data, fcn_obs, hyp=None, nu=None):
@@ -561,10 +618,14 @@ class StudentTProcess(Model):
         -------
 
         """
+
+        hyp = self.kernel.get_hyperparameters(hyp)
+
+        Q = self.kernel.exp_x_kxkx(self.points, hyp, hyp)
+        iK = self.kernel.eval_inv_dot(hyp, self.points, scaling=False)
         fcn_obs = np.squeeze(fcn_obs)
-        iK = self.kernel.eval_inv_dot(self.points)
         scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.n)
-        return scale * self.kernel.exp_model_variance(self.points, hyp=hyp)
+        return scale * self.kernel.scale ** 2 * (1 - np.trace(Q.dot(iK)))
 
     def integral_variance(self, fcn_obs, hyp=None):
         """
@@ -578,10 +639,16 @@ class StudentTProcess(Model):
         -------
 
         """
+
+        hyp = self.kernel.get_hyperparameters(hyp)
+
+        kbar = self.kernel.exp_x_kxx(hyp)
+        q = self.kernel.exp_x_kx(self.points, hyp)
+        iK = self.kernel.eval_inv_dot(hyp, self.points, scaling=False)
+
         fcn_obs = np.squeeze(fcn_obs)
-        iK = self.kernel.eval_inv_dot(self.points, hyp=hyp)
         scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.n)
-        return scale * self.kernel.integral_variance(self.points, hyp=hyp)
+        return scale * (kbar - q.T.dot(iK).dot(q))
 
     def neg_log_marginal_likelihood(self, log_hyp, fcn_obs):
         """
