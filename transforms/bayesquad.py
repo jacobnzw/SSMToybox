@@ -136,20 +136,17 @@ class GPQMO(BQTransform):
 
         """
         x = self.model.points
-        iK = np.zeros((self.n, self.n, self.e))
+        iK = self.model.kernel.eval_inv_dot(x, tf_pars, ignore_alpha=True)  # (N, N, E)
 
         # Kernel expectations
-        q = np.zeros((self.n, self.e))
-        Q = np.zeros((self.n, self.n, self.e, self.e))
-        R = np.zeros((self.d, self.n, self.e))
-        for i in np.arange(self.e):
-            for j in np.arange(self.e):
-                # NOTE: Can't access parameters for Kernel from here; how about I create a lower-level method in GPMO
-                # model to return the kernel expectations,
-                # Alternatively it might be solved by creating RBF_MO class, which would return iK, q, Q,
-                # R calculated for multiple parameters.
-                # A well structured solution, would require re-design of the expectations to Kernel and Model
-                iK = self.model.kernel.eval_inv_dot(x, tf_pars, ignore_alpha=True)
+        q = self.model.kernel.mean(x)  # (N, E)
+        Q = self.model.kernel.covariance(x)  # (N, N, E, E)
+        R = self.model.kernel.crosscovariance(x)  # (D, N, E)
+
+        # weights
+        # w_m = q iK
+        # w_c = iK Q iK
+        # w_cc = R iK
 
 
 class TPQ(BQTransform):

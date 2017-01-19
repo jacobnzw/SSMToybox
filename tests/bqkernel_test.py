@@ -12,8 +12,8 @@ class RBFKernelTest(TestCase):
     def setUpClass(cls):
         cls.hypers_1d = {'alpha': 1.0, 'el': 3.0 * np.ones(1, )}
         cls.hypers_2d = {'alpha': 1.0, 'el': 3.0 * np.ones(2, )}
-        cls.kern_rbf_1d = RBF(1, cls.hypers_1d)
-        cls.kern_rbf_2d = RBF(2, cls.hypers_2d)
+        cls.kern_rbf_1d = RBF(1, 1, cls.hypers_1d)
+        cls.kern_rbf_2d = RBF(2, 1, cls.hypers_2d)
         cls.data_1d = np.array([[1, -1, 0]], dtype=float)
         cls.data_2d = np.hstack((np.zeros((2, 1)), np.eye(2), -np.eye(2)))
         cls.test_data_1d = np.atleast_2d(np.linspace(-5, 5, 50))

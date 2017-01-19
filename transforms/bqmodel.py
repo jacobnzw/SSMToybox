@@ -26,8 +26,10 @@ class Model(object, metaclass=ABCMeta):
 
     Attributes
     ----------
-    _supported_points_ : list of strings
-    _supported_kernels_ : list of kernels
+    Model._supported_points_ : list
+        Each element of the list is an acronym of a point-set.
+    Model._supported_kernels_ : list
+        Each element of the list is an acronym of a kernel.
     kernel : Kernel
         Kernel used by the Model.
     points : numpy.ndarray
@@ -397,7 +399,7 @@ class Model(object, metaclass=ABCMeta):
             return None
         # initialize the chosen kernel
         if kernel == 'rbf':
-            return RBF(dim, hypers)
+            return RBF(dim, 1, hypers)
         elif kernel == 'affine':
             return Affine(dim, hypers)
 
