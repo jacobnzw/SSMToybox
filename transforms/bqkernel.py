@@ -83,6 +83,8 @@ class Kernel(object, metaclass=ABCMeta):
         return la.cholesky(self.eval(hyp, x, scaling=scaling) + self.jitter * np.eye(x.shape[1]))
 
     # expectations
+    # TODO: reorganize expectations: group those that require data, put hyp as first argument
+    # TODO: unify terminology, hyperparameters -> (kernel) parameters
     @abstractmethod
     def exp_x_kx(self, x, hyp):
         """
@@ -323,7 +325,7 @@ class RBF(Kernel):
         # hyp0: array_like [alpha, el_1, ..., el_D]
         # x: (D, N)
         alpha, el = hyp0[0], hyp0[1:]
-        K = self.eval(hyp=hyp0, x1=hyp0)
+        K = self.eval(hyp0, x)
         # derivative w.r.t. alpha (N,N)
         d_alpha = 2 * alpha ** -1 * K
         # derivatives w.r.t. el_1, ..., el_D (N,N,D)
@@ -345,6 +347,7 @@ class RBF(Kernel):
 
         """
         param = param.astype(float).squeeze()
+        # TODO: return scaling and lengthscale, not sqrt inv lambda
         return param[0], np.diag(param[1:] ** -1)
 
     def get_hyperparameters(self, hyp=None):
@@ -354,7 +357,7 @@ class RBF(Kernel):
         else:
 
             # ensure supplied kernel parameters are in 2d float array
-            hyp = np.asarray(hyp, dtype=float)
+            hyp = np.atleast_2d(hyp).astype(float)
             assert hyp.ndim == 2, "Supplied Kernel parameters must be a 2d array of shape (dim_out, dim)."
 
             # returned supplied kernel parameters

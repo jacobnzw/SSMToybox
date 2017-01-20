@@ -408,7 +408,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
     Gaussian process regression model of the integrand in the Bayesian quadrature.
     """
 
-    def __init__(self, dim, kern_hyp, kernel, points, point_hyp=None):
+    def __init__(self, dim, kern_hyp, kernel='rbf', points='ut', point_hyp=None):
         """
         Gaussian process model
 
@@ -440,6 +440,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         -------
 
         """
+        hyp = self.kernel.get_hyperparameters(hyp)
 
         iK = self.kernel.eval_inv_dot(hyp, self.points)
         kx = self.kernel.eval(hyp, test_data, self.points)
@@ -466,7 +467,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         hyp = self.kernel.get_hyperparameters(hyp)
         Q = self.kernel.exp_x_kxkx(self.points, hyp, hyp)
         iK = self.kernel.eval_inv_dot(hyp, self.points, scaling=False)
-        return self.kernel.scale ** 2 * (1 - np.trace(Q.dot(iK)))
+        return self.kernel.scale.squeeze() ** 2 * (1 - np.trace(Q.dot(iK)))
 
     def integral_variance(self, fcn_obs, hyp=None):
         """
@@ -506,7 +507,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         # convert from log-hypers to hypers
         hypers = np.exp(log_hyp)
 
-        L = self.kernel.eval_chol(self.points, hyp=hypers)  # (N, N)
+        L = self.kernel.eval_chol(hypers, self.points)  # (N, N)
         K = L.dot(L.T)  # jitter included from eval_chol
         a = la.solve(K, fcn_obs)  # (N, E)
         y_dot_a = np.einsum('ij, ji', fcn_obs.T, a)  # sum of diagonal of A.T.dot(A)
@@ -564,7 +565,7 @@ class StudentTProcess(Model):
     Student t process regression model of the integrand in the Bayesian quadrature.
     """
 
-    def __init__(self, dim, kern_hyp, kernel, points, point_hyp=None, nu=3.0):
+    def __init__(self, dim, kern_hyp, kernel='rbf', points='ut', point_hyp=None, nu=3.0):
         """
 
         Parameters
@@ -593,11 +594,14 @@ class StudentTProcess(Model):
         -------
 
         """
+
+        hyp = self.kernel.get_hyperparameters(hyp)
         if nu is None:
             nu = self.nu
-        iK = self.kernel.eval_inv_dot(self.points)
-        kx = self.kernel.eval(test_data, self.points)
-        kxx = self.kernel.eval(test_data, test_data, diag=True)
+
+        iK = self.kernel.eval_inv_dot(hyp, self.points)
+        kx = self.kernel.eval(hyp, test_data, self.points)
+        kxx = self.kernel.eval(hyp, test_data, test_data, diag=True)
         mean = np.squeeze(kx.dot(iK).dot(fcn_obs.T))
         var = np.squeeze(kxx - np.einsum('im,mn,mi->i', kx, iK, kx.T))
         scale = (nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (nu - 2 + self.num_pts)
@@ -622,7 +626,7 @@ class StudentTProcess(Model):
         iK = self.kernel.eval_inv_dot(hyp, self.points, scaling=False)
         fcn_obs = np.squeeze(fcn_obs)
         scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.num_pts)
-        return scale * self.kernel.scale ** 2 * (1 - np.trace(Q.dot(iK)))
+        return scale * self.kernel.scale.squeeze() ** 2 * (1 - np.trace(Q.dot(iK)))
 
     def integral_variance(self, fcn_obs, hyp=None):
         """
@@ -666,7 +670,7 @@ class StudentTProcess(Model):
         # convert from log-hypers to hypers
         hypers = np.exp(log_hyp)
 
-        L = self.kernel.eval_chol(self.points, hyp=hypers)  # (N, N)
+        L = self.kernel.eval_chol(hypers, self.points)  # (N, N)
         K = L.dot(L.T)  # jitter included from eval_chol
         a = la.solve(K, fcn_obs)  # (N, E)
         y_dot_a = np.einsum('ij, ji', fcn_obs.T, a)  # sum of diagonal of A.T.dot(A)

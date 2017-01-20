@@ -15,50 +15,48 @@ fcn = lambda x: 0.5 * x + 25 * x / (1 + x ** 2)
 
 
 class GPModelTest(TestCase):
-    # TODO: could be general test class for any model
+
+    @classmethod
+    def setUpClass(cls):
+        cls.ker_par_1d = np.array([[1, 3]])
+        cls.ker_par_5d = np.array([[1, 3, 3, 3, 3, 3]])
+        cls.pt_par_ut = {'alpha': 1.0}
 
     def test_init(self):
-        khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
-        phyp = {'alpha': 1.0}
-        GaussianProcess(1, None,,
-        GaussianProcess(1, kern_hyp=khyp, kernel='rbf', points='ut', point_hyp=phyp)
+        GaussianProcess(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
+        GaussianProcess(5, self.ker_par_5d, 'rbf', 'ut', self.pt_par_ut)
 
     def test_plotting(self):
-        khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
-        model = GaussianProcess(1, kern_hyp=khyp, kernel=khyp, points=)
+        model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
         xtest = np.linspace(-5, 5, 50)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
         model.plot_model(xtest, y, fcn_true=f)
 
     def test_exp_model_variance(self):
-        khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
-        model = GaussianProcess(1, kern_hyp=khyp, kernel=khyp, points=)
+        model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
         y = fcn(model.points)
         self.assertTrue(model.exp_model_variance(y) >= 0)
 
     def test_integral_variance(self):
-        khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
-        model = GaussianProcess(1, kern_hyp=khyp, kernel=khyp, points=)
+        model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
         y = fcn(model.points)
         self.assertTrue(model.integral_variance(y) >= 0)
 
     def test_log_marginal_likelihood(self):
-        khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
-        model = GaussianProcess(1, kern_hyp=khyp, kernel=khyp, points=)
+        model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
         y = fcn(model.points)
         lhyp = np.log([1.0, 3.0])
         f, df = model.neg_log_marginal_likelihood(lhyp, y.T)
 
     def test_hypers_optim(self):
-        khyp = {'alpha': 1.0, 'el': 1.0 * np.ones(1)}
-        model = GaussianProcess(1, kern_hyp=khyp, kernel='gh', points='gh', point_hyp={'degree': 15})
+        model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'gh', point_hyp={'degree': 15})
         xtest = np.linspace(-7, 7, 100)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
         # plot before optimization
         # model.plot_model(xtest, y, fcn_true=f)
-        lhyp0 = np.log([1.0, 0.1])
+        lhyp0 = np.log([[1.0, 0.1]])
         b = ((np.log(0.9), np.log(1.1)), (None, None))
 
         def con_alpha(lhyp):
@@ -110,8 +108,7 @@ class GPModelTest(TestCase):
         from models.tracking import ReentryRadar
         ssm = ReentryRadar()
         func = ssm.meas_eval
-        khyp = {'alpha': 1.0, 'el': 1.0 * np.ones(dim)}
-        model = GaussianProcess(dim, kern_hyp=khyp, kernel='sr', points='sr')  # , point_hyp={'degree': 10})
+        model = GaussianProcess(dim, self.ker_par_5d, 'rbf', 'sr')  # , point_hyp={'degree': 10})
         x = ssm.get_pars('x0_mean')[0][:, na] + model.points  # ssm.get_pars('x0_cov')[0].dot(model.points)
         y = np.apply_along_axis(func, 0, x, None)  # (d_out, n**2)
 
@@ -141,52 +138,52 @@ class GPModelTest(TestCase):
 
 
 class TPModelTest(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.ker_par_1d = np.array([[1, 3]])
+        cls.ker_par_5d = np.array([[1, 3, 3, 3, 3, 3]])
+        cls.pt_par_ut = {'alpha': 1.0}
+
     def test_init(self):
-        khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
-        phyp = {'alpha': 1.0}
-        StudentTProcess(1, None,,
-        StudentTProcess(1, kern_hyp=khyp, kernel='rbf', points='ut', point_hyp=phyp)
+        StudentTProcess(1, self.ker_par_1d)
+        StudentTProcess(5, self.ker_par_5d, point_hyp=self.pt_par_ut)
 
     def test_plotting(self):
-        dim = 1
-        khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(dim, )}
-        model = StudentTProcess(dim, kern_hyp=khyp, kernel=khyp, points=)
+        model = StudentTProcess(1, self.ker_par_1d)
         xtest = np.linspace(-5, 5, 50)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
         model.plot_model(xtest, y, fcn_true=f)
 
     def test_exp_model_variance(self):
-        khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
-        model = StudentTProcess(1, kern_hyp=khyp, kernel=khyp, points=)
+        model = StudentTProcess(1, self.ker_par_1d)
         y = fcn(model.points)
         self.assertTrue(model.exp_model_variance(y) >= 0)
 
     def test_integral_variance(self):
-        khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
-        model = StudentTProcess(1, kern_hyp=khyp, kernel=khyp, points=)
+        model = StudentTProcess(1, self.ker_par_1d)
         y = fcn(model.points)
         self.assertTrue(model.integral_variance(y) >= 0)
 
     def test_hypers_optim(self):
-        khyp = {'alpha': 1.0, 'el': 1.0 * np.ones(1)}
-        model = StudentTProcess(1, kern_hyp=khyp, kernel='gh', points='gh', point_hyp={'degree': 15})
+        model = StudentTProcess(1, self.ker_par_1d, points='gh', point_hyp={'degree': 15})
         xtest = np.linspace(-7, 7, 100)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
         # plot before optimization
         # model.plot_model(xtest, y, fcn_true=f)
-        lhyp0 = np.log([1.0, 1.0])
-        b = ((np.log(0.9), np.log(1.1)), (None, None))
+        lhyp0 = np.log([[1.0, 0.5]])
+        b = ((np.log(0.1), np.log(2.1)), (None, None))
 
         def con_alpha(lhyp):
             # constrain alpha**2 = 1
-            return np.exp(lhyp)[0] ** 2 - 1
+            return np.exp(lhyp[0]) ** 2 - 1 ** 2
 
         con = {'type': 'eq', 'fun': con_alpha}
-        res_ml2 = model.optimize(lhyp0, y.T, crit='nlml', method='BFGS', constraints=con)
-        res_ml2_emv = model.optimize(lhyp0, y.T, crit='nlml+emv', method='BFGS', constraints=con)
-        res_ml2_ivar = model.optimize(lhyp0, y.T, crit='nlml+ivar', method='BFGS', constraints=con)
+        res_ml2 = model.optimize(lhyp0, y.T, crit='nlml', method='SLSQP', constraints=con)
+        res_ml2_emv = model.optimize(lhyp0, y.T, crit='nlml+emv', method='SLSQP', constraints=con)
+        res_ml2_ivar = model.optimize(lhyp0, y.T, crit='nlml+ivar', method='SLSQP', constraints=con)
         hyp_ml2 = np.exp(res_ml2.x)
         hyp_ml2_emv = np.exp(res_ml2_emv.x)
         hyp_ml2_ivar = np.exp(res_ml2_ivar.x)
