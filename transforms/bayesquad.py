@@ -14,7 +14,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
     # list of supported models for the integrand
     _supported_models_ = ['gp', 'gp-mo', 'tp']  # mgp, gpder, ...
 
-    def __init__(self, dim_in, kern_hyp, dim_out=1, model='gp', kernel='rbf', points='ut', point_par=None, **kwargs):
+    def __init__(self, dim_in, dim_out, kern_hyp, model, kernel, points, point_par, **kwargs):
         self.model = BQTransform._get_model(dim_in, dim_out, model, kernel, points, kern_hyp, point_par)
 
         # BQ transform weights for the mean, covariance and cross-covariance
@@ -45,7 +45,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         kernel : string
         points : string
         hypers : numpy.ndarray
-        point_pars : numpy.ndarray
+        point_pars : dict
         kwargs : dict
 
         Returns
@@ -69,7 +69,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         elif model == 'gp-mo':
             return GaussianProcessMO(dim_in, dim_out, hypers, kernel, points, point_pars)
         elif model == 'tp':
-            return StudentTProcess(dim_in, hypers, kernel, points, point_pars)
+            return StudentTProcess(dim_in, hypers, kernel, points, point_pars, **kwargs)
 
     def minimum_variance_points(self, x0, tf_pars):
         # run optimizer to find minvar point sets using initial guess x0; requires implemented _integral_variance()
@@ -96,7 +96,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         return fcn_evals.dot(weights)
 
     def _covariance(self, weights, fcn_evals, mean_out):
-        expected_model_var = self.model.emv
+        expected_model_var = self.model.exp_model_variance(fcn_evals)
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + expected_model_var
 
     def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
@@ -134,7 +134,7 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
 
 class GPQMO(BQTransform):
     def __init__(self, dim_in, dim_out, kern_hyp, kernel='rbf', points='ut', point_par=None):
-        super(GPQMO, self).__init__(dim_in, kern_hyp, dim_out, 'gp-mo', kernel, points, point_par)
+        super(GPQMO, self).__init__(dim_in, dim_out, kern_hyp, 'gp-mo', kernel, points, point_par)
 
         # output dimension (number of outputs)
         self.e = dim_out
@@ -178,9 +178,16 @@ class GPQMO(BQTransform):
                 Q[..., i, j] = self.model.kernel.exp_x_kxkx(x, par[i, :], par[j, :])
 
         # weights
-        # w_m = q iK
-        # w_c = iK Q iK
-        # w_cc = R iK
+        # w_m = q(\theta_e) * iK(\theta_e) for all e = 1, ..., dim_out
+        w_m = np.einsum('ne, nne -> ne', q, iK)
+
+        # w_m = iK(\theta_e) * Q(\theta_e, \theta_f) * iK(\theta_f) for all e,f = 1, ..., dim_out
+        w_c = np.einsum('nie, ijed, jmd -> nmed', iK, Q, iK)
+
+        # w_cc = R(\theta_e) * iK(\theta_e) for all e = 1, ..., dim_out
+        w_cc = np.einsum('die, ine -> dne', R, iK)
+
+        return w_m, w_c, w_cc
 
     def _fcn_eval(self, fcn, x, fcn_pars):
         return np.apply_along_axis(fcn, 0, x, fcn_pars)
@@ -189,10 +196,10 @@ class GPQMO(BQTransform):
         return (fcn_evals * weights).sum(axis=0)
 
     def _covariance(self, weights, fcn_evals, mean_out):
-        pass
+        return np.einsum('ei, ijed, jd -> ed', fcn_evals.T, weights, fcn_evals)
 
     def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
-        pass
+        return np.einsum('dne, ne -> de', weights, fcn_evals)
 
     def _integral_variance(self, points, tf_pars):
         pass
@@ -200,7 +207,7 @@ class GPQMO(BQTransform):
 
 class TPQ(BQTransform):
     def __init__(self, dim_in, kern_hyp, kernel='rbf', points='ut', point_par=None):
-        super(TPQ, self).__init__(dim_in, kern_hyp, model='tp', kernel=kernel, points=points, point_par=point_par)
+        super(TPQ, self).__init__(dim_in, 1, kern_hyp, 'tp', kernel, points, point_par)
 
     def _weights(self, tf_pars=None):
         x = self.model.points
