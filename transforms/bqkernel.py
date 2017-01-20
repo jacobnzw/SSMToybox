@@ -11,7 +11,7 @@ from scipy.linalg import cho_factor, cho_solve
 
 class Kernel(object, metaclass=ABCMeta):
 
-    def __init__(self, dim, hypers, jitter=1e-8):
+    def __init__(self, dim, hypers, jitter):
         """
         Kernel base class.
 
@@ -201,6 +201,9 @@ class RBF(Kernel):
         """
         Radial Basis Function kernel.
 
+        .. math::
+           k(x, x') = s^2 \exp(-\frac{1}{2}(x - x')^{\top}\ Lambda^{-1} (x - x') \right)
+
         Parameters
         ----------
         dim : int
@@ -358,11 +361,34 @@ class RBF(Kernel):
         return (x2V[:, na] + y2V[:, na].T) - 2 * x.dot(V).dot(y.T)
 
 
-class Affine(Kernel):
-    def __init__(self, dim, hypers=1e-8):
-        super(Affine, self).__init__(dim, hypers)
+class RQ(Kernel):
 
-    def eval(self, x1, x2=None, hyp=None, diag=False):
+    def __init__(self, dim, hypers, jitter=1e-8):
+        """
+        Rational Quadratic kernel.
+
+        .. math::
+           k(x, x') = s^2 \left( 1 + \frac{1}{2\alpha}(x - x')^{\top}\ Lambda^{-1} (x - x') \right)^{-\alpha}
+
+        Parameters
+        ----------
+        dim : int
+            Input dimension
+        hypers : numpy.ndarray
+            Kernel parameters in a matrix of shape (dim_out, num_hyp), where i-th row contains parameters
+            for i-th
+            output. Each row is :math: `[\alpha, \ell_1, \ldots, \ell_dim]`
+        jitter : float
+            Jitter for stabilizing inversion of the kernel matrix. Default ``jitter=1e-8``.
+
+        Notes
+        -----
+        The kernel expectations are w.r.t standard Student's t density and are approximate.
+        """
+        assert hypers.shape[1] == dim+2
+        super(RQ, self).__init__(dim, hypers, jitter)
+
+    def eval(self, hyp, x1, x2=None, diag=False, scaling=True):
         pass
 
     def exp_x_kx(self, x, hyp=None):
@@ -380,5 +406,8 @@ class Affine(Kernel):
     def exp_x_kxkx(self, x, hyp=None, hyp_1=None):
         pass
 
-    def _get_default_hyperparameters(self, dim):
+    def der_hyp(self, x, hyp0):
+        pass
+
+    def get_hyperparameters(self, hyp):
         pass
