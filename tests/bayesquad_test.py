@@ -17,7 +17,7 @@ class GPQuadTest(TestCase):
         dim = 1
         khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(dim, )}
         # phyp = {'kappa': 0.0, 'alpha': 1.0}
-        tf = GPQ(dim, 'rbf', 'ut', khyp)
+        tf = GPQ(dim, model='rbf', kernel='ut', points=khyp)
         wm, wc, wcc = tf.wm, tf.Wc, tf.Wcc
         print('wm = \n{}\nwc = \n{}\nwcc = \n{}'.format(wm, wc, wcc))
         self.assertTrue(np.allclose(wc, wc.T), "Covariance weight matrix not symmetric.")
@@ -27,14 +27,14 @@ class GPQuadTest(TestCase):
 
     def test_rbf_scaling_invariance(self):
         dim = 5
-        tf = GPQ(dim, 'rbf', 'ut')
+        tf = GPQ(dim, model='rbf', kernel='ut')
         w0 = tf._weights([1] + dim * [1000])
         w1 = tf._weights([358.0] + dim * [1000.0])
         self.assertTrue(np.alltrue([np.array_equal(a, b) for a, b in zip(w0, w1)]))
 
     def test_expected_model_variance(self):
         dim = 2
-        tf = GPQ(dim, 'rbf', 'sr')
+        tf = GPQ(dim, model='rbf', kernel='sr')
         emv0 = tf.model.exp_model_variance(tf.model.points, hyp=[1, 600, 6])
         emv1 = tf.model.exp_model_variance(tf.model.points, hyp=[1.1, 600, 6])
         # expected model variance must be positive even for numerically unpleasant settings
@@ -42,7 +42,7 @@ class GPQuadTest(TestCase):
 
     def test_integral_variance(self):
         dim = 2
-        tf = GPQ(dim, 'rbf', 'sr')
+        tf = GPQ(dim, model='rbf', kernel='sr')
         ivar0 = tf.model.integral_variance(tf.model.points, hyp=[1, 600, 6])
         ivar1 = tf.model.integral_variance(tf.model.points, hyp=[1.1, 600, 6])
         # expected model variance must be positive even for numerically unpleasant settings
@@ -52,7 +52,7 @@ class GPQuadTest(TestCase):
         for ssm in self.models:
             f = ssm().dyn_eval
             dim = ssm.xD
-            tf = GPQ(dim, 'rbf', 'ut')
+            tf = GPQ(dim, model='rbf', kernel='ut')
             mean, cov = np.zeros(dim, ), np.eye(dim)
             tmean, tcov, tccov = tf.apply(f, mean, cov, np.atleast_1d(1.0))
             self.assertTrue(np.array_equal(tcov, tcov.T))

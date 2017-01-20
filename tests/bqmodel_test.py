@@ -20,12 +20,12 @@ class GPModelTest(TestCase):
     def test_init(self):
         khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
         phyp = {'alpha': 1.0}
-        GaussianProcess(1)
-        GaussianProcess(1, kernel='rbf', points='ut', kern_hyp=khyp, point_hyp=phyp)
+        GaussianProcess(1, None,,
+        GaussianProcess(1, kern_hyp=khyp, kernel='rbf', points='ut', point_hyp=phyp)
 
     def test_plotting(self):
         khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
-        model = GaussianProcess(1, kern_hyp=khyp)
+        model = GaussianProcess(1, kern_hyp=khyp, kernel=khyp, points=)
         xtest = np.linspace(-5, 5, 50)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
@@ -33,26 +33,26 @@ class GPModelTest(TestCase):
 
     def test_exp_model_variance(self):
         khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
-        model = GaussianProcess(1, kern_hyp=khyp)
+        model = GaussianProcess(1, kern_hyp=khyp, kernel=khyp, points=)
         y = fcn(model.points)
         self.assertTrue(model.exp_model_variance(y) >= 0)
 
     def test_integral_variance(self):
         khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
-        model = GaussianProcess(1, kern_hyp=khyp)
+        model = GaussianProcess(1, kern_hyp=khyp, kernel=khyp, points=)
         y = fcn(model.points)
         self.assertTrue(model.integral_variance(y) >= 0)
 
     def test_log_marginal_likelihood(self):
         khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
-        model = GaussianProcess(1, kern_hyp=khyp)
+        model = GaussianProcess(1, kern_hyp=khyp, kernel=khyp, points=)
         y = fcn(model.points)
         lhyp = np.log([1.0, 3.0])
         f, df = model.neg_log_marginal_likelihood(lhyp, y.T)
 
     def test_hypers_optim(self):
         khyp = {'alpha': 1.0, 'el': 1.0 * np.ones(1)}
-        model = GaussianProcess(1, points='gh', kern_hyp=khyp, point_hyp={'degree': 15})
+        model = GaussianProcess(1, kern_hyp=khyp, kernel='gh', points='gh', point_hyp={'degree': 15})
         xtest = np.linspace(-7, 7, 100)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
@@ -111,7 +111,7 @@ class GPModelTest(TestCase):
         ssm = ReentryRadar()
         func = ssm.meas_eval
         khyp = {'alpha': 1.0, 'el': 1.0 * np.ones(dim)}
-        model = GaussianProcess(dim, points='sr', kern_hyp=khyp)  # , point_hyp={'degree': 10})
+        model = GaussianProcess(dim, kern_hyp=khyp, kernel='sr', points='sr')  # , point_hyp={'degree': 10})
         x = ssm.get_pars('x0_mean')[0][:, na] + model.points  # ssm.get_pars('x0_cov')[0].dot(model.points)
         y = np.apply_along_axis(func, 0, x, None)  # (d_out, n**2)
 
@@ -144,13 +144,13 @@ class TPModelTest(TestCase):
     def test_init(self):
         khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
         phyp = {'alpha': 1.0}
-        StudentTProcess(1)
-        StudentTProcess(1, kernel='rbf', points='ut', kern_hyp=khyp, point_hyp=phyp)
+        StudentTProcess(1, None,,
+        StudentTProcess(1, kern_hyp=khyp, kernel='rbf', points='ut', point_hyp=phyp)
 
     def test_plotting(self):
         dim = 1
         khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(dim, )}
-        model = StudentTProcess(dim, kern_hyp=khyp)
+        model = StudentTProcess(dim, kern_hyp=khyp, kernel=khyp, points=)
         xtest = np.linspace(-5, 5, 50)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
@@ -158,19 +158,19 @@ class TPModelTest(TestCase):
 
     def test_exp_model_variance(self):
         khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
-        model = StudentTProcess(1, kern_hyp=khyp)
+        model = StudentTProcess(1, kern_hyp=khyp, kernel=khyp, points=)
         y = fcn(model.points)
         self.assertTrue(model.exp_model_variance(y) >= 0)
 
     def test_integral_variance(self):
         khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(1)}
-        model = StudentTProcess(1, kern_hyp=khyp)
+        model = StudentTProcess(1, kern_hyp=khyp, kernel=khyp, points=)
         y = fcn(model.points)
         self.assertTrue(model.integral_variance(y) >= 0)
 
     def test_hypers_optim(self):
         khyp = {'alpha': 1.0, 'el': 1.0 * np.ones(1)}
-        model = StudentTProcess(1, points='gh', kern_hyp=khyp, point_hyp={'degree': 15})
+        model = StudentTProcess(1, kern_hyp=khyp, kernel='gh', points='gh', point_hyp={'degree': 15})
         xtest = np.linspace(-7, 7, 100)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)

@@ -14,9 +14,9 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
     # list of supported models for the integrand
     _supported_models_ = ['gp', 'gp-mo', 'tp']  # mgp, gpder, ...
 
-    def __init__(self, dim, model='gp', kernel=None, points=None, kern_hyp=None, point_par=None, **kwargs):
-        self.model = BQTransform._get_model(dim, model, kernel, points, kern_hyp, point_par, **kwargs)
-        self.d, self.n = self.model.points.shape
+    def __init__(self, dim_in, kern_hyp, dim_out=1, model='gp', kernel='rbf', points='ut', point_par=None, **kwargs):
+        self.model = BQTransform._get_model(dim_in, dim_out, model, kernel, points, kern_hyp, point_par)
+
         # BQ transform weights for the mean, covariance and cross-covariance
         self.wm, self.Wc, self.Wcc = self._weights()
 
@@ -34,7 +34,25 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         return mean_f, cov_f, cov_fx
 
     @staticmethod
-    def _get_model(dim, model, kernel, points, hypers, point_pars, **kwargs):
+    def _get_model(dim_in, dim_out, model, kernel, points, hypers, point_pars, **kwargs):
+        """
+
+        Parameters
+        ----------
+        dim_in : int
+        dim_out : int
+        model : string
+        kernel : string
+        points : string
+        hypers : numpy.ndarray
+        point_pars : numpy.ndarray
+        kwargs : dict
+
+        Returns
+        -------
+        : Model
+
+        """
 
         # import must be after SigmaPointTransform
         from .bqmodel import GaussianProcess, StudentTProcess, GaussianProcessMO
@@ -47,11 +65,11 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
         # initialize the chosen model
         if model == 'gp':
-            return GaussianProcess(dim, kernel, points, hypers, point_pars)
+            return GaussianProcess(dim_in, hypers, kernel, points, point_pars)
         elif model == 'gp-mo':
-            return GaussianProcessMO(dim, kernel, points, hypers, point_pars)
+            return GaussianProcessMO(dim_in, dim_out, hypers, kernel, points, point_pars)
         elif model == 'tp':
-            return StudentTProcess(dim, kernel, points, hypers, point_pars, **kwargs)
+            return StudentTProcess(dim_in, hypers, kernel, points, point_pars)
 
     def minimum_variance_points(self, x0, tf_pars):
         # run optimizer to find minvar point sets using initial guess x0; requires implemented _integral_variance()
@@ -89,8 +107,8 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
 
 class GPQ(BQTransform):  # consider renaming to GPQTransform
-    def __init__(self, dim, kernel, points, kern_hyp=None, point_par=None):
-        super(GPQ, self).__init__(dim, 'gp', kernel, points, kern_hyp, point_par)
+    def __init__(self, dim_in, kern_hyp, kernel='rbf', points='ut', point_par=None):
+        super(GPQ, self).__init__(dim_in, 1, kern_hyp, 'gp', kernel, points, point_par)
 
     def _weights(self, tf_pars=None):
         x = self.model.points
@@ -115,8 +133,8 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
 
 
 class GPQMO(BQTransform):
-    def __init__(self, dim, dim_out, kernel, points, kern_hyp=None, point_par=None):
-        super(GPQMO, self).__init__(dim, 'gp-mo', kernel, points, kern_hyp, point_par)
+    def __init__(self, dim_in, dim_out, kern_hyp, kernel='rbf', points='ut', point_par=None):
+        super(GPQMO, self).__init__(dim_in, kern_hyp, dim_out, 'gp-mo', kernel, points, point_par)
 
         # output dimension (number of outputs)
         self.e = dim_out
@@ -140,15 +158,18 @@ class GPQMO(BQTransform):
 
         """
 
+        # if tf_pars=None return parameters stored in Kernel
         par = self.model.kernel.get_hyperparameters(tf_pars)
 
+        # retrieve sigma-points from Model
         x = self.model.points
+        d, e, n = self.model.dim_in, self.model.dim_out, self.model.num_pts
 
         # Kernel expectations
-        q = np.zeros((self.n, self.e))
-        Q = np.zeros((self.n, self.n, self.e, self.e))
-        R = np.zeros((self.d, self.n, self.e))
-        iK = np.zeros((self.n, self.n, self.e))
+        q = np.zeros((n, e))
+        Q = np.zeros((n, n, e, e))
+        R = np.zeros((d, n, e))
+        iK = np.zeros((n, n, e))
         for i in range(self.e):
             q[:, i] = self.model.kernel.exp_x_kx(x, par[i, :])
             R[..., i] = self.model.kernel.exp_x_xkx(x, par[i, :])
@@ -161,10 +182,25 @@ class GPQMO(BQTransform):
         # w_c = iK Q iK
         # w_cc = R iK
 
+    def _fcn_eval(self, fcn, x, fcn_pars):
+        return np.apply_along_axis(fcn, 0, x, fcn_pars)
+
+    def _mean(self, weights, fcn_evals):
+        return (fcn_evals * weights).sum(axis=0)
+
+    def _covariance(self, weights, fcn_evals, mean_out):
+        pass
+
+    def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
+        pass
+
+    def _integral_variance(self, points, tf_pars):
+        pass
+
 
 class TPQ(BQTransform):
-    def __init__(self, dim, kernel, points, kern_hyp=None, point_par=None, nu=None):
-        super(TPQ, self).__init__(dim, 'tp', kernel, points, kern_hyp, point_par, nu=nu)
+    def __init__(self, dim_in, kern_hyp, kernel='rbf', points='ut', point_par=None):
+        super(TPQ, self).__init__(dim_in, kern_hyp, model='tp', kernel=kernel, points=points, point_par=point_par)
 
     def _weights(self, tf_pars=None):
         x = self.model.points

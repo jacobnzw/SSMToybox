@@ -11,7 +11,7 @@ from scipy.linalg import cho_factor, cho_solve
 
 class Kernel(object, metaclass=ABCMeta):
 
-    def __init__(self, dim, dim_out, hypers, jitter):
+    def __init__(self, dim, hypers, jitter=1e-8):
         """
         Kernel base class.
 
@@ -19,8 +19,6 @@ class Kernel(object, metaclass=ABCMeta):
         ----------
         dim : int
             Input dimension
-        dim_out : int
-            Output dimension
         hypers : numpy.ndarray
             Kernel parameters in a (dim_out, num_hyp) matrix, where i-th row contains parameters for i-th output.
         jitter : float
@@ -29,17 +27,11 @@ class Kernel(object, metaclass=ABCMeta):
 
         # ensure parameter is 2d array of type float
         self.hypers = np.atleast_2d(hypers).astype(float)
-        assert self.hypers.ndim == 2  # in case ndim > 2
-        assert hypers.shape[0] == dim_out
+        assert self.hypers.ndim == 2, "Kernel parameters must be 2D array, you donkey!"  # in case ndim > 2
         self.scale = self.hypers[:, 0]
-        # inputs, # outputs and # params per output
         self.dim = dim
-        self.dim_out, self.num_hyp = self.hypers.shape
         self.jitter = jitter
-
-        # identity matrices for convenience
-        self.eye_d = np.eye(dim)
-        self.eye_e = np.eye(dim_out)
+        self.eye_d = np.eye(dim)  # pre-allocation for convenience
 
     @staticmethod
     def _cho_inv(A, b=None):
@@ -192,16 +184,6 @@ class Kernel(object, metaclass=ABCMeta):
         """
         pass
 
-    @abstractmethod
-    def exp_model_variance(self, x, hyp):
-        # FIXME: model dependent should be in Model
-        pass
-
-    @abstractmethod
-    def integral_variance(self, x, hyp):
-        # FIXME: model dependent should be in Model
-        pass
-
     # derivatives
     @abstractmethod
     def der_hyp(self, x, hyp0):
@@ -214,9 +196,8 @@ class Kernel(object, metaclass=ABCMeta):
 
 
 class RBF(Kernel):
-    # _hyperparameters_ = ['alpha', 'el']
 
-    def __init__(self, dim, dim_out, hypers, jitter):
+    def __init__(self, dim, hypers, jitter=1e-8):
         """
         Radial Basis Function kernel.
 
@@ -224,8 +205,6 @@ class RBF(Kernel):
         ----------
         dim : int
             Input dimension
-        dim_out : int
-            Output dimension
         hypers : numpy.ndarray
             Kernel parameters in a matrix of shape (dim_out, num_hyp), where i-th row contains parameters for i-th
             output. Each row is :math: `[\alpha, \ell_1, \ldots, \ell_dim]`
@@ -238,8 +217,8 @@ class RBF(Kernel):
         or Gaussian (conflicts with terminology for PDFs).
         """
 
-        assert hypers.shape == (dim_out, dim + 1)
-        super(RBF, self).__init__(dim, dim_out, hypers, jitter)
+        assert hypers.shape[1] == dim + 1
+        super(RBF, self).__init__(dim, hypers, jitter)
 
     def __str__(self):  # TODO: improve string representation
         return '{} {}'.format(self.__class__.__name__, self.hypers.update({'jitter': self.jitter}))
@@ -335,18 +314,6 @@ class RBF(Kernel):
         n = (xi[:, na] + xi_1[na, :]) + 0.5 * self._maha(x.T, -x_1.T, V=la.inv(r))  # (N, N)
         return la.det(r) ** -0.5 * np.exp(n)
 
-    def exp_model_variance(self, x, hyp):
-        alpha, sqrt_inv_lam = self.get_hyperparameters(hyp)
-        Q = self.exp_x_kxkx(x, hyp=hyp)
-        iK = self.eval_inv_dot(x, hyp=hyp, ignore_alpha=True)
-        return alpha**2 * (1 - np.trace(Q.dot(iK)))
-
-    def integral_variance(self, x, hyp):
-        alpha, sqrt_inv_lam = self.get_hyperparameters(hyp)
-        q = self.exp_x_kx(x, hyp)
-        iK = self.eval_inv_dot(x, hyp=hyp, ignore_alpha=True)
-        return alpha**2 * (la.det(2 * sqrt_inv_lam ** 2 + self.eye_d) ** -0.5 - q.T.dot(iK).dot(q))
-
     def der_hyp(self, x, hyp0):  # K as kwarg would save computation (would have to be evaluated w/ hyp0)
         # hyp0: array_like [alpha, el_1, ..., el_D]
         # x: (D, N)
@@ -392,8 +359,8 @@ class RBF(Kernel):
 
 
 class Affine(Kernel):
-    def __init__(self, dim, dim_out, hypers):
-        super(Affine, self).__init__(dim, 1, hypers)
+    def __init__(self, dim, hypers=1e-8):
+        super(Affine, self).__init__(dim, hypers)
 
     def eval(self, x1, x2=None, hyp=None, diag=False):
         pass

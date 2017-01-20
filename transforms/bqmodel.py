@@ -41,18 +41,18 @@ class Model(object, metaclass=ABCMeta):
         Expected model variance.
     ivar : float
         Variance of the integral.
-    d : int
+    dim_in : int
         Dimension of the point-set.
-    n : int
+    num_pts : int
         Number of points.
     eye_d
     eye_n : numpy.ndarray
         Pre-allocated identity matrices to ease the computations.
     """
-    _supported_points_ = ['sr', 'ut', 'gh']
-    _supported_kernels_ = ['rbf']
+    _supported_points_ = ['sr', 'ut', 'gh']  # TODO: register fully-symmetric sets
+    _supported_kernels_ = ['rbf']  # TODO: register RQ kernel
 
-    def __init__(self, dim, kernel, points, kern_hyp=None, point_hyp=None):
+    def __init__(self, dim, kern_hyp, kernel, points, point_hyp=None):
         """
         Initialize model of the integrand with specified kernel and point set.
 
@@ -60,13 +60,13 @@ class Model(object, metaclass=ABCMeta):
         ----------
         dim : int
             Dimension of the points (integration domain).
+        kern_hyp : numpy.ndarray
+            Kernel parameters in a vector.
         kernel : string
             String abbreviation for the kernel.
         points : string
             String abbreviation for the point-set.
-        kern_hyp : numpy.ndarray
-            Kernel parameters in a vector.
-        point_hyp : numpy.ndarray
+        point_hyp : dict
             Any parameters for constructing desired point-set.
         """
 
@@ -79,8 +79,8 @@ class Model(object, metaclass=ABCMeta):
         self.str_pts_hyp = str(point_hyp)
 
         # may no longer be necessary now that jitter is in kernel
-        self.d, self.n = self.points.shape
-        self.eye_d, self.eye_n = np.eye(self.d), np.eye(self.n)
+        self.dim_in, self.num_pts = self.points.shape
+        self.eye_d, self.eye_n = np.eye(self.dim_in), np.eye(self.num_pts)
 
     def __str__(self):
         """
@@ -312,7 +312,7 @@ class Model(object, metaclass=ABCMeta):
         -------
 
         """
-        assert in_dim <= self.d - 1
+        assert in_dim <= self.dim_in - 1
 
         fcn_obs = np.squeeze(fcn_obs)
         fcn_true = np.squeeze(fcn_true)
@@ -343,7 +343,7 @@ class Model(object, metaclass=ABCMeta):
 
         points : string
             String abbreviation for the point-set.
-        point_hyp : numpy.ndarray
+        point_hyp : dict
             Parameters for constructing desired point-set.
 
         Returns
@@ -400,9 +400,7 @@ class Model(object, metaclass=ABCMeta):
             return None
         # initialize the chosen kernel
         if kernel == 'rbf':
-            return RBF(dim, 1, hypers)
-        elif kernel == 'affine':
-            return Affine(dim, hypers)
+            return RBF(dim, hypers)
 
 
 class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/GPRegression, same for TP
@@ -410,7 +408,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
     Gaussian process regression model of the integrand in the Bayesian quadrature.
     """
 
-    def __init__(self, dim, kernel='rbf', points='ut', kern_hyp=None, point_hyp=None):
+    def __init__(self, dim, kern_hyp, kernel, points, point_hyp=None):
         """
         Gaussian process model
 
@@ -418,16 +416,16 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         ----------
         dim : int
             Number of input dimensions
+        kern_hyp : numpy.ndarray
+            Kernel parameters in matrix.
         kernel : string
             Acronym of the covariance function of the Gaussian process model.
         points : string
             Acronym for the sigma-point set to use in BQ.
-        kern_hyp : dict
-            Kernel parameters in dictionary.
         point_hyp : dict
             Parameters of the sigma-point set.
         """
-        super(GaussianProcess, self).__init__(dim, kernel, points, kern_hyp, point_hyp)
+        super(GaussianProcess, self).__init__(dim, kern_hyp, kernel, points, point_hyp)
 
     def predict(self, test_data, fcn_obs, hyp=None):
         """
@@ -514,12 +512,12 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         y_dot_a = np.einsum('ij, ji', fcn_obs.T, a)  # sum of diagonal of A.T.dot(A)
         a_out_a = np.einsum('i...j, ...jn', a, a.T)  # (N, N) sum over of outer products of columns of A
         # negative marginal log-likelihood
-        nlml = 0.5 * y_dot_a + np.sum(np.log(np.diag(L))) + 0.5 * self.n * np.log(2 * np.pi)
+        nlml = 0.5 * y_dot_a + np.sum(np.log(np.diag(L))) + 0.5 * self.num_pts * np.log(2 * np.pi)
         # nlml = np.log(nlml)  # w/o this, unconstrained solver terminates w/ 'precision loss'
         # TODO: check the gradient with check_grad method
         # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
         dK_dTheta = self.kernel.der_hyp(self.points, hypers)  # (N, N, num_hyp)
-        iK = la.solve(K, np.eye(self.n))
+        iK = la.solve(K, np.eye(self.num_pts))
         dnlml_dtheta = 0.5 * np.trace((iK - a_out_a).dot(dK_dTheta))  # (num_hyp, )
         return nlml, dnlml_dtheta
 
@@ -529,8 +527,9 @@ class GaussianProcessMO(Model):
     Multi-output Gaussian process regression model of the integrand in the Bayesian quadrature.
     """
 
-    def __init__(self, dim, kernel='rbf', points='ut', kern_hyp=None, point_hyp=None):
-        pass
+    def __init__(self, dim, dim_out, kern_hyp, kernel, points, point_hyp=None):
+        super(GaussianProcessMO, self).__init__(dim, kern_hyp, kernel, points, point_hyp)
+        self.dim_out = dim_out
 
     def predict(self, test_data, fcn_obs, hyp=None):
         pass
@@ -538,8 +537,8 @@ class GaussianProcessMO(Model):
     def exp_model_variance(self, fcn_obs, hyp=None):
         hyp = self.kernel.get_hyperparameters(hyp)
 
-        emv = np.zeros((self.e, ))
-        for i in range(self.e):
+        emv = np.zeros((self.dim_out,))
+        for i in range(self.dim_out):
             iK = self.kernel.eval_inv_dot(hyp[i, :], self.points, scaling=False)
             Q = self.kernel.exp_x_kxkx(self.points, hyp[i, :], hyp[i, :])
             emv[i] = self.kernel.scale[i] ** 2 * (1 - np.trace(Q.dot(iK)))
@@ -548,8 +547,8 @@ class GaussianProcessMO(Model):
     def integral_variance(self, fcn_obs, hyp=None):
         hyp = self.kernel.get_hyperparameters(hyp)
 
-        ivar = np.zeros((self.e, ))
-        for i in range(self.e):
+        ivar = np.zeros((self.dim_out,))
+        for i in range(self.dim_out):
             q = self.kernel.exp_x_kx(self.points, hyp[i, :])
             iK = self.kernel.eval_inv_dot(hyp[i, :], self.points, scaling=False)
             kbar = self.kernel.exp_x_kxx(hyp[i, :])
@@ -565,7 +564,7 @@ class StudentTProcess(Model):
     Student t process regression model of the integrand in the Bayesian quadrature.
     """
 
-    def __init__(self, dim, kernel='rbf', points='ut', kern_hyp=None, point_hyp=None, nu=None):
+    def __init__(self, dim, kern_hyp, kernel, points, point_hyp=None, nu=3.0):
         """
 
         Parameters
@@ -575,11 +574,9 @@ class StudentTProcess(Model):
         points
         kern_hyp
         point_hyp
-        nu
         """
-        super(StudentTProcess, self).__init__(dim, kernel, points, kern_hyp, point_hyp)
-        assert nu > 2, 'Degrees of freedom (nu) must be > 2.'
-        nu = 3.0 if nu is None else nu
+        super(StudentTProcess, self).__init__(dim, kern_hyp, kernel, points, point_hyp)
+        nu = 3.0 if nu < 2 else nu  # nu > 2
         self.nu = nu
 
     def predict(self, test_data, fcn_obs, hyp=None, nu=None):
@@ -603,7 +600,7 @@ class StudentTProcess(Model):
         kxx = self.kernel.eval(test_data, test_data, diag=True)
         mean = np.squeeze(kx.dot(iK).dot(fcn_obs.T))
         var = np.squeeze(kxx - np.einsum('im,mn,mi->i', kx, iK, kx.T))
-        scale = (nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (nu - 2 + self.n)
+        scale = (nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (nu - 2 + self.num_pts)
         return mean, scale * var
 
     def exp_model_variance(self, fcn_obs, hyp=None):
@@ -624,7 +621,7 @@ class StudentTProcess(Model):
         Q = self.kernel.exp_x_kxkx(self.points, hyp, hyp)
         iK = self.kernel.eval_inv_dot(hyp, self.points, scaling=False)
         fcn_obs = np.squeeze(fcn_obs)
-        scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.n)
+        scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.num_pts)
         return scale * self.kernel.scale ** 2 * (1 - np.trace(Q.dot(iK)))
 
     def integral_variance(self, fcn_obs, hyp=None):
@@ -647,7 +644,7 @@ class StudentTProcess(Model):
         iK = self.kernel.eval_inv_dot(hyp, self.points, scaling=False)
 
         fcn_obs = np.squeeze(fcn_obs)
-        scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.n)
+        scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.num_pts)
         return scale * (kbar - q.T.dot(iK).dot(q))
 
     def neg_log_marginal_likelihood(self, log_hyp, fcn_obs):
@@ -678,13 +675,13 @@ class StudentTProcess(Model):
         # negative marginal log-likelihood
         from scipy.special import gamma
         half_logdet_K = np.sum(np.log(np.diag(L)))
-        const = 0.5 * self.n * np.log((self.nu - 2) * np.pi) + np.log(
-            gamma(0.5 * self.nu + self.n) / gamma(0.5 * self.nu))
-        nlml = 0.5 * (self.nu + self.n) * np.log(1 + y_dot_a) + half_logdet_K + const
+        const = 0.5 * self.num_pts * np.log((self.nu - 2) * np.pi) + np.log(
+            gamma(0.5 * self.nu + self.num_pts) / gamma(0.5 * self.nu))
+        nlml = 0.5 * (self.nu + self.num_pts) * np.log(1 + y_dot_a) + half_logdet_K + const
 
         # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
         dK_dTheta = self.kernel.der_hyp(self.points, hypers)  # (N, N, num_hyp)
-        iK = la.solve(K, np.eye(self.n))
-        scale = (self.nu + self.n) / (self.nu + y_dot_a - 2)
+        iK = la.solve(K, np.eye(self.num_pts))
+        scale = (self.nu + self.num_pts) / (self.nu + y_dot_a - 2)
         dnlml_dtheta = 0.5 * np.trace((iK - scale * a_out_a).dot(dK_dTheta))  # (num_hyp, )
         return nlml, dnlml_dtheta
