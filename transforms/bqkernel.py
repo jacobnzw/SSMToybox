@@ -202,7 +202,7 @@ class RBF(Kernel):
         Radial Basis Function kernel.
 
         .. math::
-           k(x, x') = s^2 \exp(-\frac{1}{2}(x - x')^{\top}\ Lambda^{-1} (x - x') \right)
+           k(x, x') = s^2 \exp\left(-\frac{1}{2}(x - x')^{\top}\ Lambda^{-1} (x - x') \right)
 
         Parameters
         ----------
@@ -231,7 +231,7 @@ class RBF(Kernel):
             x2 = x1.copy()
 
         alpha, sqrt_inv_lam = RBF._unpack_parameters(hyp)
-        alpha = 1.0 if scaling else alpha
+        alpha = 1.0 if not scaling else alpha
 
         x1 = sqrt_inv_lam.dot(x1)
         x2 = sqrt_inv_lam.dot(x2)
@@ -242,11 +242,11 @@ class RBF(Kernel):
         else:
             return np.exp(2 * np.log(alpha) - 0.5 * self._maha(x1.T, x2.T))
 
-    def exp_x_kx(self, x, hyp, ignore_alpha=True):
+    def exp_x_kx(self, x, hyp, scaling=False):
         # a.k.a. kernel mean map w.r.t. standard Gaussian PDF
         # hyp (D+1,) array_like
         alpha, sqrt_inv_lam = RBF._unpack_parameters(hyp)
-        alpha = 1.0 if ignore_alpha else alpha
+        alpha = 1.0 if not scaling else alpha
 
         inv_lam = sqrt_inv_lam ** 2
         lam = np.diag(inv_lam.diagonal() ** -1)
@@ -272,7 +272,7 @@ class RBF(Kernel):
         inv_lam = sqrt_inv_lam ** 2
         return alpha ** 2 * la.det(2 * inv_lam + self.eye_d) ** -0.5
 
-    def exp_x_kxkx(self, x, hyp, hyp_1, ignore_alpha=True):
+    def exp_x_kxkx(self, x, hyp, hyp_1, scaling=False):
         """
         "Correlation" matrix of kernels with elements
 
@@ -286,16 +286,18 @@ class RBF(Kernel):
         x : numpy.ndarray of shape (D, N)
         hyp : numpy.ndarray of shape (D, )
         hyp_1 : numpy.ndarray of shape (D, )
-        ignore_alpha : bool
+        scaling : bool
 
 
         Returns
         -------
 
         """
+
+        # unpack kernel parameters
         alpha, sqrt_inv_lam = RBF._unpack_parameters(hyp)
         alpha_1, sqrt_inv_lam_1 = RBF._unpack_parameters(hyp_1)
-        alpha, alpha_1 = (1.0, 1.0) if ignore_alpha else alpha, alpha_1
+        alpha, alpha_1 = (1.0, 1.0) if not scaling else (alpha, alpha_1)
         inv_lam = sqrt_inv_lam ** 2
         inv_lam_1 = sqrt_inv_lam_1 ** 2
 
@@ -308,13 +310,13 @@ class RBF(Kernel):
         xi_1 = 2 * np.log(alpha_1) - 0.5 * np.sum(xi_1 * xi_1, axis=0)  # (N, )
 
         # \Lambda^{-1} * x
-        x = inv_lam.dot(x)  # (D, N)
+        x_0 = inv_lam.dot(x)  # (D, N)
         x_1 = inv_lam_1.dot(x)
 
         # R^{-1} = (\Lambda_m^{-1} + \Lambda_n^{-1} + \eye)^{-1}
         r = inv_lam + inv_lam_1 + self.eye_d  # (D, D)
 
-        n = (xi[:, na] + xi_1[na, :]) + 0.5 * self._maha(x.T, -x_1.T, V=la.inv(r))  # (N, N)
+        n = (xi[:, na] + xi_1[na, :]) + 0.5 * self._maha(x_0.T, -x_1.T, V=la.inv(r))  # (N, N)
         return la.det(r) ** -0.5 * np.exp(n)
 
     def der_hyp(self, x, hyp0):  # K as kwarg would save computation (would have to be evaluated w/ hyp0)
@@ -330,7 +332,19 @@ class RBF(Kernel):
 
     @staticmethod
     def _unpack_parameters(param):
-        # divide kernel parameters into kernel scaling and square-root of inverse lengthscale matrix
+        """
+        Extract scaling parameter and square-root of inverse lengthscale matrix from vector of kernel parameters.
+
+        Parameters
+        ----------
+        param : numpy.ndarray
+
+        Returns
+        -------
+        : tuple
+
+        """
+        param = param.astype(float).squeeze()
         return param[0], np.diag(param[1:] ** -1)
 
     def get_hyperparameters(self, hyp=None):
