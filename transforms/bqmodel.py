@@ -118,6 +118,7 @@ class Model(object, metaclass=ABCMeta):
         """
         pass
 
+    # FIXME: method signature should not contain fcn_obs, because GP has no need for it (user must supply something)
     @abstractmethod
     def exp_model_variance(self, fcn_obs, hyp=None):
         """

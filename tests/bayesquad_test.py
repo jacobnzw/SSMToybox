@@ -15,26 +15,34 @@ class GPQuadTest(TestCase):
 
     def test_weights_rbf(self):
         dim = 1
-        khyp = {'alpha': 1.0, 'el': 3.0 * np.ones(dim, )}
-        # phyp = {'kappa': 0.0, 'alpha': 1.0}
-        tf = GPQ(dim, model='rbf', kernel='ut', points=khyp)
+        khyp = np.array([[1, 3]])
+        phyp = {'kappa': 0.0, 'alpha': 1.0}
+        tf = GPQ(dim, khyp, point_par=phyp)
         wm, wc, wcc = tf.wm, tf.Wc, tf.Wcc
         print('wm = \n{}\nwc = \n{}\nwcc = \n{}'.format(wm, wc, wcc))
         self.assertTrue(np.allclose(wc, wc.T), "Covariance weight matrix not symmetric.")
-        wc = 0.5 * (wc + wc.T)
-        self.assertTrue(np.array_equal(wc, wc.T))
         # print 'GP model variance: {}'.format(tf.model.exp_model_variance())
+
+        dim = 2
+        khyp = np.array([[1, 3, 3]])
+        phyp = {'kappa': 0.0, 'alpha': 1.0}
+        tf = GPQ(dim, khyp, point_par=phyp)
+        wm, wc, wcc = tf.wm, tf.Wc, tf.Wcc
+        print('wm = \n{}\nwc = \n{}\nwcc = \n{}'.format(wm, wc, wcc))
+        self.assertTrue(np.allclose(wc, wc.T), "Covariance weight matrix not symmetric.")
 
     def test_rbf_scaling_invariance(self):
         dim = 5
-        tf = GPQ(dim, model='rbf', kernel='ut')
+        ker_par = np.array([[1, 3, 3, 3, 3, 3]])
+        tf = GPQ(dim, ker_par)
         w0 = tf._weights([1] + dim * [1000])
         w1 = tf._weights([358.0] + dim * [1000.0])
         self.assertTrue(np.alltrue([np.array_equal(a, b) for a, b in zip(w0, w1)]))
 
     def test_expected_model_variance(self):
         dim = 2
-        tf = GPQ(dim, model='rbf', kernel='sr')
+        ker_par = np.array([[1, 3, 3]])
+        tf = GPQ(dim, ker_par, points='sr')
         emv0 = tf.model.exp_model_variance(tf.model.points, hyp=[1, 600, 6])
         emv1 = tf.model.exp_model_variance(tf.model.points, hyp=[1.1, 600, 6])
         # expected model variance must be positive even for numerically unpleasant settings
@@ -42,7 +50,8 @@ class GPQuadTest(TestCase):
 
     def test_integral_variance(self):
         dim = 2
-        tf = GPQ(dim, model='rbf', kernel='sr')
+        ker_par = np.array([[1, 3, 3]])
+        tf = GPQ(dim, ker_par, points='sr')
         ivar0 = tf.model.integral_variance(tf.model.points, hyp=[1, 600, 6])
         ivar1 = tf.model.integral_variance(tf.model.points, hyp=[1.1, 600, 6])
         # expected model variance must be positive even for numerically unpleasant settings
@@ -52,9 +61,11 @@ class GPQuadTest(TestCase):
         for ssm in self.models:
             f = ssm().dyn_eval
             dim = ssm.xD
-            tf = GPQ(dim, model='rbf', kernel='ut')
+            ker_par = np.hstack((np.ones((1, 1)), 3*np.ones((1, dim))))
+            tf = GPQ(dim, ker_par)
             mean, cov = np.zeros(dim, ), np.eye(dim)
             tmean, tcov, tccov = tf.apply(f, mean, cov, np.atleast_1d(1.0))
-            self.assertTrue(np.array_equal(tcov, tcov.T))
-            la.cholesky(tcov)
+            assert la.cholesky(tcov), "Output covariance not positive definite."
+            self.assertTrue(np.array_equal(tcov, tcov.T), "Output covariance not exactly symmetric.")
+            self.assertTrue(np.allclose(tcov, tcov.T), "Output covariance not closely symmetric.")
             print("Transformed moments\nmean: {}\ncov: {}\nccov: {}".format(tmean, tcov, tccov))

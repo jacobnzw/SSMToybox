@@ -89,17 +89,76 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
     @abstractmethod
     def _fcn_eval(self, fcn, x, fcn_pars):
-        # derived class decides whether to return derivatives also
+        """
+        Evaluations of the integrand, which can comprise function observations as well as derivative observations.
+
+        Parameters
+        ----------
+        fcn : func
+            Integrand as a function handle, which is expected to behave certain way.
+        x : numpy.ndarray
+            Argument (input) of the integrand.
+        fcn_pars :
+            Parameters of the integrand.
+        Notes
+        -----
+        Methods in derived subclasses decides whether to return derivatives also
+
+        Returns
+        -------
+
+        """
         pass
 
     def _mean(self, weights, fcn_evals):
+        """
+        Transformed mean.
+
+        Parameters
+        ----------
+        weights : numpy.ndarray
+        fcn_evals : numpy.ndarray
+
+        Returns
+        -------
+        : numpy.ndarray
+
+        """
         return fcn_evals.dot(weights)
 
     def _covariance(self, weights, fcn_evals, mean_out):
+        """
+        Transformed covariance.
+
+        Parameters
+        ----------
+        weights : numpy.ndarray
+        fcn_evals : numpy.ndarray
+        mean_out : numpy.ndarray
+
+        Returns
+        -------
+        : numpy.ndarray
+
+        """
         expected_model_var = self.model.exp_model_variance(fcn_evals)
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + expected_model_var
 
     def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
+        """
+        Cross-covariance of input variable and transformed output variable.
+
+        Parameters
+        ----------
+        weights : numpy.ndarray
+        fcn_evals : numpy.ndarray
+        chol_cov_in : numpy.ndarray
+
+        Returns
+        -------
+        : numpy.ndarray
+
+        """
         return fcn_evals.dot(weights.T).dot(chol_cov_in.T)
 
     def __str__(self):
@@ -111,13 +170,27 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
         super(GPQ, self).__init__(dim_in, 1, kern_hyp, 'gp', kernel, points, point_par)
 
     def _weights(self, tf_pars=None):
+        """
+        Weights of the Gaussian process quadrature.
+
+        Parameters
+        ----------
+        tf_pars : array_like
+
+        Returns
+        -------
+        : tuple
+        Weights for computation of the transformed mean, covariance and cross-covariance in a tuple ``(wm, Wc, Wcc)``.
+
+        """
+        par = self.model.kernel.get_hyperparameters(tf_pars)
         x = self.model.points
-        iK = self.model.kernel.eval_inv_dot(x, tf_pars, ignore_alpha=True)
+        iK = self.model.kernel.eval_inv_dot(par, x, scaling=False)
 
         # Kernel expectations
-        q = self.model.kernel.exp_x_kx(x, tf_pars)
-        Q = self.model.kernel.exp_x_kxkx(x, tf_pars)
-        R = self.model.kernel.exp_x_xkx(x, tf_pars)
+        q = self.model.kernel.exp_x_kx(x, par)
+        Q = self.model.kernel.exp_x_kxkx(x, par, par)
+        R = self.model.kernel.exp_x_xkx(x, par)
 
         # BQ weights in terms of kernel expectations
         w_m = q.dot(iK)
@@ -173,7 +246,7 @@ class GPQMO(BQTransform):
         for i in range(self.e):
             q[:, i] = self.model.kernel.exp_x_kx(x, par[i, :])
             R[..., i] = self.model.kernel.exp_x_xkx(x, par[i, :])
-            iK[..., i] = self.model.kernel.eval_inv_dot(x, par[i, :], scaling=True)
+            iK[..., i] = self.model.kernel.eval_inv_dot(x, par[i, :], scaling=False)
             for j in range(self.e):
                 Q[..., i, j] = self.model.kernel.exp_x_kxkx(x, par[i, :], par[j, :])
 
@@ -211,7 +284,7 @@ class TPQ(BQTransform):
 
     def _weights(self, tf_pars=None):
         x = self.model.points
-        iK = self.model.kernel.eval_inv_dot(x, tf_pars, ignore_alpha=True)
+        iK = self.model.kernel.eval_inv_dot(tf_pars, x, scaling=False)
 
         # Kernel expectations
         q = self.model.kernel.exp_x_kx(x, tf_pars)
