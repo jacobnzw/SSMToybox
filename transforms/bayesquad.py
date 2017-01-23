@@ -243,11 +243,11 @@ class GPQMO(BQTransform):
         Q = np.zeros((n, n, e, e))
         R = np.zeros((d, n, e))
         iK = np.zeros((n, n, e))
-        for i in range(self.e):
+        for i in range(e):
             q[:, i] = self.model.kernel.exp_x_kx(par[i, :], x)
             R[..., i] = self.model.kernel.exp_x_xkx(par[i, :], x)
-            iK[..., i] = self.model.kernel.eval_inv_dot(x, par[i, :], scaling=False)
-            for j in range(self.e):
+            iK[..., i] = self.model.kernel.eval_inv_dot(par[i, :], x, scaling=False)
+            for j in range(e):
                 Q[..., i, j] = self.model.kernel.exp_x_kxkx(par[i, :], par[j, :], x)
 
         # weights
@@ -266,13 +266,14 @@ class GPQMO(BQTransform):
         return np.apply_along_axis(fcn, 0, x, fcn_par)
 
     def _mean(self, weights, fcn_evals):
-        return (fcn_evals * weights).sum(axis=0)
+        return np.einsum('ij, ji -> i', fcn_evals, weights)
 
     def _covariance(self, weights, fcn_evals, mean_out):
-        return np.einsum('ei, ijed, jd -> ed', fcn_evals.T, weights, fcn_evals)
+        emv = self.model.exp_model_variance(fcn_evals)
+        return np.einsum('ei, ijed, dj -> ed', fcn_evals, weights, fcn_evals) - np.outer(mean_out, mean_out.T) + emv
 
     def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
-        return np.einsum('dne, ne -> de', weights, fcn_evals)
+        return np.einsum('dne, en -> de', weights, fcn_evals)
 
     def _integral_variance(self, points, kern_par):
         pass

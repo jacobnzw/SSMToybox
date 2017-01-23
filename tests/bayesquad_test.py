@@ -3,7 +3,7 @@ from unittest import TestCase
 import numpy as np
 import numpy.linalg as la
 
-from transforms.bayesquad import GPQ
+from transforms.bayesquad import GPQ, GPQMO
 from models.pendulum import Pendulum
 from models.ungm import UNGM
 
@@ -76,3 +76,74 @@ class GPQuadTest(TestCase):
             # test symmetry
             self.assertTrue(np.allclose(tcov, tcov.T), "Output covariance not closely symmetric.")
             # self.assertTrue(np.array_equal(tcov, tcov.T), "Output covariance not exactly symmetric.")
+
+
+class GPQMOTest(TestCase):
+    models = [UNGM, Pendulum]
+
+    def test_weights_rbf(self):
+        dim_in, dim_out = 1, 1
+        khyp = np.array([[1, 3]])
+        phyp = {'kappa': 0.0, 'alpha': 1.0}
+        tf = GPQMO(dim_in, dim_out, khyp, point_par=phyp)
+        wm, wc, wcc = tf.wm, tf.Wc, tf.Wcc
+        self.assertTrue(np.allclose(wc, wc.swapaxes(0, 1).swapaxes(2, 3)), "Covariance weight matrix not symmetric.")
+
+        dim_in, dim_out = 4, 4
+        khyp = np.array([[1, 3, 3, 3, 3],
+                         [1, 1, 1, 1, 1],
+                         [1, 2, 2, 2, 2],
+                         [1, 3, 3, 3, 3]])
+        phyp = {'kappa': 0.0, 'alpha': 1.0}
+        tf = GPQMO(dim_in, dim_out, khyp, point_par=phyp)
+        wm, wc, wcc = tf.wm, tf.Wc, tf.Wcc
+        self.assertTrue(np.allclose(wc, wc.swapaxes(0, 1).swapaxes(2, 3)), "Covariance weight matrix not symmetric.")
+
+    def test_apply(self):
+        ssm = Pendulum()
+        f = ssm.dyn_eval
+        dim_in, dim_out = ssm.xD, ssm.xD
+        ker_par = np.hstack((np.ones((dim_out, 1)), 3*np.ones((dim_out, dim_in))))
+        tf = GPQMO(dim_in, dim_out, ker_par)
+        mean, cov = np.zeros(dim_in, ), np.eye(dim_in)
+        tmean, tcov, tccov = tf.apply(f, mean, cov, np.atleast_1d(1.0))
+        print("Transformed moments\nmean: {}\ncov: {}\nccov: {}".format(tmean, tcov, tccov))
+
+        # test positive definiteness
+        try:
+            la.cholesky(tcov)
+        except la.LinAlgError:
+            self.fail("Output covariance not positive definite.")
+
+        # test symmetry
+        self.assertTrue(np.allclose(tcov, tcov.T), "Output covariance not closely symmetric.")
+        # self.assertTrue(np.array_equal(tcov, tcov.T), "Output covariance not exactly symmetric.")
+
+    def test_single_vs_multi_output(self):
+        # results of the GPQ and GPQMO should be same if parameters properly chosen, GPQ is a special case of GPQMO
+        ssm = Pendulum()
+        f = ssm.dyn_eval
+        dim_in, dim_out = ssm.xD, ssm.xD
+
+        # input mean and covariance
+        mean_in, cov_in = np.zeros(dim_in, ), np.eye(dim_in)
+
+        # single-output GPQ
+        ker_par_so = np.hstack((np.ones((1, 1)), 3 * np.ones((1, dim_in))))
+        tf_so = GPQ(dim_in, ker_par_so)
+
+        # multi-output GPQ
+        ker_par_mo = np.hstack((np.ones((dim_out, 1)), 3 * np.ones((dim_out, dim_in))))
+        tf_mo = GPQMO(dim_in, dim_out, ker_par_mo)
+
+        # transformed moments
+        mean_so, cov_so, ccov_so = tf_so.apply(f, mean_in, cov_in, np.atleast_1d(1.0))
+        mean_mo, cov_mo, ccov_mo = tf_mo.apply(f, mean_in, cov_in, np.atleast_1d(1.0))
+
+        # results of GPQ and GPQMO should be the same
+        # self.assertTrue(np.array_equal(mean_so, mean_mo))
+        # self.assertTrue(np.array_equal(cov_so, cov_mo))
+        # self.assertTrue(np.array_equal(ccov_so, ccov_mo))
+        self.assertTrue(np.allclose(mean_so, mean_mo))
+        self.assertTrue(np.allclose(cov_so, cov_mo))
+        self.assertTrue(np.allclose(ccov_so, ccov_mo))
