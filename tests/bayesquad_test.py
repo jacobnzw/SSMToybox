@@ -141,9 +141,6 @@ class GPQMOTest(TestCase):
         mean_mo, cov_mo, ccov_mo = tf_mo.apply(f, mean_in, cov_in, np.atleast_1d(1.0))
 
         # results of GPQ and GPQMO should be the same
-        # self.assertTrue(np.array_equal(mean_so, mean_mo))
-        # self.assertTrue(np.array_equal(cov_so, cov_mo))
-        # self.assertTrue(np.array_equal(ccov_so, ccov_mo))
         self.assertTrue(np.allclose(mean_so, mean_mo))
         self.assertTrue(np.allclose(cov_so, cov_mo))
         self.assertTrue(np.allclose(ccov_so, ccov_mo))

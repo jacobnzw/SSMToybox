@@ -252,7 +252,7 @@ class GPQMO(BQTransform):
 
         # weights
         # w_m = q(\theta_e) * iK(\theta_e) for all e = 1, ..., dim_out
-        w_m = np.einsum('ne, nne -> ne', q, iK)
+        w_m = np.einsum('ne, nme -> me', q, iK)
 
         # w_m = iK(\theta_e) * Q(\theta_e, \theta_f) * iK(\theta_f) for all e,f = 1, ..., dim_out
         w_c = np.einsum('nie, ijed, jmd -> nmed', iK, Q, iK)
@@ -273,7 +273,7 @@ class GPQMO(BQTransform):
         return np.einsum('ei, ijed, dj -> ed', fcn_evals, weights, fcn_evals) - np.outer(mean_out, mean_out.T) + emv
 
     def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
-        return np.einsum('dne, en -> de', weights, fcn_evals)
+        return np.einsum('dne, en -> ed', weights, fcn_evals)
 
     def _integral_variance(self, points, kern_par):
         pass
