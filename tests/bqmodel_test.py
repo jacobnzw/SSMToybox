@@ -50,7 +50,7 @@ class GPModelTest(TestCase):
         f, df = model.neg_log_marginal_likelihood(lhyp, y.T)
 
     def test_hypers_optim(self):
-        model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'gh', point_hyp={'degree': 15})
+        model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'gh', point_par={'degree': 15})
         xtest = np.linspace(-7, 7, 100)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
@@ -81,9 +81,9 @@ class GPModelTest(TestCase):
                                                                       hyp_ml2_ivar[1]))
 
         # plot after optimization
-        model.plot_model(xtest, y, fcn_true=f, hyp=hyp_ml2)
-        model.plot_model(xtest, y, fcn_true=f, hyp=hyp_ml2_emv)
-        model.plot_model(xtest, y, fcn_true=f, hyp=hyp_ml2_ivar)
+        model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2)
+        model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2_emv)
+        model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2_ivar)
 
         # TODO: test fitting of multioutput GPs, GPy supports this in GPRegression
         # plot NLML surface
@@ -147,7 +147,7 @@ class TPModelTest(TestCase):
 
     def test_init(self):
         StudentTProcess(1, self.ker_par_1d)
-        StudentTProcess(5, self.ker_par_5d, point_hyp=self.pt_par_ut)
+        StudentTProcess(5, self.ker_par_5d, point_par=self.pt_par_ut)
 
     def test_plotting(self):
         model = StudentTProcess(1, self.ker_par_1d)
@@ -167,7 +167,7 @@ class TPModelTest(TestCase):
         self.assertTrue(model.integral_variance(y) >= 0)
 
     def test_hypers_optim(self):
-        model = StudentTProcess(1, self.ker_par_1d, points='gh', point_hyp={'degree': 15})
+        model = StudentTProcess(1, self.ker_par_1d, points='gh', point_par={'degree': 15})
         xtest = np.linspace(-7, 7, 100)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
@@ -198,6 +198,6 @@ class TPModelTest(TestCase):
                                                                       hyp_ml2_ivar[1]))
 
         # plot after optimization
-        model.plot_model(xtest, y, fcn_true=f, hyp=hyp_ml2)
-        model.plot_model(xtest, y, fcn_true=f, hyp=hyp_ml2_emv)
-        model.plot_model(xtest, y, fcn_true=f, hyp=hyp_ml2_ivar)
+        model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2)
+        model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2_emv)
+        model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2_ivar)

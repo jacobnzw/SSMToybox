@@ -52,11 +52,11 @@ class RBFKernelTest(TestCase):
 
     def test_exp_x_kx(self):
 
-        q = self.kern_rbf_1d.exp_x_kx(self.data_1d, self.par_1d)
+        q = self.kern_rbf_1d.exp_x_kx(self.par_1d, self.data_1d)
         self.assertTrue(q.shape == (3,))
         self.assertTrue(np.alltrue(q >= 0))
 
-        q = self.kern_rbf_2d.exp_x_kx(self.data_2d, self.par_2d)
+        q = self.kern_rbf_2d.exp_x_kx(self.par_2d, self.data_2d)
         self.assertTrue(q.shape == (5,))
         self.assertTrue(np.alltrue(q >= 0))
 
@@ -69,19 +69,19 @@ class RBFKernelTest(TestCase):
         self.kern_rbf_2d.exp_xy_kxy(self.par_2d)
 
     def test_exp_x_xkx(self):
-        r = self.kern_rbf_1d.exp_x_xkx(self.data_1d, self.par_1d)
+        r = self.kern_rbf_1d.exp_x_xkx(self.par_1d, self.data_1d)
         self.assertTrue(r.shape == (1, 3))
 
-        r = self.kern_rbf_2d.exp_x_xkx(self.data_2d, self.par_2d)
+        r = self.kern_rbf_2d.exp_x_xkx(self.par_2d, self.data_2d)
         self.assertTrue(r.shape == (2, 5))
 
     def test_exp_x_kxkx(self):
-        q = self.kern_rbf_1d.exp_x_kxkx(self.data_1d, self.par_1d, self.par_1d)
+        q = self.kern_rbf_1d.exp_x_kxkx(self.par_1d, self.par_1d, self.data_1d)
         self.assertTrue(q.shape == (3, 3))
         self.assertTrue(np.array_equal(q, q.T), 'Result not symmetric.')
         la.cholesky(q)
 
-        q = self.kern_rbf_2d.exp_x_kxkx(self.data_2d, self.par_2d, self.par_2d)
+        q = self.kern_rbf_2d.exp_x_kxkx(self.par_2d, self.par_2d, self.data_2d)
         self.assertTrue(q.shape == (5, 5))
         self.assertTrue(np.array_equal(q, q.T), 'Result not symmetric.')
         la.cholesky(q)

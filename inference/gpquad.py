@@ -66,7 +66,7 @@ def main():
     # state dimensions are irrelevant to the GP model of the measurement function. This is why we set high
     # lengthscale for the remaining dimensions, which ensures they will not contribute significantly to kernel
     # covariance (the RBF kernel is expressed in terms of inverse lengthscales).
-    # TODO: find hypers that give position RMSE < ~0.01 (UKF), GPQKF best position RMSE is ~0.1,
+    # TODO: find par that give position RMSE < ~0.01 (UKF), GPQKF best position RMSE is ~0.1,
     from models.tracking import reentry_filter_demo
     from unscented import UnscentedKalman
     d = 5

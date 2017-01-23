@@ -43,8 +43,8 @@ class GPQuadTest(TestCase):
         dim = 2
         ker_par = np.array([[1, 3, 3]])
         tf = GPQ(dim, ker_par, points='sr')
-        emv0 = tf.model.exp_model_variance(tf.model.points, hyp=[1, 600, 6])
-        emv1 = tf.model.exp_model_variance(tf.model.points, hyp=[1.1, 600, 6])
+        emv0 = tf.model.exp_model_variance(tf.model.points, par=[1, 600, 6])
+        emv1 = tf.model.exp_model_variance(tf.model.points, par=[1.1, 600, 6])
         # expected model variance must be positive even for numerically unpleasant settings
         self.assertTrue(np.alltrue(np.array([emv0, emv1]) >= 0))
 
@@ -52,8 +52,8 @@ class GPQuadTest(TestCase):
         dim = 2
         ker_par = np.array([[1, 3, 3]])
         tf = GPQ(dim, ker_par, points='sr')
-        ivar0 = tf.model.integral_variance(tf.model.points, hyp=[1, 600, 6])
-        ivar1 = tf.model.integral_variance(tf.model.points, hyp=[1.1, 600, 6])
+        ivar0 = tf.model.integral_variance(tf.model.points, par=[1, 600, 6])
+        ivar1 = tf.model.integral_variance(tf.model.points, par=[1.1, 600, 6])
         # expected model variance must be positive even for numerically unpleasant settings
         self.assertTrue(np.alltrue(np.array([ivar0, ivar1]) >= 0))
 
@@ -65,7 +65,14 @@ class GPQuadTest(TestCase):
             tf = GPQ(dim, ker_par)
             mean, cov = np.zeros(dim, ), np.eye(dim)
             tmean, tcov, tccov = tf.apply(f, mean, cov, np.atleast_1d(1.0))
-            assert la.cholesky(tcov), "Output covariance not positive definite."
-            self.assertTrue(np.array_equal(tcov, tcov.T), "Output covariance not exactly symmetric.")
-            self.assertTrue(np.allclose(tcov, tcov.T), "Output covariance not closely symmetric.")
             print("Transformed moments\nmean: {}\ncov: {}\nccov: {}".format(tmean, tcov, tccov))
+
+            # test positive definiteness
+            try:
+                la.cholesky(tcov)
+            except la.LinAlgError:
+                self.fail("Output covariance not positive definite.")
+
+            # test symmetry
+            self.assertTrue(np.allclose(tcov, tcov.T), "Output covariance not closely symmetric.")
+            # self.assertTrue(np.array_equal(tcov, tcov.T), "Output covariance not exactly symmetric.")
