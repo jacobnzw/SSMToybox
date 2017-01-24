@@ -253,7 +253,7 @@ class GPQMO(BQTransform):
             q[:, i] = self.model.kernel.exp_x_kx(par[i, :], x)
             R[..., i] = self.model.kernel.exp_x_xkx(par[i, :], x)
             iK[..., i] = self.model.kernel.eval_inv_dot(par[i, :], x, scaling=False)
-            for j in range(e - i):
+            for j in range(i+1):
                 Q[..., i, j] = self.model.kernel.exp_x_kxkx(par[i, :], par[j, :], x)
                 Q[..., j, i] = Q[..., i, j]
 

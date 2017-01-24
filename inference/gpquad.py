@@ -96,14 +96,12 @@ def main():
     dim = 5
     hdyn = np.array([[1, 25, 25, 25, 25, 25]], dtype=float)
     hobs = np.array([[1, 25, 25, 1e4, 1e4, 1e4]], dtype=float)
-    reentry_filter_demo(GPQKalman, hdyn, hobs, 'rbf', 'ut')
-
-    # used kernel parameters in table for nicer printing
     dyn_par_table = pd.DataFrame(hdyn, columns=['alpha'] + ['el_' + str(d) for d in range(1, dim+1)])
     obs_par_table = pd.DataFrame(hobs, columns=['alpha'] + ['el_' + str(d) for d in range(1, dim+1)])
     print('Kernel parameters used')
     print(dyn_par_table)
     print(obs_par_table)
+    reentry_filter_demo(GPQKalman, hdyn, hobs, 'rbf', 'ut')
 
     # multi-output GPQ Kalman
     null, lin = 1e4, 3

@@ -6,6 +6,7 @@ import numpy.linalg as la
 from transforms.bayesquad import GPQ, GPQMO
 from models.pendulum import Pendulum
 from models.ungm import UNGM
+from models.tracking import ReentryRadar
 
 np.set_printoptions(precision=4)
 
@@ -121,24 +122,25 @@ class GPQMOTest(TestCase):
 
     def test_single_vs_multi_output(self):
         # results of the GPQ and GPQMO should be same if parameters properly chosen, GPQ is a special case of GPQMO
-        ssm = Pendulum()
+        ssm = ReentryRadar()
         f = ssm.dyn_eval
         dim_in, dim_out = ssm.xD, ssm.xD
 
         # input mean and covariance
-        mean_in, cov_in = np.zeros(dim_in, ), np.eye(dim_in)
+        mean_in, cov_in = ssm.pars['x0_mean'], ssm.pars['x0_cov']
 
         # single-output GPQ
-        ker_par_so = np.hstack((np.ones((1, 1)), 3 * np.ones((1, dim_in))))
+        ker_par_so = np.hstack((np.ones((1, 1)), 25 * np.ones((1, dim_in))))
         tf_so = GPQ(dim_in, ker_par_so)
 
         # multi-output GPQ
-        ker_par_mo = np.hstack((np.ones((dim_out, 1)), 3 * np.ones((dim_out, dim_in))))
+        ker_par_mo = np.hstack((np.ones((dim_out, 1)), 25 * np.ones((dim_out, dim_in))))
         tf_mo = GPQMO(dim_in, dim_out, ker_par_mo)
 
         # transformed moments
-        mean_so, cov_so, ccov_so = tf_so.apply(f, mean_in, cov_in, np.atleast_1d(1.0))
-        mean_mo, cov_mo, ccov_mo = tf_mo.apply(f, mean_in, cov_in, np.atleast_1d(1.0))
+        # FIXME: transformed covariances different
+        mean_so, cov_so, ccov_so = tf_so.apply(f, mean_in, cov_in, ssm.par_fcn(0))
+        mean_mo, cov_mo, ccov_mo = tf_mo.apply(f, mean_in, cov_in, ssm.par_fcn(0))
 
         # results of GPQ and GPQMO should be the same
         self.assertTrue(np.allclose(mean_so, mean_mo))
