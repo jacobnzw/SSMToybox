@@ -185,6 +185,8 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
         """
         par = self.model.kernel.get_parameters(kern_par)
         x = self.model.points
+
+        # inverse kernel matrix
         iK = self.model.kernel.eval_inv_dot(par, x, scaling=False)
 
         # Kernel expectations
@@ -196,6 +198,10 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
         w_m = q.dot(iK)
         w_c = iK.dot(Q).dot(iK)
         w_cc = R.dot(iK)
+
+        # covariance weights should be symmetric
+        w_c = 0.5 * (w_c + w_c.T)
+
         return w_m, w_c, w_cc
 
     def _fcn_eval(self, fcn, x, fcn_par):
@@ -247,18 +253,22 @@ class GPQMO(BQTransform):
             q[:, i] = self.model.kernel.exp_x_kx(par[i, :], x)
             R[..., i] = self.model.kernel.exp_x_xkx(par[i, :], x)
             iK[..., i] = self.model.kernel.eval_inv_dot(par[i, :], x, scaling=False)
-            for j in range(e):
+            for j in range(e - i):
                 Q[..., i, j] = self.model.kernel.exp_x_kxkx(par[i, :], par[j, :], x)
+                Q[..., j, i] = Q[..., i, j]
 
         # weights
         # w_m = q(\theta_e) * iK(\theta_e) for all e = 1, ..., dim_out
         w_m = np.einsum('ne, nme -> me', q, iK)
 
-        # w_m = iK(\theta_e) * Q(\theta_e, \theta_f) * iK(\theta_f) for all e,f = 1, ..., dim_out
+        # w_c = iK(\theta_e) * Q(\theta_e, \theta_f) * iK(\theta_f) for all e,f = 1, ..., dim_out
         w_c = np.einsum('nie, ijed, jmd -> nmed', iK, Q, iK)
 
         # w_cc = R(\theta_e) * iK(\theta_e) for all e = 1, ..., dim_out
         w_cc = np.einsum('die, ine -> dne', R, iK)
+
+        # covariance weights should be symmetric
+        w_c = 0.5 * (w_c + w_c.swapaxes(0, 1).swapaxes(2, 3))
 
         return w_m, w_c, w_cc
 

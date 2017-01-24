@@ -47,10 +47,15 @@ class Kernel(object, metaclass=ABCMeta):
         : numpy.ndarray
 
         """
-        # inversion of PD matrix A using Cholesky decomposition
-        if b is None:
-            b = np.eye(A.shape[0])
-        return cho_solve(cho_factor(A), b)
+
+        b = np.eye(A.shape[0]) if b is None else b
+
+        # solve a system involving  symmetric PD matrix A using Cholesky decomposition
+        iA = cho_solve(cho_factor(A), b)
+
+        # inverse of symmetric PD matrix must be symmetric
+        iA = 0.5 * (iA + iA.T)
+        return iA
 
     # evaluation
     @abstractmethod
