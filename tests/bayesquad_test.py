@@ -142,7 +142,11 @@ class GPQMOTest(TestCase):
         mean_so, cov_so, ccov_so = tf_so.apply(f, mean_in, cov_in, ssm.par_fcn(0))
         mean_mo, cov_mo, ccov_mo = tf_mo.apply(f, mean_in, cov_in, ssm.par_fcn(0))
 
+        print('mean delta: {}'.format(np.abs(mean_so - mean_mo).max()))
+        print('cov delta: {}'.format(np.abs(cov_so - cov_mo).max()))
+        print('ccov delta: {}'.format(np.abs(ccov_so - ccov_mo).max()))
+
         # results of GPQ and GPQMO should be the same
-        self.assertTrue(np.allclose(mean_so, mean_mo))
-        self.assertTrue(np.allclose(cov_so, cov_mo))
-        self.assertTrue(np.allclose(ccov_so, ccov_mo))
+        self.assertTrue(np.array_equal(mean_so, mean_mo))
+        self.assertTrue(np.array_equal(cov_so, cov_mo))
+        self.assertTrue(np.array_equal(ccov_so, ccov_mo))

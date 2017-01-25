@@ -290,15 +290,22 @@ class GPQMO(BQTransform):
         return np.apply_along_axis(fcn, 0, x, fcn_par)
 
     def _mean(self, weights, fcn_evals):
-        return np.einsum('ij, ji -> i', fcn_evals, weights)
-        # mean = np.empty((self.model.dim_out, ))
-        # for i in range(self.model.dim_out):
-        #     mean[i] = fcn_evals[i, :].dot(weights[:, i])
-        # return mean
+        # return np.einsum('ij, ji -> i', fcn_evals, weights)
+        mean = np.empty((self.model.dim_out, ))
+        for i in range(self.model.dim_out):
+            mean[i] = fcn_evals[i, :].dot(weights[:, i])
+        return mean
 
     def _covariance(self, weights, fcn_evals, mean_out):
         emv = self.model.exp_model_variance(fcn_evals)
-        return np.einsum('ei, ijed, dj -> ed', fcn_evals, weights, fcn_evals) - np.outer(mean_out, mean_out.T) + emv
+        # return np.einsum('ei, ijed, dj -> ed', fcn_evals, weights, fcn_evals) - np.outer(mean_out, mean_out.T) + emv
+        e, n = self.model.dim_out, self.model.num_pts
+        C = np.empty((e, e))
+        for i in range(e):
+            for j in range(i+1):
+                C[i, j] = fcn_evals[i, :].dot(weights[..., i, j]).dot(fcn_evals[j, :])
+                C[j, i] = C[i, j]
+        return C - np.outer(mean_out, mean_out.T) + emv
 
     def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
         """
@@ -318,7 +325,12 @@ class GPQMO(BQTransform):
         : numpy.ndarray
             Shape (E, D)
         """
-        return np.einsum('en, ine, id  -> ed', fcn_evals, weights, chol_cov_in)
+        # return np.einsum('en, ine, id  -> ed', fcn_evals, weights, chol_cov_in)
+        e, d = self.model.dim_out, self.model.dim_in
+        C = np.empty((e, d))
+        for i in range(e):
+            C[i, :] = fcn_evals[i, :].dot(weights[..., i].T).dot(chol_cov_in.T)
+        return C
 
     def _integral_variance(self, points, kern_par):
         pass
