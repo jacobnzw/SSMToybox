@@ -28,6 +28,10 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         chol_cov = cholesky(cov)
         x = mean + chol_cov.dot(self.model.points)
         fx = self._fcn_eval(f, x, fcn_par)
+
+        # DEBUG
+        self.fx = fx
+
         mean_f = self._mean(self.wm, fx)
         cov_f = self._covariance(self.Wc, fx, mean_f)
         cov_fx = self._cross_covariance(self.Wcc, fx, chol_cov)
@@ -194,6 +198,9 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
         Q = self.model.kernel.exp_x_kxkx(par, par, x)
         R = self.model.kernel.exp_x_xkx(par, x)
 
+        # DEBUG
+        self.q, self.Q, self.R, self.iK = q, Q, R, iK
+
         # BQ weights in terms of kernel expectations
         w_m = q.dot(iK)
         w_c = iK.dot(Q).dot(iK)
@@ -249,6 +256,7 @@ class GPQMO(BQTransform):
         Q = np.zeros((n, n, e, e))
         R = np.zeros((d, n, e))
         iK = np.zeros((n, n, e))
+        w_c = np.zeros((n, n, e, e))
         for i in range(e):
             q[:, i] = self.model.kernel.exp_x_kx(par[i, :], x)
             R[..., i] = self.model.kernel.exp_x_xkx(par[i, :], x)
@@ -256,13 +264,19 @@ class GPQMO(BQTransform):
             for j in range(i+1):
                 Q[..., i, j] = self.model.kernel.exp_x_kxkx(par[i, :], par[j, :], x)
                 Q[..., j, i] = Q[..., i, j]
+                w_c[..., i, j] = iK[..., i].dot(Q[..., i, j]).dot(iK[..., j])
+                w_c[..., j, i] = w_c[..., i, j]
+
+        # DEBUG
+        self.q, self.Q, self.R, self.iK = q, Q, R, iK
 
         # weights
         # w_m = q(\theta_e) * iK(\theta_e) for all e = 1, ..., dim_out
         w_m = np.einsum('ne, nme -> me', q, iK)
 
         # w_c = iK(\theta_e) * Q(\theta_e, \theta_f) * iK(\theta_f) for all e,f = 1, ..., dim_out
-        w_c = np.einsum('nie, ijed, jmd -> nmed', iK, Q, iK)
+        # NOTE: einsum gives slighly different results than dot, or I don't know how to use it
+        # w_c = np.einsum('nie, ijed, jmd -> nmed', iK, Q, iK)
 
         # w_cc = R(\theta_e) * iK(\theta_e) for all e = 1, ..., dim_out
         w_cc = np.einsum('die, ine -> dne', R, iK)
@@ -277,13 +291,34 @@ class GPQMO(BQTransform):
 
     def _mean(self, weights, fcn_evals):
         return np.einsum('ij, ji -> i', fcn_evals, weights)
+        # mean = np.empty((self.model.dim_out, ))
+        # for i in range(self.model.dim_out):
+        #     mean[i] = fcn_evals[i, :].dot(weights[:, i])
+        # return mean
 
     def _covariance(self, weights, fcn_evals, mean_out):
         emv = self.model.exp_model_variance(fcn_evals)
         return np.einsum('ei, ijed, dj -> ed', fcn_evals, weights, fcn_evals) - np.outer(mean_out, mean_out.T) + emv
 
     def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
-        return np.einsum('dne, en -> ed', weights, fcn_evals)
+        """
+        Covariance of the input and output variables for multi-output GPQ model.
+
+        Parameters
+        ----------
+        weights : numpy.ndarray
+            Shape (D, N, E)
+        fcn_evals : numpy.ndarray
+            Shape (E, N)
+        chol_cov_in : numpy.ndarray
+            Shape (D, D)
+
+        Returns
+        -------
+        : numpy.ndarray
+            Shape (E, D)
+        """
+        return np.einsum('en, ine, id  -> ed', fcn_evals, weights, chol_cov_in)
 
     def _integral_variance(self, points, kern_par):
         pass
