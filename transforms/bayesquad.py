@@ -129,6 +129,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
         """
         return fcn_evals.dot(weights)
+        # return np.einsum('en, n -> e', fcn_evals, weights)
 
     def _covariance(self, weights, fcn_evals, mean_out):
         """
@@ -147,6 +148,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         """
         expected_model_var = self.model.exp_model_variance(fcn_evals)
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + expected_model_var
+        # return np.einsum('in, nm, jm -> ij', fcn_evals, weights, fcn_evals) - np.outer(mean_out, mean_out.T) + expected_model_var
 
     def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
         """
@@ -155,8 +157,11 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         Parameters
         ----------
         weights : numpy.ndarray
+            Shape (D, N)
         fcn_evals : numpy.ndarray
+            Shape (E, N)
         chol_cov_in : numpy.ndarray
+            Shape (D, D)
 
         Returns
         -------
@@ -164,6 +169,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
         """
         return fcn_evals.dot(weights.T).dot(chol_cov_in.T)
+        # return np.einsum('en, dn, dj -> ej', fcn_evals, weights, chol_cov_in)
 
     def __str__(self):
         return '{}\n{}'.format(self.__class__.__name__, self.model)
@@ -299,7 +305,7 @@ class GPQMO(BQTransform):
     def _covariance(self, weights, fcn_evals, mean_out):
         emv = self.model.exp_model_variance(fcn_evals)
         # return np.einsum('ei, ijed, dj -> ed', fcn_evals, weights, fcn_evals) - np.outer(mean_out, mean_out.T) + emv
-        e, n = self.model.dim_out, self.model.num_pts
+        e = self.model.dim_out
         C = np.empty((e, e))
         for i in range(e):
             for j in range(i+1):
