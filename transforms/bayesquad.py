@@ -296,6 +296,24 @@ class GPQMO(BQTransform):
         return np.apply_along_axis(fcn, 0, x, fcn_par)
 
     def _mean(self, weights, fcn_evals):
+        """
+        Transformed mean for the multi-output GPQMO.
+
+        Parameters
+        ----------
+        weights : numpy.ndarray
+        fcn_evals : numpy.ndarray
+
+        Notes
+        -----
+        Problems with implementation. Can't get the results to match the results of single-output GPQ transform.
+        I strongly suspect this is caused by the inconsistent results from numpy.einsum and numpy.dot.
+
+        Returns
+        -------
+        : numpy.ndarray
+
+        """
         # return np.einsum('ij, ji -> i', fcn_evals, weights)
         mean = np.empty((self.model.dim_out, ))
         for i in range(self.model.dim_out):
