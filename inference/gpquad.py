@@ -72,7 +72,7 @@ def main():
 
 
     # Pendulum demo
-    # from models.pendulum import pendulum_filter_demo
+    from models.pendulum import pendulum_filter_demo
     # hdyn = {'alpha': 1.0, 'el': [3.0, 3.0]}
     # hobs = {'alpha': 1.0, 'el': [1.6, 1e5]}
     # gh_hyp = {'degree': 5}
@@ -81,8 +81,15 @@ def main():
     #               'point_hyp': {'degree': 5}}
     # kwargs_ut = {'kern_hyp_dyn': {'alpha': 1.0, 'el': [3.0, 3.0]},  # emv 3.3, 5.9e4
     #              'kern_hyp_obs': {'alpha': 1.0, 'el': [2.0, 1e4]}, }
-    # pendulum_filter_demo(GPQKalman, 'rbf', 'sr', **kwargs_ut)
-    # pendulum_filter_demo(GPQMKalman, 'rbf', 'sr')
+
+    # par_dyn = np.array([[1, 3, 3]], dtype=float)
+    # par_obs = np.array([[1, 2, 1e4]], dtype=float)
+    # pendulum_filter_demo(GPQKalman, par_dyn, par_obs, 'rbf', 'sr')
+
+    par_dyn = np.array([[1, 10, 3],
+                        [1, 3, 10]], dtype=float)
+    par_obs = np.array([[1, 3, 1e4]], dtype=float)
+    pendulum_filter_demo(GPQMOKalman, par_dyn, par_obs, 'rbf', 'sr')
 
 
     # Reentry vehicle tracking demo
@@ -91,36 +98,36 @@ def main():
     # lengthscale for the remaining dimensions, which ensures they will not contribute significantly to kernel
     # covariance (the RBF kernel is expressed in terms of inverse lengthscales).
     # TODO: find par that give position RMSE < ~0.01 (UKF), GPQKF best position RMSE is ~0.1,
-    from models.tracking import reentry_filter_demo
-    from unscented import UnscentedKalman
-    dim = 5
-    hdyn = np.array([[1, 25, 25, 25, 25, 25]], dtype=float)
-    hobs = np.array([[1, 25, 25, 1e4, 1e4, 1e4]], dtype=float)
-    dyn_par_table = pd.DataFrame(hdyn, columns=['alpha'] + ['el_' + str(d) for d in range(1, dim+1)])
-    obs_par_table = pd.DataFrame(hobs, columns=['alpha'] + ['el_' + str(d) for d in range(1, dim+1)])
-    print('Kernel parameters used')
-    print(dyn_par_table)
-    print(obs_par_table)
-    reentry_filter_demo(GPQKalman, hdyn, hobs, 'rbf', 'ut')
-
-    # multi-output GPQ Kalman
-    null, lin = 1e4, 3
-    # hdyn = np.array([[1, lin, null, lin, null, null],
-    #                  [1, null, lin, null, lin, null],
-    #                  [1, 3, null, 3, null, null],
-    #                  [1, null, 3, null, 3, null],
-    #                  [1, null, null, null, null, lin]], dtype=float)
-    # hobs = np.array([[1, 3, 3, null, null, null],
-    #                  [1, lin, lin, null, null, null]], dtype=float)
-    hdyn = np.hstack((np.ones((5, 1)), 25.0*np.ones((5, 5))))
-    hobs = np.array([[1, 25, 25, null, null, null],
-                     [1, 25, 25, null, null, null]], dtype=float)
-    dyn_par_table = pd.DataFrame(hdyn, columns=['alpha'] + ['el_' + str(d) for d in range(1, dim + 1)])
-    obs_par_table = pd.DataFrame(hobs, columns=['alpha'] + ['el_' + str(d) for d in range(1, dim + 1)])
-    print('Kernel parameters used')
-    print(dyn_par_table)
-    print(obs_par_table)
-    reentry_filter_demo(GPQMOKalman, hdyn, hobs, 'rbf', 'ut')
+    # from models.tracking import reentry_filter_demo
+    # from unscented import UnscentedKalman
+    # dim = 5
+    # hdyn = np.array([[1, 25, 25, 25, 25, 25]], dtype=float)
+    # hobs = np.array([[1, 25, 25, 1e4, 1e4, 1e4]], dtype=float)
+    # dyn_par_table = pd.DataFrame(hdyn, columns=['alpha'] + ['el_' + str(d) for d in range(1, dim+1)])
+    # obs_par_table = pd.DataFrame(hobs, columns=['alpha'] + ['el_' + str(d) for d in range(1, dim+1)])
+    # print('Kernel parameters used')
+    # print(dyn_par_table)
+    # print(obs_par_table)
+    # reentry_filter_demo(GPQKalman, hdyn, hobs, 'rbf', 'ut')
+    #
+    # # multi-output GPQ Kalman
+    # null, lin = 1e4, 3
+    # # hdyn = np.array([[1, lin, null, lin, null, null],
+    # #                  [1, null, lin, null, lin, null],
+    # #                  [1, 3, null, 3, null, null],
+    # #                  [1, null, 3, null, 3, null],
+    # #                  [1, null, null, null, null, lin]], dtype=float)
+    # # hobs = np.array([[1, 3, 3, null, null, null],
+    # #                  [1, lin, lin, null, null, null]], dtype=float)
+    # hdyn = np.hstack((np.ones((5, 1)), 25.0*np.ones((5, 5))))
+    # hobs = np.array([[1, 25, 25, null, null, null],
+    #                  [1, 25, 25, null, null, null]], dtype=float)
+    # dyn_par_table = pd.DataFrame(hdyn, columns=['alpha'] + ['el_' + str(d) for d in range(1, dim + 1)])
+    # obs_par_table = pd.DataFrame(hobs, columns=['alpha'] + ['el_' + str(d) for d in range(1, dim + 1)])
+    # print('Kernel parameters used')
+    # print(dyn_par_table)
+    # print(obs_par_table)
+    # reentry_filter_demo(GPQMOKalman, hdyn, hobs, 'rbf', 'ut')
 
 
     # reentry_filter_demo(UnscentedKalman)
