@@ -20,7 +20,7 @@ class Kernel(object, metaclass=ABCMeta):
         dim : int
             Input dimension
         par : numpy.ndarray
-            Kernel parameters in a (dim_out, num_hyp) matrix, where i-th row contains parameters for i-th output.
+            Kernel parameters in a (dim_out, num_par) matrix, where i-th row contains parameters for i-th output.
         jitter : float
             Jitter for stabilizing inversion of kernel matrix.
         """
@@ -36,15 +36,19 @@ class Kernel(object, metaclass=ABCMeta):
     @staticmethod
     def _cho_inv(A, b=None):
         """
+        Solution of a linear system :math:`Ax = b`, where :math:`A` is a symmetric positive definite matrix.
 
         Parameters
         ----------
         A : numpy.ndarray
+            Symmetric positive definite matrix.
         b : numpy.ndarray
+            Right-hand side. If `b=None` defaults to unit matrix of the same shape as :math:`A`.
 
         Returns
         -------
         : numpy.ndarray
+            If `b=None`, an :math:`A^{-1}` is returned, otherwise :math:`A^{-1}b` is returned.
 
         """
 
@@ -214,7 +218,7 @@ class RBF(Kernel):
         dim : int
             Input dimension
         par : numpy.ndarray
-            Kernel parameters in a matrix of shape (dim_out, num_hyp), where i-th row contains parameters for i-th
+            Kernel parameters in a matrix of shape (dim_out, num_par), where i-th row contains parameters for i-th
             output. Each row is :math: `[\alpha, \ell_1, \ldots, \ell_dim]`
         jitter : float
             Jitter for stabilizing inversion of the kernel matrix. Default ``jitter=1e-8``.
@@ -270,7 +274,7 @@ class RBF(Kernel):
 
     def exp_x_kxkx(self, par_0, par_1, x, scaling=False):
         """
-        "Correlation" matrix of kernels with elements
+        Correlation matrix of kernels with elements
 
         .. math:
         \[
@@ -279,14 +283,18 @@ class RBF(Kernel):
 
         Parameters
         ----------
-        x : numpy.ndarray of shape (D, N)
-        par_0 : numpy.ndarray of shape (D, )
-        par_1 : numpy.ndarray of shape (D, )
+        x : numpy.ndarray
+            Data points, shape (D, N)
+        par_0 : numpy.ndarray
+        par_1 : numpy.ndarray
+            Kernel parameters, shape (D, )
         scaling : bool
+            Kernel scaling parameter used when `scaling=True`.
 
         Returns
         -------
-
+        : numpy.ndarray
+            Correlation matrix of kernels computed for given pair of kernel parameters.
         """
 
         # unpack kernel parameters
@@ -372,11 +380,11 @@ class RBF(Kernel):
         Parameters
         ----------
         x : numpy.ndarray
-            Data points in (n, d) matrix.
+            Data points in (N, D) matrix.
         y : numpy.ndarray
-            Data points in (n, d) matrix.
+            Data points in (N, D) matrix.
         V : numpy.ndarray
-            Weight matrix (d, d), if V=None, V=eye(d) is used
+            Weight matrix (D, D), if `V=None`, `V=eye(D)` is used
 
         Returns
         -------
@@ -404,7 +412,7 @@ class RQ(Kernel):
         dim : int
             Input dimension
         par : numpy.ndarray
-            Kernel parameters in a matrix of shape (dim_out, num_hyp), where i-th row contains parameters
+            Kernel parameters in a matrix of shape (dim_out, num_par), where i-th row contains parameters
             for i-th
             output. Each row is :math: `[\alpha, \ell_1, \ldots, \ell_dim]`
         jitter : float

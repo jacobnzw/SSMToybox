@@ -22,7 +22,6 @@ class Model(object, metaclass=ABCMeta):
     Assumptions
     -----------
       - The model of the integrand relies on a Kernel class, that is, it is either a GP or TP regression model.
-      - The regression models use single set of kernel parameters for all every output of the integrand.
 
     Attributes
     ----------
@@ -49,6 +48,7 @@ class Model(object, metaclass=ABCMeta):
     eye_n : numpy.ndarray
         Pre-allocated identity matrices to ease the computations.
     """
+
     _supported_points_ = ['sr', 'ut', 'gh']  # TODO: register fully-symmetric sets
     _supported_kernels_ = ['rbf']  # TODO: register RQ kernel
 
@@ -109,7 +109,7 @@ class Model(object, metaclass=ABCMeta):
         fcn_obs : numpy.ndarray
             Observed function values at the point-set locations.
         par : numpy.ndarray
-            Kernel parameters, default `hyp=None`.
+            Kernel parameters, default `par=None`.
 
         Returns
         -------
@@ -118,7 +118,6 @@ class Model(object, metaclass=ABCMeta):
         """
         pass
 
-    # FIXME: method signature should not contain fcn_obs, because GP has no need for it (user must supply something)
     @abstractmethod
     def exp_model_variance(self, fcn_obs, par=None):
         """
@@ -134,7 +133,7 @@ class Model(object, metaclass=ABCMeta):
         fcn_obs : numpy.ndarray
             Observed function values at the point-set locations.
         par : numpy.ndarray
-            Kernel parameters, default `hyp=None`.
+            Kernel parameters, default `par=None`.
 
         Returns
         -------
@@ -158,7 +157,7 @@ class Model(object, metaclass=ABCMeta):
         fcn_obs : numpy.ndarray
             Observed function values at the point-set locations.
         par : numpy.ndarray
-            Kernel parameters, default `hyp=None`.
+            Kernel parameters, default `par=None`.
 
         Returns
         -------
@@ -303,7 +302,7 @@ class Model(object, metaclass=ABCMeta):
         fcn_obs : numpy.ndarray
             Observed function values at the point-set locations.
         par : numpy.ndarray
-            Kernel parameters, default `hyp=None`.
+            Kernel parameters, default `par=None`.
         fcn_true :
             True function values
         in_dim : int
@@ -317,17 +316,21 @@ class Model(object, metaclass=ABCMeta):
 
         fcn_obs = np.squeeze(fcn_obs)
         fcn_true = np.squeeze(fcn_true)
+
         # model predictive mean and variance
         mean, var = self.predict(test_data, fcn_obs, par=par)
         std = np.sqrt(var)
         test_data = np.squeeze(test_data[in_dim, :])
+
         # set plot title according to model
         fig_title = self.__class__.__name__ + ' model of the integrand'
+
         # plot training data, predictive mean and variance
         fig = plt.figure(fig_title)
         plt.fill_between(test_data, mean - 2 * std, mean + 2 * std, color='0.1', alpha=0.15)
         plt.plot(test_data, mean, color='k', lw=2)
         plt.plot(self.points[in_dim, :], fcn_obs, 'ko', ms=8)
+
         # true function values at test points if provided
         if fcn_true is not None:
             plt.plot(test_data, fcn_true, lw=2, ls='--', color='tomato')
@@ -356,13 +359,16 @@ class Model(object, metaclass=ABCMeta):
         -----
         List of supported points is kept in ``_supported_points_`` class variable.
         """
+
         points = points.lower()
+
         # make sure points is supported
         if points not in Model._supported_points_:
             print('Points {} not supported. Supported points are {}.'.format(points, Model._supported_points_))
             return None
         if point_par is None:
             point_par = {}
+
         # create chosen points
         if points == 'sr':
             return SphericalRadial.unit_sigma_points(dim)
@@ -394,11 +400,14 @@ class Model(object, metaclass=ABCMeta):
         -----
         List of supported kernels is kept in ``_supported_kernels_`` class variable.
         """
+
         kernel = kernel.lower()
+
         # make sure kernel is supported
         if kernel not in Model._supported_kernels_:
             print('Kernel {} not supported. Supported kernels are {}.'.format(kernel, Model._supported_kernels_))
             return None
+
         # initialize the chosen kernel
         if kernel == 'rbf':
             return RBF(dim, par)
@@ -411,12 +420,12 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
     def __init__(self, dim, kern_par, kernel='rbf', points='ut', point_par=None):
         """
-        Gaussian process model
+        Gaussian process regression model.
 
         Parameters
         ----------
         dim : int
-            Number of input dimensions
+            Number of input dimensions.
         kern_par : numpy.ndarray
             Kernel parameters in matrix.
         kernel : string
@@ -426,21 +435,29 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         point_par : dict
             Parameters of the sigma-point set.
         """
+
         super(GaussianProcess, self).__init__(dim, kern_par, kernel, points, point_par)
 
     def predict(self, test_data, fcn_obs, par=None):
         """
+        Gaussian process predictions.
 
         Parameters
         ----------
-        test_data
-        fcn_obs
-        par
+        test_data : numpy.ndarray
+            Test data, shape (D, M)
+        fcn_obs : numpy.ndarray
+            Observations of the integrand at sigma-points.
+        par : numpy.ndarray
+            Kernel parameters.
 
         Returns
         -------
+        : tuple
+            Predictive mean and variance in a tuple (mean, var).
 
         """
+
         par = self.kernel.get_parameters(par)
 
         iK = self.kernel.eval_inv_dot(par, self.points)
@@ -452,16 +469,17 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         var = np.squeeze(kxx - np.einsum('im,mn,mi->i', kx, iK, kx.T))
         return mean, var
 
-    def exp_model_variance(self, fcn_obs, par=None):
+    def exp_model_variance(self, fcn_obs=None, par=None):
         """
 
         Parameters
         ----------
-        fcn_obs
-        par
+        fcn_obs : numpy.ndarray
+        par : numpy.ndarray
 
         Returns
         -------
+        : float
 
         """
 
@@ -475,11 +493,12 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
         Parameters
         ----------
-        fcn_obs
-        par
+        fcn_obs : numpy.ndarray
+        par : numpy.ndarray
 
         Returns
         -------
+        : float
 
         """
 
@@ -491,36 +510,43 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
     def neg_log_marginal_likelihood(self, log_par, fcn_obs):
         """
+        Negative marginal log-likelihood of Gaussian process regression model.
 
         Parameters
         ----------
-        log_par
-        fcn_obs
+        log_par : numpy.ndarray
+            Kernel log-parameters, shape (num_par, ).
+        fcn_obs : numpy.ndarray
+            Function values, shape (num_pts, dim_out).
+
+        Notes
+        -----
+        Used as an objective function by the `Model.optimize()` to find an estimate of the kernel parameters.
 
         Returns
         -------
+        Negative log-likelihood and gradient for given parameter.
 
         """
-        # marginal log-likelihood of GP, uses log-par for optimization reasons
-        # N - # points, E - # function outputs
-        # fcn_obs (N, E), par (num_hyp, )
 
         # convert from log-par to par
-        hypers = np.exp(log_par)
+        par = np.exp(log_par)
 
-        L = self.kernel.eval_chol(hypers, self.points)  # (N, N)
+        L = self.kernel.eval_chol(par, self.points)  # (N, N)
         K = L.dot(L.T)  # jitter included from eval_chol
         a = la.solve(K, fcn_obs)  # (N, E)
         y_dot_a = np.einsum('ij, ji', fcn_obs.T, a)  # sum of diagonal of A.T.dot(A)
         a_out_a = np.einsum('i...j, ...jn', a, a.T)  # (N, N) sum over of outer products of columns of A
+
         # negative marginal log-likelihood
         nlml = 0.5 * y_dot_a + np.sum(np.log(np.diag(L))) + 0.5 * self.num_pts * np.log(2 * np.pi)
         # nlml = np.log(nlml)  # w/o this, unconstrained solver terminates w/ 'precision loss'
+
         # TODO: check the gradient with check_grad method
         # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
-        dK_dTheta = self.kernel.der_par(hypers, self.points)  # (N, N, num_hyp)
+        dK_dTheta = self.kernel.der_par(par, self.points)  # (N, N, num_par)
         iK = la.solve(K, np.eye(self.num_pts))
-        dnlml_dtheta = 0.5 * np.trace((iK - a_out_a).dot(dK_dTheta))  # (num_hyp, )
+        dnlml_dtheta = 0.5 * np.trace((iK - a_out_a).dot(dK_dTheta))  # (num_par, )
         return nlml, dnlml_dtheta
 
 
@@ -529,11 +555,48 @@ class GaussianProcessMO(Model):
     Multi-output Gaussian process regression model of the integrand in the Bayesian quadrature.
     """
 
-    def __init__(self, dim, dim_out, kern_par, kernel, points, point_par=None):
-        super(GaussianProcessMO, self).__init__(dim, kern_par, kernel, points, point_par)
+    def __init__(self, dim_in, dim_out, kern_par, kernel, points, point_par=None):
+        """
+        Multi-output Gaussian process regression model.
+
+        Parameters
+        ----------
+        dim_in : int
+            Number of input dimensions.
+        dim_out : int
+            Number of output dimensions.
+        kern_par : numpy.ndarray
+            Kernel parameters in matrix.
+        kernel : string
+            Acronym of the covariance function of the Gaussian process model.
+        points : string
+            Acronym for the sigma-point set to use in BQ.
+        point_par : dict
+            Parameters of the sigma-point set.
+        """
+
+        super(GaussianProcessMO, self).__init__(dim_in, kern_par, kernel, points, point_par)
         self.dim_out = dim_out
 
     def predict(self, test_data, fcn_obs, par=None):
+        """
+        Predictions of multi-output Gaussian process regression model.
+
+        Parameters
+        ----------
+        test_data : numpy.ndarray
+            Test data, shape (dim_in, num_test)
+        fcn_obs : numpy.ndarray
+            Observations of the integrand at sigma-points, shape (dim_out, num_pts)?
+        par : numpy.ndarray
+            Kernel parameters.
+
+        Returns
+        -------
+        : tuple
+            Predictive mean and variance in a tuple (mean, var).
+
+        """
         pass
 
     def exp_model_variance(self, fcn_obs, par=None):
@@ -558,6 +621,25 @@ class GaussianProcessMO(Model):
         return ivar
 
     def neg_log_marginal_likelihood(self, log_par, fcn_obs):
+        """
+        Negative marginal log-likelihood of a multi-output GP regression model.
+
+        Parameters
+        ----------
+        log_par : numpy.ndarray
+            Kernel log-parameters, shape (dim_out, num_par).
+        fcn_obs : numpy.ndarray
+            Function values, shape (num_pts, dim_out).
+
+        Notes
+        -----
+        Used as an objective function by the `Model.optimize()` to find an estimate of the kernel parameters.
+
+        Returns
+        -------
+        Negative log-likelihood and gradient for given parameter.
+
+        """
         pass
 
 
@@ -568,31 +650,45 @@ class StudentTProcess(Model):
 
     def __init__(self, dim, kern_par, kernel='rbf', points='ut', point_par=None, nu=3.0):
         """
+        Student t process regression model.
 
         Parameters
         ----------
-        dim
-        kernel
-        points
-        kern_par
-        point_par
+        dim : int
+            Number of input dimensions.
+        kern_par : numpy.ndarray
+            Kernel parameters in matrix.
+        kernel : string
+            Acronym of the covariance function of the Gaussian process model.
+        points : string
+            Acronym for the sigma-point set to use in BQ.
+        point_par : dict
+            Parameters of the sigma-point set.
         """
+
         super(StudentTProcess, self).__init__(dim, kern_par, kernel, points, point_par)
         nu = 3.0 if nu < 2 else nu  # nu > 2
         self.nu = nu
 
     def predict(self, test_data, fcn_obs, par=None, nu=None):
         """
+        Student t process predictions.
 
         Parameters
         ----------
-        test_data
-        fcn_obs
-        par
-        nu
+        test_data : numpy.ndarray
+            Test data, shape (D, M)
+        fcn_obs : numpy.ndarray
+            Observations of the integrand at sigma-points.
+        par : numpy.ndarray
+            Kernel parameters.
+        nu : float
+            Degrees of freedom.
 
         Returns
         -------
+        : tuple
+            Predictive mean and variance in a tuple (mean, var).
 
         """
 
@@ -654,28 +750,33 @@ class StudentTProcess(Model):
 
     def neg_log_marginal_likelihood(self, log_par, fcn_obs):
         """
+        Negative marginal log-likelihood of Student t process regression model.
 
         Parameters
         ----------
-        log_par
-        fcn_obs
+        log_par : numpy.ndarray
+            Kernel log-parameters, shape (num_par, ).
+        fcn_obs : numpy.ndarray
+            Function values, shape (num_pts, dim_out).
+
+        Notes
+        -----
+        Used as an objective function by the `Model.optimize()` to find an estimate of the kernel parameters.
 
         Returns
         -------
+        Negative log-likelihood and gradient for given parameter.
 
         """
-        # marginal log-likelihood of TP, uses log-par for optimization reasons
-        # N - # points, E - # function outputs
-        # fcn_obs (N, E), par (num_hyp, )
 
         # convert from log-par to par
-        hypers = np.exp(log_par)
+        par = np.exp(log_par)
 
-        L = self.kernel.eval_chol(hypers, self.points)  # (N, N)
+        L = self.kernel.eval_chol(par, self.points)  # (num_pts, num_pts)
         K = L.dot(L.T)  # jitter included from eval_chol
-        a = la.solve(K, fcn_obs)  # (N, E)
+        a = la.solve(K, fcn_obs)  # (num_pts, dim_out)
         y_dot_a = np.einsum('ij, ji', fcn_obs.T, a)  # sum of diagonal of A.T.dot(A)
-        a_out_a = np.einsum('i...j, ...jn', a, a.T)  # (N, N) sum over of outer products of columns of A
+        a_out_a = np.einsum('i...j, ...jn', a, a.T)  # (num_pts, num_pts) sum over of outer products of columns of A
 
         # negative marginal log-likelihood
         from scipy.special import gamma
@@ -685,8 +786,8 @@ class StudentTProcess(Model):
         nlml = 0.5 * (self.nu + self.num_pts) * np.log(1 + y_dot_a) + half_logdet_K + const
 
         # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
-        dK_dTheta = self.kernel.der_par(hypers, self.points)  # (N, N, num_hyp)
+        dK_dTheta = self.kernel.der_par(par, self.points)  # (num_pts, num_pts, num_par)
         iK = la.solve(K, np.eye(self.num_pts))
         scale = (self.nu + self.num_pts) / (self.nu + y_dot_a - 2)
-        dnlml_dtheta = 0.5 * np.trace((iK - scale * a_out_a).dot(dK_dTheta))  # (num_hyp, )
+        dnlml_dtheta = 0.5 * np.trace((iK - scale * a_out_a).dot(dK_dTheta))  # (num_par, )
         return nlml, dnlml_dtheta

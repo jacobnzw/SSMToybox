@@ -21,36 +21,71 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         self.wm, self.Wc, self.Wcc = self._weights()
 
     def apply(self, f, mean, cov, fcn_par, kern_par=None):
-        # Re-compute weights if transform parameter kern_par explicitly given
+        """
+        Compute transformed moments.
+
+        Parameters
+        ----------
+        f : func
+            Integrand, transforming function of the random variable.
+        mean : numpy.ndarray
+            Input mean.
+        cov : numpy.ndarray
+            Input covariance.
+        fcn_par : numpy.ndarray
+            Integrand parameters.
+        kern_par : numpy.ndarray
+            Kernel parameters.
+
+        Returns
+        -------
+        : tuple
+            Transformed mean, covariance and cross-covariance in tuple.
+
+        """
+
+        # re-compute weights if transform parameter kern_par explicitly given
         if kern_par is not None:
             self.wm, self.Wc, self.Wcc = self._weights(kern_par)
+
         mean = mean[:, na]
         chol_cov = cholesky(cov)
+
+        # evaluate integrand at sigma-points
         x = mean + chol_cov.dot(self.model.points)
         fx = self._fcn_eval(f, x, fcn_par)
 
         # DEBUG
         self.fx = fx
 
+        # compute transformed moments
         mean_f = self._mean(self.wm, fx)
         cov_f = self._covariance(self.Wc, fx, mean_f)
         cov_fx = self._cross_covariance(self.Wcc, fx, chol_cov)
+
         return mean_f, cov_f, cov_fx
 
     @staticmethod
     def _get_model(dim_in, dim_out, model, kernel, points, kern_par, point_par, **kwargs):
         """
+        Initialize chosen model with supplied parameters.
 
         Parameters
         ----------
         dim_in : int
         dim_out : int
         model : string
+            Model of the integrand. See `BQTransform._supported_models_`.
         kernel : string
+            Kernel of the model. See `Model._supported_kernels_`.
         points : string
+            Point-set to use for the integration. See `Model._supported_points_`.
         kern_par : numpy.ndarray
+            Kernel parameters.
         point_par : dict
+            Parameters of the point-set scheme.
         kwargs : dict
+            Additional kwargs passed to the model.
 
         Returns
         -------
@@ -81,12 +116,25 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
     @abstractmethod
     def _weights(self, kern_par):
-        # no need for input args because points and par are in self.model.points and self.model.kernel.par
+        """
+        Bayesian quadrature weights.
+
+        Parameters
+        ----------
+        kern_par : numpy.ndarray
+            Kernel parameters to use in computation of the weights.
+
+        Returns
+        -------
+        : tuple
+            Weights for the mean, covariance and cross-covariance quadrature approximations.
+
+        """
         pass
 
     @abstractmethod
     def _integral_variance(self, points, kern_par):
-        # can serve for finding minimum variance point sets or hyper-parameters
+        # can serve for finding minimum variance point sets or kernel parameters
         # optimizers require the first argument to be the variable, a decorator could be used to interchange the first
         # two arguments, so that we don't have to define the same function twice only w/ different signature
         pass
@@ -226,10 +274,40 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
 
 class GPQMO(BQTransform):
     def __init__(self, dim_in, dim_out, kern_par, kernel='rbf', points='ut', point_par=None):
+        """
+
+        Parameters
+        ----------
+        dim_in
+        dim_out
+        kern_par
+        kernel
+        points
+        point_par
+
+        Notes
+        -----
+        There can be a difference between the GPQ weights and GPQMO weights. In GPQMO we need to multiply
+        higher-dimensional arrays when computing weights, which is more elegantly handled by the numpy.einsum(). As
+        of Numpy 1.11.3 the problem is, that the results from `einsum()` do not exactly match those obtained by
+        equivalent usage of `numpy.dot()`. As of yet I did not come up with an implementation giving equal results.
+
+        The transformed moments are implemented in two ways: (a) using `einsum` and (b) using for loops and `dot` (
+        slower). The option (b) is the closest to the results produced by GPQ.
+
+        The consequence is that the GPQMO filters do not perform the same as  GPQ filters, even though they should
+        when provided with the same parameters.
+
+        """
         super(GPQMO, self).__init__(dim_in, dim_out, kern_par, 'gp-mo', kernel, points, point_par)
 
         # output dimension (number of outputs)
         self.e = dim_out
+
+        # TEMPORARY
+        self.tmean = np.empty((dim_out, ))
+        self.tcov = np.empty((dim_out, dim_out))
+        self.tccov = np.empty((dim_out, dim_in))
 
     def _weights(self, kern_par=None):
         """
@@ -237,16 +315,16 @@ class GPQMO(BQTransform):
 
         Parameters
         ----------
-        kern_par : numpy.ndarray of shape (E, num_par)
+        kern_par : numpy.ndarray of shape (dim_out, num_par)
             Kernel parameters in a matrix, where e-th row contains parameters for e-th output.
 
         Returns
         -------
         : tuple (w_m, w_c, w_cc)
             GP quadrature weights for the mean (w_m), covariance (w_c) and cross-covariance (w_cc).
-            w_m : numpy.ndarray of shape (N, E)
-            w_c : numpy.ndarray of shape (N, N, E, E)
-            w_cc : numpy.ndarray of shape (D, N, E)
+            w_m : numpy.ndarray of shape (num_pts, dim_out)
+            w_c : numpy.ndarray of shape (num_pts, num_pts, dim_out, dim_out)
+            w_cc : numpy.ndarray of shape (dim_in, num_pts, dim_out)
 
         """
 
@@ -273,7 +351,7 @@ class GPQMO(BQTransform):
                 w_c[..., i, j] = iK[..., i].dot(Q[..., i, j]).dot(iK[..., j])
                 w_c[..., j, i] = w_c[..., i, j]
 
-        # DEBUG
+        # DEBUG, la.cond(Q) is high
         self.q, self.Q, self.R, self.iK = q, Q, R, iK
 
         # weights
@@ -297,7 +375,7 @@ class GPQMO(BQTransform):
 
     def _mean(self, weights, fcn_evals):
         """
-        Transformed mean for the multi-output GPQMO.
+        Transformed mean for the multi-output GPQ.
 
         Parameters
         ----------
@@ -315,21 +393,18 @@ class GPQMO(BQTransform):
 
         """
         # return np.einsum('ij, ji -> i', fcn_evals, weights)
-        mean = np.empty((self.model.dim_out, ))
         for i in range(self.model.dim_out):
-            mean[i] = fcn_evals[i, :].dot(weights[:, i])
-        return mean
+            self.tmean[i] = fcn_evals[i, :].dot(weights[:, i])
+        return self.tmean
 
     def _covariance(self, weights, fcn_evals, mean_out):
         emv = self.model.exp_model_variance(fcn_evals)
         # return np.einsum('ei, ijed, dj -> ed', fcn_evals, weights, fcn_evals) - np.outer(mean_out, mean_out.T) + emv
-        e = self.model.dim_out
-        C = np.empty((e, e))
-        for i in range(e):
+        for i in range(self.e):
             for j in range(i+1):
-                C[i, j] = fcn_evals[i, :].dot(weights[..., i, j]).dot(fcn_evals[j, :])
-                C[j, i] = C[i, j]
-        return C - np.outer(mean_out, mean_out.T) + emv
+                self.tcov[i, j] = fcn_evals[i, :].dot(weights[..., i, j]).dot(fcn_evals[j, :])
+                self.tcov[j, i] = self.tcov[i, j]
+        return self.tcov - np.outer(mean_out, mean_out.T) + emv
 
     def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
         """
@@ -350,11 +425,9 @@ class GPQMO(BQTransform):
             Shape (E, D)
         """
         # return np.einsum('en, ine, id  -> ed', fcn_evals, weights, chol_cov_in)
-        e, d = self.model.dim_out, self.model.dim_in
-        C = np.empty((e, d))
-        for i in range(e):
-            C[i, :] = fcn_evals[i, :].dot(weights[..., i].T).dot(chol_cov_in.T)
-        return C
+        for i in range(self.e):
+            self.tccov[i, :] = fcn_evals[i, :].dot(weights[..., i].T).dot(chol_cov_in.T)
+        return self.tccov
 
     def _integral_variance(self, points, kern_par):
         pass
