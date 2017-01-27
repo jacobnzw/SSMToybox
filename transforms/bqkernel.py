@@ -8,6 +8,30 @@ from scipy.linalg import cho_factor, cho_solve
 
 # TODO: documentation
 
+def maha(x, y, V=None):
+    """
+    Mahalanobis distance of all pairs of supplied data points.
+
+    Parameters
+    ----------
+    x : numpy.ndarray
+        Data points in (N, D) matrix.
+    y : numpy.ndarray
+        Data points in (N, D) matrix.
+    V : numpy.ndarray
+        Weight matrix (D, D), if `V=None`, `V=eye(D)` is used
+
+    Returns
+    -------
+    : numpy.ndarray
+        Pair-wise Mahalanobis distance of rows of x and y with given weight matrix V.
+    """
+    if V is None:
+        V = np.eye(x.shape[1])
+    x2V = np.sum(x.dot(V) * x, 1)
+    y2V = np.sum(y.dot(V) * y, 1)
+    return (x2V[:, na] + y2V[:, na].T) - 2 * x.dot(V).dot(y.T)
+
 
 class Kernel(object, metaclass=ABCMeta):
 
@@ -91,6 +115,19 @@ class Kernel(object, metaclass=ABCMeta):
     def eval_chol(self, par, x, scaling=True):
         return la.cholesky(self.eval(par, x, scaling=scaling) + self.jitter * np.eye(x.shape[1]))
 
+    def get_parameters(self, par=None):
+        if par is None:
+            # return parameters kernel was initialized with
+            return self.par
+        else:
+
+            # ensure supplied kernel parameters are in 2d float array
+            par = np.atleast_2d(par).astype(float)
+            assert par.ndim == 2, "Supplied Kernel parameters must be a 2d array of shape (dim_out, dim)."
+
+            # returned supplied kernel parameters
+            return par
+
     # expectations
     @abstractmethod
     def exp_x_kx(self, par, x):
@@ -103,6 +140,10 @@ class Kernel(object, metaclass=ABCMeta):
             Sigma-points (data) in a 2d array of shape (dim, N).
         par : array_like
             Kernel parameters in a vector. The first element must be kernel scaling parameter.
+
+        Notes
+        -----
+        Also known as kernel mean map.
 
         Returns
         -------
@@ -145,6 +186,10 @@ class Kernel(object, metaclass=ABCMeta):
             Kernel parameters in a vector. The first element must be kernel scaling parameter.
         par_1 : array_like
             Kernel parameters in a vector. The first element must be kernel scaling parameter.
+
+        Notes
+        -----
+        Also known as kernel iteration.
 
         Returns
         -------
@@ -199,10 +244,6 @@ class Kernel(object, metaclass=ABCMeta):
         # evaluates derivative of the kernel matrix at par_0; x is data, now acting as parameter
         pass
 
-    @abstractmethod
-    def get_parameters(self, par):
-        pass
-
 
 class RBF(Kernel):
 
@@ -249,7 +290,7 @@ class RBF(Kernel):
             dx = x1 - x2
             return np.exp(2 * np.log(alpha) - 0.5 * np.sum(dx * dx, axis=0))
         else:
-            return np.exp(2 * np.log(alpha) - 0.5 * self._maha(x1.T, x2.T))
+            return np.exp(2 * np.log(alpha) - 0.5 * maha(x1.T, x2.T))
 
     def exp_x_kx(self, par, x, scaling=False):
         # a.k.a. kernel mean map w.r.t. standard Gaussian PDF
@@ -278,7 +319,7 @@ class RBF(Kernel):
 
         .. math:
         \[
-            \mathbb{E}[k(x, x_i), k(x, x_j)]
+            \mathbb{E}[k(x, x_i), k(x, x_j)] = \int\! k(x, x_i), k(x, x_j) N(x \mid 0, I)\, \mathrm{d}x
         \]
 
         Parameters
@@ -319,7 +360,7 @@ class RBF(Kernel):
         # R^{-1} = (\Lambda_m^{-1} + \Lambda_n^{-1} + \eye)^{-1}
         r = inv_lam + inv_lam_1 + self.eye_d  # (D, D)
 
-        n = (xi[:, na] + xi_1[na, :]) + 0.5 * self._maha(x_0.T, -x_1.T, V=la.inv(r))  # (N, N)
+        n = (xi[:, na] + xi_1[na, :]) + 0.5 * maha(x_0.T, -x_1.T, V=la.inv(r))  # (N, N)
         return la.det(r) ** -0.5 * np.exp(n)
 
     def exp_x_kxx(self, par):
@@ -360,43 +401,6 @@ class RBF(Kernel):
         # TODO: return scaling and lengthscale, not sqrt inv lambda
         return par[0], np.diag(par[1:] ** -1)
 
-    def get_parameters(self, par=None):
-        if par is None:
-            # return parameters kernel was initialized with
-            return self.par
-        else:
-
-            # ensure supplied kernel parameters are in 2d float array
-            par = np.atleast_2d(par).astype(float)
-            assert par.ndim == 2, "Supplied Kernel parameters must be a 2d array of shape (dim_out, dim)."
-
-            # returned supplied kernel parameters
-            return par
-
-    def _maha(self, x, y, V=None):
-        """
-        Mahalanobis distance of all pairs of supplied data points.
-
-        Parameters
-        ----------
-        x : numpy.ndarray
-            Data points in (N, D) matrix.
-        y : numpy.ndarray
-            Data points in (N, D) matrix.
-        V : numpy.ndarray
-            Weight matrix (D, D), if `V=None`, `V=eye(D)` is used
-
-        Returns
-        -------
-        : numpy.ndarray
-            Pair-wise Mahalanobis distance of rows of x and y with given weight matrix V.
-        """
-        if V is None:
-            V = np.eye(x.shape[1])
-        x2V = np.sum(x.dot(V) * x, 1)
-        y2V = np.sum(y.dot(V) * y, 1)
-        return (x2V[:, na] + y2V[:, na].T) - 2 * x.dot(V).dot(y.T)
-
 
 class RQ(Kernel):
 
@@ -405,7 +409,9 @@ class RQ(Kernel):
         Rational Quadratic kernel.
 
         .. math::
+        \[
            k(x, x') = s^2 \left( 1 + \frac{1}{2\alpha}(x - x')^{\top}\ Lambda^{-1} (x - x') \right)^{-\alpha}
+        \]
 
         Parameters
         ----------
@@ -426,16 +432,128 @@ class RQ(Kernel):
         super(RQ, self).__init__(dim, par, jitter)
 
     def eval(self, par, x1, x2=None, diag=False, scaling=True):
-        pass
+        if x2 is None:
+            x2 = x1.copy()
 
-    def exp_x_kx(self, par, x):
-        pass
+        s, alpha, sqrt_inv_lam = RQ._unpack_parameters(par)
+        s = 1.0 if not scaling else s
+
+        x1 = sqrt_inv_lam.dot(x1)
+        x2 = sqrt_inv_lam.dot(x2)
+        if diag:  # diagonal only
+            assert x1.shape == x2.shape
+            dx = x1 - x2
+            return s**2 * (1 + (2*alpha) ** -1 * np.sum(dx * dx, axis=0)) ** (-alpha)
+        else:
+            return s**2 * (1 + (2*alpha) ** -1 * maha(x1.T, x2.T)) ** (-alpha)
+
+    def exp_x_kx(self, par, x, scaling=False):
+        """
+        RQ kernel mean
+
+        .. math::
+        \[
+            \mathbb{E}_{x}{k(x, x_i)} = \int\! k(x, x_i) St(x \mid 0, I, \nu) \,\mathrm{d}x
+        \]
+
+        Parameters
+        ----------
+        par : numpy.ndarray
+        x : numpy.ndarray
+
+        Returns
+        -------
+
+        """
+        s, alpha, sqrt_inv_lam = RQ._unpack_parameters(par)
+        s = 1.0 if not scaling else s
+
+        inv_lam = sqrt_inv_lam ** 2
+        lam = np.diag(inv_lam.diagonal() ** -1)
+
+        c = s ** 2 * la.det(inv_lam + self.eye_d) ** -0.5
+        xl = la.inv(lam + self.eye_d).dot(x)
+        return c * (1 + (2*alpha)**-1 * np.sum(x * xl, axis=0)) ** (-alpha)
 
     def exp_x_xkx(self, par, x):
-        pass
+        """
+        RQ kernel cross-correlation
 
-    def exp_x_kxkx(self, par_0, par_1, x):
-        pass
+        .. math::
+        \[
+            \mathbb{E}_{x}[xk(x, x_i)] = \int\! xk(x, x_i) St(x \mid 0, I, \nu) \mathrm{d}x
+        \]
+
+        Parameters
+        ----------
+        x : numpy.ndarray
+            Sigma-points (data) in a 2d array of shape (dim, N).
+        par : array_like
+            Kernel parameters in a vector. The first element must be kernel scaling parameter.
+
+        Returns
+        -------
+        : numpy.ndarray
+            Expectation for given data points :math:`x_i` and vector of kernel parameters :math:`\theta_m`
+            returned
+            in an array of shape `(D, N)`, where `(D, N) = x.shape`.
+        """
+        s, alpha, sqrt_inv_lam = RQ._unpack_parameters(par)
+        lam = np.diag(sqrt_inv_lam.diagonal() ** -2)
+
+        mu_q = la.inv(lam + self.eye_d).dot(x)
+        q = self.exp_x_kx(par, x)
+        return q[na, :] * mu_q
+
+    def exp_x_kxkx(self, par_0, par_1, x, scaling=False):
+        """
+        RQ kernel correlation
+
+        .. math:
+        \[
+            \mathbb{E}[k(x, x_i), k(x, x_j)] = \int\! k(x, x_i), k(x, x_j) St(x \mid 0, I, \nu)\, \mathrm{d}x
+        \]
+
+        Parameters
+        ----------
+        x : numpy.ndarray
+            Data points, shape (D, N)
+        par_0 : numpy.ndarray
+        par_1 : numpy.ndarray
+            Kernel parameters, shape (D, )
+        scaling : bool
+            Kernel scaling parameter used when `scaling=True`.
+
+        Returns
+        -------
+        : numpy.ndarray
+            Correlation matrix of kernels computed for given pair of kernel parameters.
+        """
+
+        # unpack kernel parameters
+        s, alpha, sqrt_inv_lam = RQ._unpack_parameters(par_0)
+        s_1, alpha_1, sqrt_inv_lam_1 = RQ._unpack_parameters(par_1)
+        s, s_1 = (1.0, 1.0) if not scaling else (s, s_1)
+        inv_lam = sqrt_inv_lam ** 2
+        inv_lam_1 = sqrt_inv_lam_1 ** 2
+
+        # \xi_i^T * \Lambda_m * \xi_i
+        xi = sqrt_inv_lam.dot(x)  # (D, N)
+        xi = np.sum(xi * xi, axis=0)  # (N, )
+
+        # \xi_j^T * \Lambda_n * \xi_j
+        xi_1 = sqrt_inv_lam_1.dot(x)  # (D, N)
+        xi_1 = np.sum(xi_1 * xi_1, axis=0)  # (N, )
+
+        # \Lambda^{-1} * x
+        x_0 = inv_lam.dot(x)  # (D, N)
+        x_1 = inv_lam_1.dot(x)
+
+        # R^{-1} = (\Lambda_m^{-1} + \Lambda_n^{-1} + \eye)^{-1}
+        r = inv_lam + inv_lam_1 + self.eye_d  # (D, D)
+
+        n = (xi[:, na] + xi_1[na, :]) + maha(x_0.T, -x_1.T, V=la.inv(r))  # (N, N)
+        return s**2 * s_1**2 * la.det(r) ** -0.5 * (1 + (2*alpha) ** -1 * n) ** (-alpha)
 
     def exp_x_kxx(self, par):
         pass
@@ -446,5 +564,19 @@ class RQ(Kernel):
     def der_par(self, par_0, x):
         pass
 
-    def get_parameters(self, par):
-        pass
+    @staticmethod
+    def _unpack_parameters(par):
+        """
+        Break down the parameter vector into individual parameters.
+
+        Parameters
+        ----------
+        par : numpy.ndarray
+
+        Returns
+        -------
+        : tuple
+
+        """
+        par = par.astype(float).squeeze()
+        return par[0], par[1], np.diag(par[2:] ** -1)
