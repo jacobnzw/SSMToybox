@@ -556,10 +556,12 @@ class RQ(Kernel):
         return s**2 * s_1**2 * la.det(r) ** -0.5 * (1 + (2*alpha) ** -1 * n) ** (-alpha)
 
     def exp_x_kxx(self, par):
-        pass
+        return par[0] ** 2
 
     def exp_xy_kxy(self, par):
-        pass
+        s, alpha, sqrt_inv_lam = RQ._unpack_parameters(par)
+        inv_lam = sqrt_inv_lam ** 2
+        return s ** 2 * la.det(2 * inv_lam + self.eye_d) ** -0.5
 
     def der_par(self, par_0, x):
         pass
