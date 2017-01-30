@@ -158,7 +158,7 @@ class StudentInference(StateSpaceInference):
         if self.fixed_dof:  # fixed-DOF version
 
             # pick the smallest DOF
-            dof_pr = np.min((self.dof, self.ssm.nu_q, self.ssm.nu_r))
+            dof_pr = np.min((self.dof, self.q_dof, self.r_dof))
 
             # rescale filtered covariance and noise scale matrices
             scale = (dof_pr - 2) / dof_pr
