@@ -5,8 +5,8 @@ import numpy as np
 import numpy.linalg as la
 from scipy.optimize import minimize
 
-from .bqkernel import RBF
-from .quad import SphericalRadial, Unscented, GaussHermite
+from .bqkernel import RBF, RQ
+from .quad import SphericalRadial, Unscented, GaussHermite, FullySymmetricStudent
 
 
 # TODO: documentation
@@ -49,8 +49,8 @@ class Model(object, metaclass=ABCMeta):
         Pre-allocated identity matrices to ease the computations.
     """
 
-    _supported_points_ = ['sr', 'ut', 'gh']  # TODO: register fully-symmetric sets
-    _supported_kernels_ = ['rbf']  # TODO: register RQ kernel
+    _supported_points_ = ['sr', 'ut', 'gh', 'fs']
+    _supported_kernels_ = ['rbf', 'rq']
 
     def __init__(self, dim, kern_par, kernel, points, point_par=None):
         """
@@ -376,6 +376,8 @@ class Model(object, metaclass=ABCMeta):
             return Unscented.unit_sigma_points(dim, **point_par)
         elif points == 'gh':
             return GaussHermite.unit_sigma_points(dim, **point_par)
+        elif points == 'fs':
+            return FullySymmetricStudent.unit_sigma_points(dim, **point_par)
 
     @staticmethod
     def get_kernel(dim, kernel, par):
@@ -411,6 +413,8 @@ class Model(object, metaclass=ABCMeta):
         # initialize the chosen kernel
         if kernel == 'rbf':
             return RBF(dim, par)
+        elif kernel == 'rq':
+            return RQ(dim, par)
 
 
 class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/GPRegression, same for TP
@@ -664,6 +668,8 @@ class StudentTProcess(Model):
             Acronym for the sigma-point set to use in BQ.
         point_par : dict
             Parameters of the sigma-point set.
+        nu : float
+            Degrees of freedom.
         """
 
         super(StudentTProcess, self).__init__(dim, kern_par, kernel, points, point_par)

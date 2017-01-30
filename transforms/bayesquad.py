@@ -15,7 +15,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
     _supported_models_ = ['gp', 'gp-mo', 'tp']  # mgp, gpder, ...
 
     def __init__(self, dim_in, dim_out, kern_par, model, kernel, points, point_par, **kwargs):
-        self.model = BQTransform._get_model(dim_in, dim_out, model, kernel, points, kern_par, point_par)
+        self.model = BQTransform._get_model(dim_in, dim_out, model, kernel, points, kern_par, point_par, **kwargs)
 
         # BQ transform weights for the mean, covariance and cross-covariance
         self.wm, self.Wc, self.Wcc = self._weights()
@@ -434,22 +434,32 @@ class GPQMO(BQTransform):
 
 
 class TPQ(BQTransform):
-    def __init__(self, dim_in, kern_par, kernel='rbf', points='ut', point_par=None):
-        super(TPQ, self).__init__(dim_in, 1, kern_par, 'tp', kernel, points, point_par)
+    def __init__(self, dim_in, kern_par, kernel='rbf', points='ut', point_par=None, nu=3.0):
+        super(TPQ, self).__init__(dim_in, 1, kern_par, 'tp', kernel, points, point_par, nu=nu)
 
     def _weights(self, kern_par=None):
+        par = self.model.kernel.get_parameters(kern_par)
         x = self.model.points
-        iK = self.model.kernel.eval_inv_dot(kern_par, x, scaling=False)
+
+        # inverse kernel matrix
+        iK = self.model.kernel.eval_inv_dot(par, x, scaling=False)
 
         # Kernel expectations
-        q = self.model.kernel.exp_x_kx(kern_par, x)
-        Q = self.model.kernel.exp_x_kxkx(kern_par, x)
-        R = self.model.kernel.exp_x_xkx(kern_par, x)
+        q = self.model.kernel.exp_x_kx(par, x)
+        Q = self.model.kernel.exp_x_kxkx(par, par, x)
+        R = self.model.kernel.exp_x_xkx(par, x)
+
+        # DEBUG
+        self.q, self.Q, self.R, self.iK = q, Q, R, iK
 
         # BQ weights in terms of kernel expectations
         w_m = q.dot(iK)
         w_c = iK.dot(Q).dot(iK)
         w_cc = R.dot(iK)
+
+        # covariance weights should be symmetric
+        w_c = 0.5 * (w_c + w_c.T)
+
         return w_m, w_c, w_cc
 
     def _fcn_eval(self, fcn, x, fcn_par):
