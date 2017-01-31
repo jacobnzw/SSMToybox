@@ -143,7 +143,7 @@ class System(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        size
+        size : int or tuple of ints
 
         Returns
         -------
@@ -158,7 +158,7 @@ class System(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        size
+        size : int or tuple of ints
 
         Returns
         -------
@@ -173,7 +173,7 @@ class System(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        size
+        size : int or tuple of ints
 
         Returns
         -------
