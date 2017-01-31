@@ -18,7 +18,7 @@ class StateSpaceInference(object):
         self.ssm = ssm
         # set initial condition mean and covariance, and noise covariances
         self.x_mean_fi, self.x_cov_fi, self.q_mean, self.q_cov, self.r_mean, self.r_cov, self.G = ssm.get_pars(
-            'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov', 'q_factor'
+            'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov', 'q_gain'
         )
         self.flags = {'filtered': False, 'smoothed': False}
         self.x_mean_pr, self.x_cov_pr, = None, None

@@ -5,12 +5,15 @@ from models.ssmodel import *
 
 
 class Pendulum(StateSpaceModel):
+
     xD = 2  # state dimension
     zD = 1  # measurement dimension
     qD = 2
     rD = 1
+
     q_additive = True
     r_additive = True
+
     g = 9.81  # gravitation constant
 
     def __init__(self, x0_mean=np.array([1.5, 0]), x0_cov=0.01 * np.eye(2), r_cov=np.array([[0.1]]), dt=0.01):

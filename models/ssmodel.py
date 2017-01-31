@@ -1,7 +1,9 @@
+from abc import ABCMeta, abstractmethod
+
 import numpy as np
 from numpy import newaxis as na
-# TODO: Abstract Base Classes to enforce the requirements of the base class on the derived classes.
-# TODO: The class should recognize input dimensions of dynamics and observation models separately
+
+# NOTE : The class should recognize input dimensions of dynamics and observation models separately
 # This is because observation models do not always use all the state dimensions, e.g. radar only uses position
 # to produce range and bearing measurements, the remaining states (velocity, ...) remain unused. Therefore the moment
 # transform for the observation model should have different dimension. I think this approach should be followed by
@@ -9,24 +11,28 @@ from numpy import newaxis as na
 # rule with sigma-points extended with zeros to match the state dimension.
 
 
-class StateSpaceModel(object):
+class StateSpaceModel(metaclass=ABCMeta):
 
     xD = None  # state dimension
     zD = None  # measurement dimension
     qD = None  # state noise dimension
     rD = None  # measurement noise dimension
+
     q_additive = None  # True = state noise is additive, False = non-additive
     r_additive = None
+
     # lists the keyword arguments currently required by the StateSpaceModel class
-    _required_kwargs_ = 'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov', 'q_factor'
+    _required_kwargs_ = None
+
+    # default values of the input arguments (statistics of noises and initial conditions)
+    _default_ = None
 
     def __init__(self, **kwargs):
         self.pars = kwargs
-        self.zero_q = np.zeros((self.qD))
-        self.zero_r = np.zeros((self.rD))
-        # TODO: if q_factor not given, use identity matrix
-        # TODO: if _mean not given, assume zero-mean
+        self.zero_q = np.zeros(self.qD)
+        self.zero_r = np.zeros(self.rD)
 
+    @abstractmethod
     def dyn_fcn(self, x, q, pars):
         """ System dynamics.
 
@@ -46,8 +52,9 @@ class StateSpaceModel(object):
         1-D numpy.ndarray of shape (self.xD,)
             system state in the next time step
         """
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def meas_fcn(self, x, r, pars):
         """Measurement model.
 
@@ -67,8 +74,9 @@ class StateSpaceModel(object):
         1-D numpy.ndarray of shape (self.zD,)
             measurement of the state
         """
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def par_fcn(self, time):
         """Parameter function of the system dynamics and measurement model.
 
@@ -86,8 +94,9 @@ class StateSpaceModel(object):
         1-D numpy.ndarray of shape (self.pD,)
             Vector of parameters at a given time.
         """
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def dyn_fcn_dx(self, x, q, pars):
         """Jacobian of the system dynamics.
 
@@ -110,8 +119,9 @@ class StateSpaceModel(object):
                 * additive: (self.xD, self.xD)
                 * non-additive: (self.xD, self.xD + self.qD)
         """
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def meas_fcn_dx(self, x, r, pars):
         """Jacobian of the measurement model.
 
@@ -134,7 +144,52 @@ class StateSpaceModel(object):
                 * additive: (self.xD, self.xD)
                 * non-additive: (self.xD, self.xD + self.rD)
         """
-        raise NotImplementedError
+        pass
+
+    @abstractmethod
+    def state_noise_sample(self, size=None):
+        """
+        Sample from a state noise distribution.
+
+        Parameters
+        ----------
+        size : int or tuple of ints
+
+        Returns
+        -------
+
+        """
+        pass
+
+    @abstractmethod
+    def measurement_noise_sample(self, size=None):
+        """
+        Sample from a measurement noise distribution.
+
+        Parameters
+        ----------
+        size : int or tuple of ints
+
+        Returns
+        -------
+
+        """
+        pass
+
+    @abstractmethod
+    def initial_condition_sample(self, size=None):
+        """
+        Sample from a distribution over the system initial conditions.
+
+        Parameters
+        ----------
+        size : int or tuple of ints
+
+        Returns
+        -------
+
+        """
+        pass
 
     def dyn_eval(self, xq, pars, dx=False):
         """Evaluation of the system dynamics according to noise additivity.
@@ -152,6 +207,7 @@ class StateSpaceModel(object):
         -------
             Evaluated system dynamics or evaluated Jacobian of the system dynamics.
         """
+
         if self.q_additive:
             assert len(xq) == self.xD
             if dx:
@@ -183,6 +239,7 @@ class StateSpaceModel(object):
         -------
             Evaluated measurement model or evaluated Jacobian of the measurement model.
         """
+
         if self.r_additive:
             # assert len(xr) == self.xD
             if dx:
@@ -212,6 +269,7 @@ class StateSpaceModel(object):
         -------
             Prints the errors and user decides whether they're acceptable.
         """
+
         nq = self.xD if self.q_additive else self.xD + self.qD
         nr = self.xD if self.r_additive else self.xD + self.rD
         xq, xr = np.random.rand(nq), np.random.rand(nr)
@@ -219,10 +277,14 @@ class StateSpaceModel(object):
         assert hq_diag.shape == (nq, nq) and hr_diag.shape == (nr, nr)
         xqph, xqmh = xq[:, na] + hq_diag, xq[:, na] - hq_diag
         xrph, xrmh = xr[:, na] + hr_diag, xr[:, na] - hr_diag
-        par = self.par_fcn(1.0)
+
+        # allocate space for Jacobians
         fph = np.zeros((self.xD, nq))
         hph = np.zeros((self.zD, nr))
         fmh, hmh = fph.copy(), hph.copy()
+
+        # approximate Jacobians by central differences
+        par = self.par_fcn(1.0)
         for i in range(nq):
             fph[:, i] = self.dyn_eval(xqph[:, i], par)
             fmh[:, i] = self.dyn_eval(xqmh[:, i], par)
@@ -231,6 +293,8 @@ class StateSpaceModel(object):
             hmh[:, i] = self.meas_eval(xrmh[:, i], par)
         jac_fx = (2 * h) ** -1 * (fph - fmh)
         jac_hx = (2 * h) ** -1 * (hph - hmh)
+
+        # report approximation error
         print("Errors in Jacobians\n{}\n{}".format(np.abs(jac_fx - self.dyn_eval(xq, par, dx=True)),
                                                    np.abs(jac_hx - self.meas_eval(xr, par, dx=True))))
 
@@ -255,15 +319,19 @@ class StateSpaceModel(object):
                 * z : 3-D array of shape (self.zD, steps, mc_sims) containing simulated measurements of the system state
         """
 
-        x0_mean, x0_cov, q_mean, q_cov, r_mean, r_cov = self.get_pars(
-                'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov'
-        )
+        # allocate space for state and measurement sequences
         x = np.zeros((self.xD, steps, mc_sims))
         z = np.zeros((self.zD, steps, mc_sims))
-        q = np.random.multivariate_normal(q_mean, q_cov, size=(mc_sims, steps)).T
-        r = np.random.multivariate_normal(r_mean, r_cov, size=(mc_sims, steps)).T
-        x0 = np.random.multivariate_normal(x0_mean, x0_cov, size=mc_sims).T  # (D, mc_sims)
-        x[:, 0, :] = x0  # store initial states at k=0
+
+        # generate state and measurement noise
+        q = self.state_noise_sample((mc_sims, steps))
+        r = self.measurement_noise_sample((mc_sims, steps))
+
+        # generate initial conditions, store initial states at k=0
+        x0 = self.initial_condition_sample(mc_sims)  # (D, mc_sims)
+        x[:, 0, :] = x0
+
+        # simulate SSM `mc_sims` times for `steps` time steps
         for imc in range(mc_sims):
             for k in range(1, steps):
                 theta = self.par_fcn(k - 1)
@@ -279,3 +347,149 @@ class StateSpaceModel(object):
         for k in keys:
             values.append(self.pars.get(k))
         return values
+
+
+class GaussianStateSpaceModel(StateSpaceModel):
+
+    # lists the keyword arguments currently required by the StateSpaceModel class
+    _required_kwargs_ = 'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov', 'q_gain'
+
+    def __init__(self, x0_mean=None, x0_cov=None, q_mean=None, q_cov=None, r_mean=None, r_cov=None, q_gain=None):
+
+        # use default value of statistics for Gaussian SSM if None provided
+        kwargs = {
+            'x0_mean': x0_mean if not None else np.zeros(self.xD),
+            'x0_cov': x0_cov if not None else np.eye(self.xD),
+            'q_mean': q_mean if not None else np.zeros(self.qD),
+            'q_cov': q_cov if not None else np.eye(self.qD),
+            'r_mean': r_mean if not None else np.zeros(self.rD),
+            'r_cov': r_cov if not None else np.eye(self.rD),
+            'q_gain': q_gain if not None else np.eye(self.qD)
+        }
+        super(GaussianStateSpaceModel, self).__init__(**kwargs)
+
+    @abstractmethod
+    def dyn_fcn(self, x, q, pars):
+        """ System dynamics.
+
+        Abstract method for the system dynamics.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            System state
+        q : 1-D array_like of shape (self.qD,)
+            System noise
+        pars : 1-D array_like
+            Parameters of the system dynamics
+
+        Returns
+        -------
+        1-D numpy.ndarray of shape (self.xD,)
+            system state in the next time step
+        """
+        pass
+
+    @abstractmethod
+    def meas_fcn(self, x, r, pars):
+        """Measurement model.
+
+        Abstract method for the measurement model.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            system state
+        r : 1-D array_like of shape (self.rD,)
+            measurement noise
+        pars : 1-D array_like
+            parameters of the measurement model
+
+        Returns
+        -------
+        1-D numpy.ndarray of shape (self.zD,)
+            measurement of the state
+        """
+        pass
+
+    @abstractmethod
+    def par_fcn(self, time):
+        """Parameter function of the system dynamics and measurement model.
+
+        Abstract method for the parameter function of the whole state-space model. The implementation should ensure
+        that the system dynamics parameters come before the measurement model parameters in the returned vector of
+        parameters.
+
+        Parameters
+        ----------
+        time : int
+            Discrete time step
+
+        Returns
+        -------
+        1-D numpy.ndarray of shape (self.pD,)
+            Vector of parameters at a given time.
+        """
+        pass
+
+    @abstractmethod
+    def dyn_fcn_dx(self, x, q, pars):
+        """Jacobian of the system dynamics.
+
+        Abstract method for the Jacobian of system dynamics. Jacobian is a matrix of first partial derivatives.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            System state
+        q : 1-D array_like of shape (self.qD,)
+            System noise
+        pars : 1-D array_like of shape (self.pD,)
+            System parameter
+
+        Returns
+        -------
+        2-D numpy.ndarray
+            Jacobian matrix of the system dynamics, where the second dimension depends on the noise additivity.
+            The shape depends on whether or not the state noise is additive. The two cases are:
+                * additive: (self.xD, self.xD)
+                * non-additive: (self.xD, self.xD + self.qD)
+        """
+        pass
+
+    @abstractmethod
+    def meas_fcn_dx(self, x, r, pars):
+        """Jacobian of the measurement model.
+
+        Abstract method for the Jacobian of measurement model. Jacobian is a matrix of first partial derivatives.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            System state
+        r : 1-D array_like of shape (self.qD,)
+            Measurement noise
+        pars : 1-D array_like of shape (self.pD,)
+            System parameter
+
+        Returns
+        -------
+        2-D numpy.ndarray
+            Jacobian matrix of the measurement model, where the second dimension depends on the noise additivity.
+            The shape depends on whether or not the state noise is additive. The two cases are:
+                * additive: (self.xD, self.xD)
+                * non-additive: (self.xD, self.xD + self.rD)
+        """
+        pass
+
+    def state_noise_sample(self, size=None):
+        q_mean, q_cov = self.get_pars('q_mean', 'q_cov')
+        return np.random.multivariate_normal(q_mean, q_cov, size).T
+
+    def measurement_noise_sample(self, size=None):
+        r_mean, r_cov = self.get_pars('r_mean', 'r_cov')
+        return np.random.multivariate_normal(r_mean, r_cov, size).T
+
+    def initial_condition_sample(self, size=None):
+        x0_mean, x0_cov = self.get_pars('x0_mean', 'x0_cov')
+        return np.random.multivariate_normal(x0_mean, x0_cov, size).T
