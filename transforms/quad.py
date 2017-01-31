@@ -8,11 +8,6 @@ from sklearn.utils.extmath import cartesian
 from .mtform import MomentTransform, SigmaPointTransform, SigmaPointTruncTransform
 
 
-# TODO: add higher-order fully symmetric rules from [McNamee, Stenger]
-# TODO: Monte Carlo transform discussed in [Gustafsson, 2012] might serve as baseline for all Gaussian filters
-#  Gaussian Particle filter [Djuric] appears to be different from MCT
-
-
 class MonteCarlo(MomentTransform):
     """Monte Carlo transform.
 
