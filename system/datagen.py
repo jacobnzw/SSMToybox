@@ -136,6 +136,51 @@ class System(object, metaclass=ABCMeta):
         """
         pass
 
+    @abstractmethod
+    def state_noise_sample(self, size=None):
+        """
+        Sample from a state noise distribution.
+
+        Parameters
+        ----------
+        size
+
+        Returns
+        -------
+
+        """
+        pass
+
+    @abstractmethod
+    def measurement_noise_sample(self, size=None):
+        """
+        Sample from a measurement noise distribution.
+
+        Parameters
+        ----------
+        size
+
+        Returns
+        -------
+
+        """
+        pass
+
+    @abstractmethod
+    def initial_condition_sample(self, size=None):
+        """
+        Sample from a distribution over the system initial conditions.
+
+        Parameters
+        ----------
+        size
+
+        Returns
+        -------
+
+        """
+        pass
+
     def dyn_eval(self, xq, pars, dx=False):
         """Evaluation of the system dynamics according to noise additivity.
 
@@ -238,18 +283,14 @@ class System(object, metaclass=ABCMeta):
         # ensure sensible values of dt
         assert dt < duration
 
-        # get the system statistics
-        stats = 'x0_mean', 'x0_cov', 'q_mean', 'q_cov'
-        x0_mean, x0_cov, q_mean, q_cov = self.get_pars(*stats)
-
         # get ODE integration method
         ode_method = self._get_ode_method(method)
 
         # allocate space for system state and noise
         steps = int(np.floor(duration / dt))
         x = np.zeros((self.xD, steps, mc_sims))
-        q = np.random.multivariate_normal(q_mean, q_cov, size=(mc_sims, steps)).T
-        x0 = np.random.multivariate_normal(x0_mean, x0_cov, size=mc_sims).T  # (D, mc_sims)
+        q = self.state_noise_sample((mc_sims, steps))
+        x0 = self.initial_condition_sample(mc_sims)  # (D, mc_sims)
         x[:, 0, :] = x0  # store initial states at k=0
 
         # continuous-time system simulation
@@ -264,20 +305,16 @@ class System(object, metaclass=ABCMeta):
         # x - state trajectory, freq - sampling frequency [Hz],
         # mc_per_step - how many measurement to generate in each time step
 
-        # get the system statistics
-        stats = 'r_mean', 'r_cov'
-        r_mean, r_cov = self.get_pars(*stats)
         d, steps = x.shape
 
         # Generate measurement noise
-        r = np.random.multivariate_normal(r_mean, r_cov, (mc_per_step, steps)).T
+        r = self.measurement_noise_sample((mc_per_step, steps))
         y = np.zeros((self.zD, steps, mc_per_step))
         for imc in range(mc_per_step):
             for k in range(1, steps):
                 theta = self.par_fcn(k - 1)
                 y[:, k, imc] = self.meas_fcn(x[:, k], r[:, k, imc], theta)
         return y
-
 
     def _ode_euler(self, func, x, q, theta, dt):
         # Euler ODE integration
@@ -373,7 +410,7 @@ class ReentryRadar(System):
         super(ReentryRadar, self).__init__(**kwargs)
 
     def dyn_fcn(self, x, q, pars):
-        # scaled balistic coefficient
+        # scaled ballistic coefficient
         b = self.b0 * np.exp(x[4])
         # distance from center of the Earth
         R = np.sqrt(x[0] ** 2 + x[1] ** 2)
@@ -404,6 +441,18 @@ class ReentryRadar(System):
 
     def meas_fcn_dx(self, x, r, pars):
         pass
+
+    def state_noise_sample(self, size=None):
+        q_mean, q_cov = self.get_pars('q_mean', 'q_cov')
+        return np.random.multivariate_normal(q_mean, q_cov, size).T
+
+    def measurement_noise_sample(self, size=None):
+        r_mean, r_cov = self.get_pars('r_mean', 'r_cov')
+        return np.random.multivariate_normal(r_mean, r_cov, size).T
+
+    def initial_condition_sample(self, size=None):
+        x0_mean, x0_cov = self.get_pars('x0_mean', 'x0_cov')
+        return np.random.multivariate_normal(x0_mean, x0_cov, size).T
 
 
 def radar_tracking_demo():
