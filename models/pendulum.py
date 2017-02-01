@@ -1,10 +1,11 @@
 import matplotlib.pyplot as plt
+import numpy as np
 
 from inference.ssinfer import StateSpaceInference
-from models.ssmodel import *
+from models.ssmodel import GaussianStateSpaceModel
 
 
-class Pendulum(StateSpaceModel):
+class Pendulum(GaussianStateSpaceModel):
 
     xD = 2  # state dimension
     zD = 1  # measurement dimension
@@ -27,7 +28,7 @@ class Pendulum(StateSpaceModel):
             'q_cov': 0.01 * np.array([[(dt ** 3) / 3, (dt ** 2) / 2], [(dt ** 2) / 2, dt]]),
             'r_mean': np.zeros(self.rD),
             'r_cov': np.atleast_2d(r_cov),
-            'q_factor': np.eye(2)
+            'q_gain': np.eye(2)
         }
         super(Pendulum, self).__init__(**req_kwargs)
 

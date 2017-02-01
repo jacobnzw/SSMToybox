@@ -1,11 +1,12 @@
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
+import numpy as np
 
 from inference.ssinfer import StateSpaceInference
-from .ssmodel import *
+from models.ssmodel import GaussianStateSpaceModel
 
 
-class CoordinatedTurnBOT(StateSpaceModel):
+class CoordinatedTurnBOT(GaussianStateSpaceModel):
     """
     Bearings only target tracking in 2D using multiple sensors as in [3]_.
 
@@ -39,8 +40,10 @@ class CoordinatedTurnBOT(StateSpaceModel):
     zD = 4  # measurement dimension == # sensors
     qD = 5
     rD = 4  # measurement noise dimension == # sensors
+
     q_additive = True
     r_additive = True
+
     rho_1, rho_2 = 0.1, 1.75e-4  # noise intensities
 
     def __init__(self, dt=0.1, sensor_pos=np.vstack((np.eye(2), -np.eye(2)))):
@@ -126,7 +129,7 @@ class CoordinatedTurnBOT(StateSpaceModel):
         pass
 
 
-class CoordinatedTurnRadar(StateSpaceModel):
+class CoordinatedTurnRadar(GaussianStateSpaceModel):
     """
     Maneuvering target tracking using radar measurements .
 
@@ -160,8 +163,10 @@ class CoordinatedTurnRadar(StateSpaceModel):
     zD = 4  # measurement dimension == # sensors
     qD = 5
     rD = 4  # measurement noise dimension == # sensors
+
     q_additive = True
     r_additive = True
+
     rho_1, rho_2 = 0.5, 1e-6  # noise intensities
 
     def __init__(self, dt=0.2, sensor_pos=np.vstack((np.eye(2), -np.eye(2)))):
@@ -189,7 +194,7 @@ class CoordinatedTurnRadar(StateSpaceModel):
             'r_mean': np.zeros(self.rD),
             'r_cov': 1e-2 * np.eye(self.rD)  # 1e-2 rad == 10 mrad
         }
-        super(CoordinatedTurnBOT, self).__init__(**kwargs)
+        super(CoordinatedTurnRadar, self).__init__(**kwargs)
 
     def dyn_fcn(self, x, q, *args):
         """
@@ -247,7 +252,7 @@ class CoordinatedTurnRadar(StateSpaceModel):
         pass
 
 
-class ReentryRadar(StateSpaceModel):
+class ReentryRadar(GaussianStateSpaceModel):
     """
     Radar tracking of the reentry vehicle as described in [1]_.
     Vehicle is entering Earth's atmosphere at high altitude and with great speed, ground radar is tracking it.
@@ -275,13 +280,14 @@ class ReentryRadar(StateSpaceModel):
     zD = 2  # measurement dimension
     qD = 3
     rD = 2  # measurement noise dimension
+
     q_additive = True
     r_additive = True
 
     R0 = 6374  # Earth's radius
     H0 = 13.406
     Gm0 = 3.9860e5
-    b0 = -0.59783  # balistic coefficient of a typical vehicle
+    b0 = -0.59783  # ballistic coefficient of a typical vehicle
     sx, sy = R0, 0  # radar location
 
     def __init__(self, dt=0.1):
@@ -304,12 +310,12 @@ class ReentryRadar(StateSpaceModel):
             'r_mean': np.zeros(self.rD),
             'r_cov': np.array([[1e-6, 0],
                                [0, 0.17e-3 ** 2]]),
-            'q_factor': np.vstack((np.zeros((2, 3)), np.eye(3)))
+            'q_gain': np.vstack((np.zeros((2, 3)), np.eye(3)))
         }
         super(ReentryRadar, self).__init__(**kwargs)
 
     def dyn_fcn(self, x, q, pars):
-        # scaled balistic coefficient
+        # scaled ballistic coefficient
         b = self.b0 * np.exp(x[4])
         # distance from center of the Earth
         R = np.sqrt(x[0] ** 2 + x[1] ** 2)

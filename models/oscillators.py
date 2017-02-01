@@ -1,13 +1,16 @@
 from inference.ssinfer import StateSpaceInference
-from models.ssmodel import *
+from models.ssmodel import GaussianStateSpaceModel
 import matplotlib.pyplot as plt
+import numpy as np
 
 
-class VanDerPol(StateSpaceModel):
+class VanDerPol(GaussianStateSpaceModel):
+
     xD = 2  # state dimension
     zD = 1  # measurement dimension
     qD = 2  # state noise dimension
     rD = 1  # measurement noise dimension
+
     q_additive = True  # True = state noise is additive, False = non-additive
     r_additive = True
 
@@ -21,7 +24,7 @@ class VanDerPol(StateSpaceModel):
             'q_cov': np.diag([2.62e-2, 8e-3]),
             'r_mean': np.zeros(self.rD),
             'r_cov': np.array([[3e-3]]),
-            'q_factor': np.eye(2)
+            'q_gain': np.eye(2)
         }
         super(VanDerPol, self).__init__(**req_kwargs)
 

@@ -1,10 +1,11 @@
 import matplotlib.pyplot as plt
+import numpy as np
 
-from .ssmodel import *
+from models.ssmodel import GaussianStateSpaceModel
 from inference.ssinfer import StateSpaceInference
 
 
-class FrequencyDemodulation(StateSpaceModel):
+class FrequencyDemodulation(GaussianStateSpaceModel):
     """
     Frequence demodulation experiment from [1]_
 
@@ -21,8 +22,10 @@ class FrequencyDemodulation(StateSpaceModel):
     zD = 2
     qD = 2
     rD = 2
+
     q_additive = True
     r_additive = True
+
     # system (process) parameters
     mu = 0.9
     lam = 0.99
@@ -35,7 +38,7 @@ class FrequencyDemodulation(StateSpaceModel):
             'q_cov': np.eye(self.qD),
             'r_mean': np.zeros(self.rD),
             'r_cov': 2e-3 * np.eye(self.rD),
-            'q_factor': np.eye(self.qD),
+            'q_gain': np.eye(self.qD),
         }
         super(FrequencyDemodulation, self).__init__(**kwargs)
 

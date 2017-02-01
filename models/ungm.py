@@ -2,10 +2,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from inference.ssinfer import StateSpaceInference
-from models.ssmodel import StateSpaceModel
+from models.ssmodel import GaussianStateSpaceModel
 
 
-class UNGM(StateSpaceModel):
+class UNGM(GaussianStateSpaceModel):
     """
     Univariate Non-linear Growth Model frequently used as a benchmark.
     """
@@ -19,16 +19,6 @@ class UNGM(StateSpaceModel):
     r_additive = True
 
     def __init__(self, x0_mean=0.0, x0_cov=1.0, q_mean=0.0, q_cov=10.0, r_mean=0.0, r_cov=1.0, **kwargs):
-        """
-        Inits the UNGM object where state covariance (q_cov) and measurement covariance (r_cov) must be supplied. The
-        initial state mean and covariance, if not supplied, will default to $x_0 ~ N(0, 1)$.
-        :param q_cov: state noise covariance
-        :param r_cov: measurement noise covariance
-        :param x0_mean: initial state mean
-        :param x0_cov: initial state covariance
-        :param kwargs: additional arguments
-        :return:
-        """
         super(UNGM, self).__init__(**kwargs)
         self.set_pars('x0_mean', np.atleast_1d(x0_mean))
         self.set_pars('x0_cov', np.atleast_2d(x0_cov))
@@ -36,7 +26,7 @@ class UNGM(StateSpaceModel):
         self.set_pars('q_cov', np.atleast_2d(q_cov))
         self.set_pars('r_mean', np.atleast_1d(r_mean))
         self.set_pars('r_cov', np.atleast_2d(r_cov))
-        self.set_pars('q_factor', np.eye(1))
+        self.set_pars('q_gain', np.eye(1))
 
     def dyn_fcn(self, x, q, pars):
         return np.asarray([0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * np.cos(1.2 * pars[0])]) + q
@@ -54,7 +44,7 @@ class UNGM(StateSpaceModel):
         return np.asarray([0.1 * x[0]])
 
 
-class UNGMnonadd(StateSpaceModel):
+class UNGMnonadd(GaussianStateSpaceModel):
     """
     Univariate Non-linear Growth Model with non-additive noise for testing.
     """
@@ -64,20 +54,11 @@ class UNGMnonadd(StateSpaceModel):
     zD = 1  # measurement dimension
     qD = 1
     rD = 1
+
     q_additive = False
     r_additive = False
 
     def __init__(self, x0_mean=0.0, x0_cov=1.0, q_mean=0.0, q_cov=10.0, r_mean=0.0, r_cov=1.0, **kwargs):
-        """
-        Inits the UNGM object where state covariance (q_cov) and measurement covariance (r_cov) must be supplied. The
-        initial state mean and covariance, if not supplied, will default to $x_0 ~ N(0, 1)$.
-        :param q_cov: state noise covariance
-        :param r_cov: measurement noise covariance
-        :param x0_mean: initial state mean
-        :param x0_cov: initial state covariance
-        :param kwargs: additional arguments
-        :return:
-        """
         super(UNGMnonadd, self).__init__(**kwargs)
         self.set_pars('x0_mean', np.atleast_1d(x0_mean))
         self.set_pars('x0_cov', np.atleast_2d(x0_cov))

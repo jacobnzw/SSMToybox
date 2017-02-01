@@ -6,21 +6,22 @@ from numpy import newaxis as na
 
 # Rough, preliminary code up of the continuous-time system simulations
 class System(object, metaclass=ABCMeta):
+
     xD = None  # state dimension
     zD = None  # measurement dimension
     qD = None  # state noise dimension
     rD = None  # measurement noise dimension
+
     q_additive = None  # True = state noise is additive, False = non-additive
     r_additive = None
+
     # lists the keyword arguments currently required by the StateSpaceModel class
-    _required_kwargs_ = 'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov', 'q_factor'
+    _required_kwargs_ = 'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov', 'q_gain'
 
     def __init__(self, **kwargs):
         self.pars = kwargs
-        self.zero_q = np.zeros((self.qD))
-        self.zero_r = np.zeros((self.rD))
-        # TODO: if q_factor not given, use identity matrix
-        # TODO: if _mean not given, assume zero-mean
+        self.zero_q = np.zeros(self.qD)
+        self.zero_r = np.zeros(self.rD)
 
     @abstractmethod
     def dyn_fcn(self, x, q, pars):
@@ -378,6 +379,7 @@ class ReentryRadar(System):
     zD = 2  # measurement dimension
     qD = 3
     rD = 2  # measurement noise dimension
+
     q_additive = True
     r_additive = True
 
@@ -405,7 +407,7 @@ class ReentryRadar(System):
             'r_mean': np.zeros(self.rD),
             'r_cov': np.array([[1e-6, 0],
                                [0, 0.17e-3 ** 2]]),
-            'q_factor': np.vstack((np.zeros((2, 3)), np.eye(3)))
+            'q_gain': np.vstack((np.zeros((2, 3)), np.eye(3)))
         }
         super(ReentryRadar, self).__init__(**kwargs)
 

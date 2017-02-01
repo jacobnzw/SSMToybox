@@ -21,12 +21,6 @@ class StateSpaceModel(metaclass=ABCMeta):
     q_additive = None  # True = state noise is additive, False = non-additive
     r_additive = None
 
-    # lists the keyword arguments currently required by the StateSpaceModel class
-    _required_kwargs_ = None
-
-    # default values of the input arguments (statistics of noises and initial conditions)
-    _default_ = None
-
     def __init__(self, **kwargs):
         self.pars = kwargs
         self.zero_q = np.zeros(self.qD)
@@ -350,9 +344,9 @@ class StateSpaceModel(metaclass=ABCMeta):
 
 
 class GaussianStateSpaceModel(StateSpaceModel):
-
-    # lists the keyword arguments currently required by the StateSpaceModel class
-    _required_kwargs_ = 'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov', 'q_gain'
+    """
+    State-space model with Gaussian noise and initial conditions.
+    """
 
     def __init__(self, x0_mean=None, x0_cov=None, q_mean=None, q_cov=None, r_mean=None, r_cov=None, q_gain=None):
 
