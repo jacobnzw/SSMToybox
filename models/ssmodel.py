@@ -487,3 +487,149 @@ class GaussianStateSpaceModel(StateSpaceModel):
     def initial_condition_sample(self, size=None):
         x0_mean, x0_cov = self.get_pars('x0_mean', 'x0_cov')
         return np.random.multivariate_normal(x0_mean, x0_cov, size).T
+
+
+class StudentStateSpaceModel(GaussianStateSpaceModel):
+
+    def __init__(self, x0_mean=None, x0_cov=None, q_mean=None, q_cov=None, r_mean=None, r_cov=None, q_gain=None,
+                 q_dof=None, r_dof=None):
+
+        super(StudentStateSpaceModel, self).__init__(x0_mean, x0_cov, q_mean, q_cov, r_mean, r_cov, q_gain)
+        self.set_pars('q_dof', q_dof)
+        self.set_pars('r_dof', r_dof)
+
+    @abstractmethod
+    def dyn_fcn(self, x, q, pars):
+        """ System dynamics.
+
+        Abstract method for the system dynamics.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            System state
+        q : 1-D array_like of shape (self.qD,)
+            System noise
+        pars : 1-D array_like
+            Parameters of the system dynamics
+
+        Returns
+        -------
+        1-D numpy.ndarray of shape (self.xD,)
+            system state in the next time step
+        """
+        pass
+
+    @abstractmethod
+    def meas_fcn(self, x, r, pars):
+        """Measurement model.
+
+        Abstract method for the measurement model.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            system state
+        r : 1-D array_like of shape (self.rD,)
+            measurement noise
+        pars : 1-D array_like
+            parameters of the measurement model
+
+        Returns
+        -------
+        1-D numpy.ndarray of shape (self.zD,)
+            measurement of the state
+        """
+        pass
+
+    @abstractmethod
+    def par_fcn(self, time):
+        """Parameter function of the system dynamics and measurement model.
+
+        Abstract method for the parameter function of the whole state-space model. The implementation should ensure
+        that the system dynamics parameters come before the measurement model parameters in the returned vector of
+        parameters.
+
+        Parameters
+        ----------
+        time : int
+            Discrete time step
+
+        Returns
+        -------
+        1-D numpy.ndarray of shape (self.pD,)
+            Vector of parameters at a given time.
+        """
+        pass
+
+    @abstractmethod
+    def dyn_fcn_dx(self, x, q, pars):
+        """Jacobian of the system dynamics.
+
+        Abstract method for the Jacobian of system dynamics. Jacobian is a matrix of first partial derivatives.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            System state
+        q : 1-D array_like of shape (self.qD,)
+            System noise
+        pars : 1-D array_like of shape (self.pD,)
+            System parameter
+
+        Returns
+        -------
+        2-D numpy.ndarray
+            Jacobian matrix of the system dynamics, where the second dimension depends on the noise additivity.
+            The shape depends on whether or not the state noise is additive. The two cases are:
+                * additive: (self.xD, self.xD)
+                * non-additive: (self.xD, self.xD + self.qD)
+        """
+        pass
+
+    @abstractmethod
+    def meas_fcn_dx(self, x, r, pars):
+        """Jacobian of the measurement model.
+
+        Abstract method for the Jacobian of measurement model. Jacobian is a matrix of first partial derivatives.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            System state
+        r : 1-D array_like of shape (self.qD,)
+            Measurement noise
+        pars : 1-D array_like of shape (self.pD,)
+            System parameter
+
+        Returns
+        -------
+        2-D numpy.ndarray
+            Jacobian matrix of the measurement model, where the second dimension depends on the noise additivity.
+            The shape depends on whether or not the state noise is additive. The two cases are:
+                * additive: (self.xD, self.xD)
+                * non-additive: (self.xD, self.xD + self.rD)
+        """
+        pass
+
+    def state_noise_sample(self, size=None):
+        q_mean, q_cov, q_dof = self.get_pars('q_mean', 'q_cov', 'q_dof')
+
+        # TODO: generate noise from multivariate t distribution with given statistics
+        pass
+
+    def measurement_noise_sample(self, size=None):
+        r_mean, r_cov, r_dof = self.get_pars('r_mean', 'r_cov', 'r_dof')
+        # TODO: generate noise from multivariate t distribution with given statistics
+        pass
+
+    def initial_condition_sample(self, size=None):
+        x0_mean, x0_cov, x0_dof = self.get_pars('x0_mean', 'x0_cov', 'x0_dof')
+        # TODO: generate noise from multivariate t distribution with given statistics
+        pass
+
+    def _multivariate_t(self, mean, scale, nu, size=None):
+        s = np.empty(size)
+        for i in range(s.shape[0]):
+            v = np.random.gamma(nu/2, 2/nu)
+            s[i, :] = np.random.multivariate_normal(mean, (1 / np.sqrt(v)) * scale)
