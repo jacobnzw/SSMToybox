@@ -1,11 +1,11 @@
 import numpy as np
 
-from inference.ssinfer import StateSpaceInference, StudentInference
+from inference.ssinfer import StateSpaceInference, StudentInference, GaussianInference
 from models.ssmodel import StateSpaceModel
 from transforms.bayesquad import TPQ
 
 
-class TPQKalman(StateSpaceInference):
+class TPQKalman(GaussianInference):
     """
     T-Process-quadrature filter and smoother for the Gaussian inference.
     """

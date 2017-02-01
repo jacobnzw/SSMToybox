@@ -1,11 +1,11 @@
-from inference.ssinfer import StateSpaceInference, MarginalInference
+from inference.ssinfer import StateSpaceInference, MarginalInference, GaussianInference
 from models.ssmodel import StateSpaceModel
 from transforms.bayesquad import GPQ, GPQMO
 import numpy as np
 import pandas as pd
 
 
-class GPQKalman(StateSpaceInference):
+class GPQKalman(GaussianInference):
     """
     GP quadrature filter and smoother.
     """
@@ -19,7 +19,7 @@ class GPQKalman(StateSpaceInference):
         super(GPQKalman, self).__init__(ssm, t_dyn, t_obs)
 
 
-class GPQMOKalman(StateSpaceInference):
+class GPQMOKalman(GaussianInference):
 
     def __init__(self, ssm, ker_par_dyn, ker_par_obs, kernel='rbf', points='ut', point_par=None):
         """

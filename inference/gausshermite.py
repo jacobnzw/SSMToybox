@@ -1,9 +1,9 @@
-from inference.ssinfer import StateSpaceInference
+from inference.ssinfer import StateSpaceInference, GaussianInference
 from models.ssmodel import StateSpaceModel
 from transforms.quad import GaussHermite, GaussHermiteTrunc
 
 
-class GaussHermiteKalman(StateSpaceInference):
+class GaussHermiteKalman(GaussianInference):
     """
     Gauss-Hermite Kalman filter and smoother.
     """
@@ -17,7 +17,7 @@ class GaussHermiteKalman(StateSpaceInference):
         super(GaussHermiteKalman, self).__init__(sys, tf, th)
 
 
-class GaussHermiteTruncKalman(StateSpaceInference):
+class GaussHermiteTruncKalman(GaussianInference):
     """
     Truncated Gauss-Hermite Kalman filter and smoother. Aware of the effective dimensionality.
     """

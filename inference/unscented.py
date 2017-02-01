@@ -1,9 +1,9 @@
-from inference.ssinfer import StateSpaceInference
+from inference.ssinfer import StateSpaceInference, GaussianInference
 from models.ssmodel import StateSpaceModel
 from transforms.quad import Unscented, UnscentedTrunc
 
 
-class UnscentedKalman(StateSpaceInference):
+class UnscentedKalman(GaussianInference):
     """
     Unscented Kalman filter and smoother.
     """
@@ -17,7 +17,7 @@ class UnscentedKalman(StateSpaceInference):
         super(UnscentedKalman, self).__init__(sys, tf, th)
 
 
-class UnscentedTruncKalman(StateSpaceInference):
+class UnscentedTruncKalman(GaussianInference):
     """
     Unscented Kalman filter and smoother.
     """

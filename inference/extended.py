@@ -1,9 +1,9 @@
-from inference.ssinfer import StateSpaceInference
+from inference.ssinfer import StateSpaceInference, GaussianInference
 from models.ssmodel import StateSpaceModel
 from transforms.taylor import Taylor1stOrder, TaylorGPQD
 
 
-class ExtendedKalman(StateSpaceInference):
+class ExtendedKalman(GaussianInference):
     """
     Extended Kalman filter/smoother. For linear system functions this is a Kalman filter.
     """
@@ -17,7 +17,7 @@ class ExtendedKalman(StateSpaceInference):
         super(ExtendedKalman, self).__init__(sys, tf, th)
 
 
-class ExtendedKalmanGPQD(StateSpaceInference):
+class ExtendedKalmanGPQD(GaussianInference):
     def __init__(self, sys, alpha=1.0, el=1.0):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD

@@ -1,25 +1,25 @@
+from abc import ABCMeta, abstractmethod
 import numpy as np
 import numpy.linalg as la
 from scipy.linalg import cho_factor, cho_solve, block_diag
 from scipy.stats import multivariate_normal
 from numpy import newaxis as na
-from models.ssmodel import StateSpaceModel
+from models.ssmodel import StateSpaceModel, GaussianStateSpaceModel
 from transforms.mtform import MomentTransform
 
 
-class StateSpaceInference(object):
+class StateSpaceInference(metaclass=ABCMeta):
     def __init__(self, ssm, tf_dyn, tf_meas):
+
+        # dynamical system whose state is to be estimated
+        assert isinstance(ssm, StateSpaceModel)
+        self.ssm = ssm
+
         # separate moment transforms for system dynamics and measurement model
         assert isinstance(tf_dyn, MomentTransform) and isinstance(tf_meas, MomentTransform)
         self.tf_dyn = tf_dyn
         self.tf_meas = tf_meas
-        # dynamical system whose state is to be estimated
-        assert isinstance(ssm, StateSpaceModel)
-        self.ssm = ssm
-        # set initial condition mean and covariance, and noise covariances
-        self.x_mean_fi, self.x_cov_fi, self.q_mean, self.q_cov, self.r_mean, self.r_cov, self.G = ssm.get_pars(
-            'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov', 'q_gain'
-        )
+
         self.flags = {'filtered': False, 'smoothed': False}
         self.x_mean_pr, self.x_cov_pr, = None, None
         self.x_mean_sm, self.x_cov_sm = None, None
@@ -73,7 +73,6 @@ class StateSpaceInference(object):
         return self.sm_mean, self.sm_cov
 
     def reset(self):
-        self.x_mean_fi, self.x_cov_fi = self.ssm.get_pars('x0_mean', 'x0_cov')
         self.x_mean_pr, self.x_cov_pr = None, None
         self.x_mean_sm, self.x_cov_sm = None, None
         self.xx_cov, self.xy_cov = None, None
@@ -82,6 +81,37 @@ class StateSpaceInference(object):
         self.sm_mean, self.sm_cov = None, None
         self.D, self.N = None, None
         self.flags = {'filtered': False, 'smoothed': False}
+
+    @abstractmethod
+    def _time_update(self, time, theta_dyn=None, theta_obs=None):
+        pass
+
+    @abstractmethod
+    def _measurement_update(self, y, time=None):
+        pass
+
+    @abstractmethod
+    def _smoothing_update(self):
+        pass
+
+
+class GaussianInference(StateSpaceInference):
+
+    def __init__(self, ssm, tf_dyn, tf_meas):
+
+        # dynamical system whose state is to be estimated
+        assert isinstance(ssm, GaussianStateSpaceModel)
+
+        # set initial condition mean and covariance, and noise covariances
+        self.x_mean_fi, self.x_cov_fi, self.q_mean, self.q_cov, self.r_mean, self.r_cov, self.G = ssm.get_pars(
+            'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov', 'q_gain'
+        )
+
+        super(GaussianInference, self).__init__(ssm, tf_dyn, tf_meas)
+
+    def reset(self):
+        self.x_mean_fi, self.x_cov_fi = self.ssm.get_pars('x0_mean', 'x0_cov')
+        super(GaussianInference, self).reset()
 
     def _time_update(self, time, theta_dyn=None, theta_obs=None):
         # in non-additive case, augment mean and covariance
@@ -122,7 +152,7 @@ class StateSpaceInference(object):
         self.x_cov_sm = self.x_cov_fi + gain.dot(self.x_cov_sm - self.x_cov_pr).dot(gain.T)
 
 
-class StudentInference(StateSpaceInference):
+class StudentInference(GaussianInference):
     """
     Student's t filter as described in Filip Tronarp's paper.
 
@@ -148,8 +178,12 @@ class StudentInference(StateSpaceInference):
             If False, DOF will be increasing after each measurement update, which means the heavy-tailed behaviour is
             not preserved and therefore converges to a Gaussian filter.
         """
+
+        # assert isinstance(ssm, StudentStateSpaceModel)
         super(StudentInference, self).__init__(ssm, tf_dyn, tf_meas)
-        self.q_dof, self.r_dof = ssm.get_pars('q_dof', 'r_dof')  # state and measurement noise DOF
+
+        # state and measurement noise DOF
+        self.q_dof, self.r_dof = ssm.get_pars('q_dof', 'r_dof')
         self.dof = nu
         self.fixed_dof = fixed_dof
 

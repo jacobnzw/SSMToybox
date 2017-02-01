@@ -1,9 +1,9 @@
-from inference.ssinfer import StateSpaceInference
+from inference.ssinfer import StateSpaceInference, GaussianInference
 from models.ssmodel import StateSpaceModel
 from transforms.quad import SphericalRadial, SphericalRadialTrunc
 
 
-class CubatureKalman(StateSpaceInference):
+class CubatureKalman(GaussianInference):
     """
     Cubature Kalman filter and smoother.
     """
@@ -17,7 +17,7 @@ class CubatureKalman(StateSpaceInference):
         super(CubatureKalman, self).__init__(sys, tf, th)
 
 
-class CubatureTruncKalman(StateSpaceInference):
+class CubatureTruncKalman(GaussianInference):
     """
     Truncated cubature Kalman filter and smoother. Aware of the effective dimension of the observation model.
     """
