@@ -15,8 +15,8 @@ from models.ungm import UNGM, UNGMnonadd
 def default_bq_hypers(sys):
     nq = sys.xD if sys.q_additive else sys.xD + sys.qD
     nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-    hypers_f = {'alpha': 1.0, 'el': 3.0 * np.ones((nq,))}
-    hypers_h = {'alpha': 1.0, 'el': 3.0 * np.ones((nr,))}
+    hypers_f = np.atleast_2d(np.hstack((1, 3.0 * np.ones(nq))))
+    hypers_h = np.atleast_2d(np.hstack((1, 3.0 * np.ones(nr))))
     return hypers_f, hypers_h
 
 
@@ -46,8 +46,8 @@ class TestUNGM(unittest.TestCase):
             UnscentedKalman(ssm, kappa=0.0),
             CubatureKalman(ssm),
             GaussHermiteKalman(ssm),
-            GPQKalman(ssm, 'rbf', 'ut', hyp_dyn, hyp_meas),
-            TPQKalman(ssm, 'rbf', 'ut', hyp_dyn, hyp_meas),
+            GPQKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
+            TPQKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
         )
         for inf in inf_method:
             inf.forward_pass(z[..., 0])
@@ -65,8 +65,8 @@ class TestUNGM(unittest.TestCase):
             UnscentedKalman(ssm),
             CubatureKalman(ssm),
             GaussHermiteKalman(ssm),
-            GPQKalman(ssm, 'rbf', 'ut', hyp_dyn, hyp_meas),
-            TPQKalman(ssm, 'rbf', 'ut', hyp_dyn, hyp_meas),
+            GPQKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
+            TPQKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
         )
         for inf in inf_method:
             print(r"Testing {} ...".format(inf.__class__.__name__), end=' ')
@@ -92,8 +92,8 @@ class TestPendulum(unittest.TestCase):
             UnscentedKalman(ssm),
             CubatureKalman(ssm),
             GaussHermiteKalman(ssm),
-            GPQKalman(ssm, 'rbf', 'ut', hyp_dyn, hyp_meas),
-            TPQKalman(ssm, 'rbf', 'ut', hyp_dyn, hyp_meas),
+            GPQKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
+            TPQKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
         )
         for inf in inf_method:
             inf.forward_pass(z[..., 0])
