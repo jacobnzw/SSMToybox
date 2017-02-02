@@ -35,7 +35,7 @@ class SyntheticSys(StateSpaceModel):
             'r_cov_0': 0.01 * np.eye(self.rD),
             'r_cov_1': 5 * np.eye(self.rD),
         }
-        super(Synthetic, self).__init__(**pars)
+        super(SyntheticSys, self).__init__(**pars)
 
     def dyn_fcn(self, x, q, pars):
         a = 1 - 0.1 / (1 + np.linalg.norm(x))
@@ -58,19 +58,19 @@ class SyntheticSys(StateSpaceModel):
 
     def state_noise_sample(self, size=None):
         m0, m1, c0, c1 = self.get_pars('q_mean_0', 'q_mean_1', 'q_cov_0', 'q_cov_1')
-        q0 = np.random.multivariate_normal(m0, c0, size)
-        q1 = np.random.multivariate_normal(m1, c1, size)
+        q0 = np.random.multivariate_normal(m0, c0, size).T
+        q1 = np.random.multivariate_normal(m1, c1, size).T
         return 0.95 * q0 + 0.05 * q1
 
     def measurement_noise_sample(self, size=None):
         m0, m1, c0, c1 = self.get_pars('r_mean_0', 'r_mean_1', 'r_cov_0', 'r_cov_1')
-        r0 = np.random.multivariate_normal(m0, c0, size)
-        r1 = np.random.multivariate_normal(m1, c1, size)
+        r0 = np.random.multivariate_normal(m0, c0, size).T
+        r1 = np.random.multivariate_normal(m1, c1, size).T
         return 0.9 * r0 + 0.1 * r1
 
     def initial_condition_sample(self, size=None):
         m, c = self.get_pars('x0_mean', 'x0_cov')
-        return np.random.multivariate_normal(m, c, size)
+        return np.random.multivariate_normal(m, c, size).T
 
 
 class SyntheticSSM(StudentStateSpaceModel):
@@ -173,12 +173,12 @@ def synthetic_demo(steps=250, mc_sims=5000):
     ssm = SyntheticSSM()
 
     # kernel parameters for TPQ and GPQ filters
-    par_dyn = np.array([[1.0, 1.0, 3.0]])
-    par_obs = np.array([[1.0, 1.0, 3.0]])
+    par_dyn = np.array([[1.0, 1.0, 3.0, 3.0]])
+    par_obs = np.array([[1.0, 1.0, 3.0, 3.0, 3.0, 3.0]])
 
     # init filters
     filters = (
-        ExtendedStudent(ssm),
+        # ExtendedStudent(ssm),
         UnscentedKalman(ssm),
         TPQStudent(ssm, par_dyn, par_obs, nu=4.0),
         GPQStudent(ssm, par_dyn, par_obs),
@@ -191,15 +191,20 @@ def synthetic_demo(steps=250, mc_sims=5000):
 
     # run filters
     for i, f in enumerate(filters):
-        mf[..., i], Pf[..., i] = f.forward_pass(z)
+        for imc in range(mc_sims):
+            mf[..., imc, i], Pf[..., imc, i] = f.forward_pass(z[..., imc])
 
     # evaluate performance metrics
     # FIXME: RMSE is a norm thus number -> sum out dimension
-    rmse = np.sqrt((x[..., na] - mf) ** 2)
-    rmse_avg = rmse.mean(axis=2)  # average RMSE over simulations
+    rmse = np.sqrt(((x[...,  na] - mf) ** 2).sum(axis=0))
+    rmse_avg = rmse.mean(axis=1)  # average RMSE over simulations
 
     # print out table
     import pandas as pd
     f_label = [f.__class__.__name__ for f in filters]
     m_label = ['MEAN_RMSE', 'MAX_RMSE']
     table = pd.DataFrame([rmse_avg.mean(axis=1), rmse_avg.max(axis=1)], f_label, m_label)
+    print(table)
+
+if __name__ == '__main__':
+    synthetic_demo(mc_sims=50)

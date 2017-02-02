@@ -358,7 +358,7 @@ class GaussianStateSpaceModel(StateSpaceModel):
             'q_cov': q_cov if not None else np.eye(self.qD),
             'r_mean': r_mean if not None else np.zeros(self.rD),
             'r_cov': r_cov if not None else np.eye(self.rD),
-            'q_gain': q_gain if not None else np.eye(self.qD)
+            'q_gain': q_gain if not None else np.eye(self.qD)  # FIXME: does not give eye if q_gain is None
         }
         super(GaussianStateSpaceModel, self).__init__(**kwargs)
 
@@ -614,15 +614,15 @@ class StudentStateSpaceModel(GaussianStateSpaceModel):
 
     def state_noise_sample(self, size=None):
         q_mean, q_cov, q_dof = self.get_pars('q_mean', 'q_cov', 'q_dof')
-        return self._multivariate_t(q_mean, q_cov, q_dof, size)
+        return self._multivariate_t(q_mean, q_cov, q_dof, size).T
 
     def measurement_noise_sample(self, size=None):
         r_mean, r_cov, r_dof = self.get_pars('r_mean', 'r_cov', 'r_dof')
-        return self._multivariate_t(r_mean, r_cov, r_dof, size)
+        return self._multivariate_t(r_mean, r_cov, r_dof, size).T
 
     def initial_condition_sample(self, size=None):
         x0_mean, x0_cov, x0_dof = self.get_pars('x0_mean', 'x0_cov', 'x0_dof')
-        return self._multivariate_t(x0_mean, x0_cov, x0_dof, size)
+        return self._multivariate_t(x0_mean, x0_cov, x0_dof, size).T
 
     @staticmethod
     def _multivariate_t(mean, scale, nu, size=None):
