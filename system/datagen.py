@@ -4,8 +4,10 @@ import numpy as np
 from numpy import newaxis as na
 
 
-# Rough, preliminary code up of the continuous-time system simulations
 class System(object, metaclass=ABCMeta):
+    """
+    General continuous-time dynamical system
+    """
 
     xD = None  # state dimension
     zD = None  # measurement dimension
@@ -14,9 +16,6 @@ class System(object, metaclass=ABCMeta):
 
     q_additive = None  # True = state noise is additive, False = non-additive
     r_additive = None
-
-    # lists the keyword arguments currently required by the StateSpaceModel class
-    _required_kwargs_ = 'x0_mean', 'x0_cov', 'q_mean', 'q_cov', 'r_mean', 'r_cov', 'q_gain'
 
     def __init__(self, **kwargs):
         self.pars = kwargs
@@ -351,7 +350,153 @@ class System(object, metaclass=ABCMeta):
         return values
 
 
-class ReentryRadar(System):
+class GaussianSystem(System):
+    """
+    System where the state and measurement noise are Gaussian.
+    """
+
+    def __init__(self, x0_mean=None, x0_cov=None, q_mean=None, q_cov=None, r_mean=None, r_cov=None, q_gain=None):
+
+        # use default value of statistics for Gaussian SSM if None provided
+        kwargs = {
+            'x0_mean': x0_mean if not None else np.zeros(self.xD),
+            'x0_cov': x0_cov if not None else np.eye(self.xD),
+            'q_mean': q_mean if not None else np.zeros(self.qD),
+            'q_cov': q_cov if not None else np.eye(self.qD),
+            'r_mean': r_mean if not None else np.zeros(self.rD),
+            'r_cov': r_cov if not None else np.eye(self.rD),
+            'q_gain': q_gain if not None else np.eye(self.qD)
+        }
+        super(GaussianSystem, self).__init__(**kwargs)
+
+    @abstractmethod
+    def dyn_fcn(self, x, q, pars):
+        """ System dynamics.
+
+        Abstract method for the system dynamics.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            System state
+        q : 1-D array_like of shape (self.qD,)
+            System noise
+        pars : 1-D array_like
+            Parameters of the system dynamics
+
+        Returns
+        -------
+        1-D numpy.ndarray of shape (self.xD,)
+            system state in the next time step
+        """
+        pass
+
+    @abstractmethod
+    def meas_fcn(self, x, r, pars):
+        """Measurement model.
+
+        Abstract method for the measurement model.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            system state
+        r : 1-D array_like of shape (self.rD,)
+            measurement noise
+        pars : 1-D array_like
+            parameters of the measurement model
+
+        Returns
+        -------
+        1-D numpy.ndarray of shape (self.zD,)
+            measurement of the state
+        """
+        pass
+
+    @abstractmethod
+    def par_fcn(self, time):
+        """Parameter function of the system dynamics and measurement model.
+
+        Abstract method for the parameter function of the whole state-space model. The implementation should ensure
+        that the system dynamics parameters come before the measurement model parameters in the returned vector of
+        parameters.
+
+        Parameters
+        ----------
+        time : int
+            Discrete time step
+
+        Returns
+        -------
+        1-D numpy.ndarray of shape (self.pD,)
+            Vector of parameters at a given time.
+        """
+        pass
+
+    @abstractmethod
+    def dyn_fcn_dx(self, x, q, pars):
+        """Jacobian of the system dynamics.
+
+        Abstract method for the Jacobian of system dynamics. Jacobian is a matrix of first partial derivatives.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            System state
+        q : 1-D array_like of shape (self.qD,)
+            System noise
+        pars : 1-D array_like of shape (self.pD,)
+            System parameter
+
+        Returns
+        -------
+        2-D numpy.ndarray
+            Jacobian matrix of the system dynamics, where the second dimension depends on the noise additivity.
+            The shape depends on whether or not the state noise is additive. The two cases are:
+                * additive: (self.xD, self.xD)
+                * non-additive: (self.xD, self.xD + self.qD)
+        """
+        pass
+
+    @abstractmethod
+    def meas_fcn_dx(self, x, r, pars):
+        """Jacobian of the measurement model.
+
+        Abstract method for the Jacobian of measurement model. Jacobian is a matrix of first partial derivatives.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            System state
+        r : 1-D array_like of shape (self.qD,)
+            Measurement noise
+        pars : 1-D array_like of shape (self.pD,)
+            System parameter
+
+        Returns
+        -------
+        2-D numpy.ndarray
+            Jacobian matrix of the measurement model, where the second dimension depends on the noise additivity.
+            The shape depends on whether or not the state noise is additive. The two cases are:
+                * additive: (self.xD, self.xD)
+                * non-additive: (self.xD, self.xD + self.rD)
+        """
+        pass
+
+    def state_noise_sample(self, size=None):
+        q_mean, q_cov = self.get_pars('q_mean', 'q_cov')
+        return np.random.multivariate_normal(q_mean, q_cov, size).T
+
+    def measurement_noise_sample(self, size=None):
+        r_mean, r_cov = self.get_pars('r_mean', 'r_cov')
+        return np.random.multivariate_normal(r_mean, r_cov, size).T
+
+    def initial_condition_sample(self, size=None):
+        x0_mean, x0_cov = self.get_pars('x0_mean', 'x0_cov')
+        return np.random.multivariate_normal(x0_mean, x0_cov, size).T
+
+
+class ReentryRadar(GaussianSystem):
     """
     Radar tracking of the reentry vehicle as described in [1]_.
     Vehicle is entering Earth's atmosphere at high altitude and with great speed, ground radar is tracking it.
@@ -443,18 +588,6 @@ class ReentryRadar(System):
 
     def meas_fcn_dx(self, x, r, pars):
         pass
-
-    def state_noise_sample(self, size=None):
-        q_mean, q_cov = self.get_pars('q_mean', 'q_cov')
-        return np.random.multivariate_normal(q_mean, q_cov, size).T
-
-    def measurement_noise_sample(self, size=None):
-        r_mean, r_cov = self.get_pars('r_mean', 'r_cov')
-        return np.random.multivariate_normal(r_mean, r_cov, size).T
-
-    def initial_condition_sample(self, size=None):
-        x0_mean, x0_cov = self.get_pars('x0_mean', 'x0_cov')
-        return np.random.multivariate_normal(x0_mean, x0_cov, size).T
 
 
 def radar_tracking_demo():
