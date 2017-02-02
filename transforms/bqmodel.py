@@ -728,7 +728,7 @@ class StudentTProcess(Model):
         Q = self.kernel.exp_x_kxkx(par, par, self.points)
         iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
         fcn_obs = np.squeeze(fcn_obs)
-        scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.num_pts)
+        scale = (self.nu - 2 + fcn_obs.dot(iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
         return scale * self.kernel.scale.squeeze() ** 2 * (1 - np.trace(Q.dot(iK)))
 
     def integral_variance(self, fcn_obs, par=None):
@@ -751,7 +751,7 @@ class StudentTProcess(Model):
         iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
 
         fcn_obs = np.squeeze(fcn_obs)
-        scale = (self.nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (self.nu - 2 + self.num_pts)
+        scale = (self.nu - 2 + fcn_obs.dot(iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
         return scale * (kbar - q.T.dot(iK).dot(q))
 
     def neg_log_marginal_likelihood(self, log_par, fcn_obs):

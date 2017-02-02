@@ -158,6 +158,8 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
         Returns
         -------
+        : numpy.ndarray
+            Function evaluations of shape (out_dim, num_pts).
 
         """
         pass
