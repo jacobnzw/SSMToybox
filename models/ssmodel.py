@@ -614,22 +614,43 @@ class StudentStateSpaceModel(GaussianStateSpaceModel):
 
     def state_noise_sample(self, size=None):
         q_mean, q_cov, q_dof = self.get_pars('q_mean', 'q_cov', 'q_dof')
-
-        # TODO: generate noise from multivariate t distribution with given statistics
-        pass
+        return self._multivariate_t(q_mean, q_cov, q_dof, size)
 
     def measurement_noise_sample(self, size=None):
         r_mean, r_cov, r_dof = self.get_pars('r_mean', 'r_cov', 'r_dof')
-        # TODO: generate noise from multivariate t distribution with given statistics
-        pass
+        return self._multivariate_t(r_mean, r_cov, r_dof, size)
 
     def initial_condition_sample(self, size=None):
         x0_mean, x0_cov, x0_dof = self.get_pars('x0_mean', 'x0_cov', 'x0_dof')
-        # TODO: generate noise from multivariate t distribution with given statistics
-        pass
+        return self._multivariate_t(x0_mean, x0_cov, x0_dof, size)
 
-    def _multivariate_t(self, mean, scale, nu, size=None):
-        s = np.empty(size)
-        for i in range(s.shape[0]):
-            v = np.random.gamma(nu/2, 2/nu)
-            s[i, :] = np.random.multivariate_normal(mean, (1 / np.sqrt(v)) * scale)
+    @staticmethod
+    def _multivariate_t(mean, scale, nu, size=None):
+        """
+        Samples of a random variable :math:`X` following a multivariate t-distribution
+        :math:`X \sim \mathrm{St}(\mu, \Sigma, \nu)`.
+
+        Parameters
+        ----------
+        mean
+            Mean vector
+        scale
+            Scale matrix
+        nu : float
+            Degrees of freedom
+        size : int or tuple of ints
+
+
+        Notes
+        -----
+        If :math:`y \sim \mathrm{N}(0, \Sigma)` and :math:`u \sim \mathrm{Gamma}(k=\nu/2, \theta=2/\nu)`,
+        then :math:`x \sim \mathrm{St}(\mu, \Sigma, \nu)`, where :math:`x = \mu + \frac{y}{\sqrt{u}}`.
+
+        Returns
+        -------
+
+        """
+        v = np.random.gamma(nu / 2, 2 / nu, size)[:, na]
+        n = np.random.multivariate_normal(np.zeros_like(mean), scale, size)
+        return mean[na, :] + n / np.sqrt(v)
+
