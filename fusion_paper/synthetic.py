@@ -2,6 +2,7 @@ import numpy as np
 from numpy import newaxis as na
 from datagen import System
 from transforms.taylor import Taylor1stOrder
+from transforms.quad import FullySymmetricStudent
 from models.ssmodel import StateSpaceModel, StudentStateSpaceModel
 from inference.tpquad import TPQKalman, TPQStudent
 from inference.gpquad import GPQKalman, GPQ
@@ -150,6 +151,25 @@ class GPQStudent(StudentInference):
         super(GPQStudent, self).__init__(ssm, t_dyn, t_obs)
 
 
+class FSQStudent(StudentInference):
+    """Filter based on fully symmetric quadrature rules."""
+
+    def __init__(self, ssm, degree=3, kappa=None):
+        assert isinstance(ssm, StudentStateSpaceModel)
+
+        # correct input dimension if noise non-additive
+        nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
+        nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
+
+        # degrees of freedom for SSM noises
+        q_dof, r_dof = ssm.get_pars('q_dof', 'r_dof')
+
+        # init moment transforms
+        t_dyn = FullySymmetricStudent(nq, degree, kappa, q_dof)
+        t_obs = FullySymmetricStudent(nr, degree, kappa, r_dof)
+        super(FSQStudent, self).__init__(ssm, t_dyn, t_obs)
+
+
 def synthetic_demo(steps=250, mc_sims=5000):
     """
     An experiment replicating the conditions of the synthetic example in _[1] used for testing non-additive
@@ -179,6 +199,7 @@ def synthetic_demo(steps=250, mc_sims=5000):
     # init filters
     filters = (
         # ExtendedStudent(ssm),
+        FSQStudent(ssm, kappa=-1),
         UnscentedKalman(ssm, kappa=-1),
         # TPQStudent(ssm, par_dyn, par_obs, nu=4.0),
         # GPQStudent(ssm, par_dyn, par_obs),
