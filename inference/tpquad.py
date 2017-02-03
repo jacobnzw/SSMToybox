@@ -26,12 +26,12 @@ class TPQStudent(StudentInference):
     mixture representation which facilitates analytical tractability.
     """
 
-    def __init__(self, ssm, kern_par_dyn, kern_par_obs, kernel='rq', points='fs', point_hyp=None, nu=3.0):
+    def __init__(self, ssm, kern_par_dyn, kern_par_obs, kernel='rq', points='fs', point_hyp=None, dof=3.0):
         assert isinstance(ssm, StateSpaceModel)
         nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
         nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
-        t_dyn = TPQ(nq, kern_par_dyn, kernel, points, point_hyp, nu)
-        t_obs = TPQ(nr, kern_par_obs, kernel, points, point_hyp, nu)
+        t_dyn = TPQ(nq, kern_par_dyn, kernel, points, point_hyp, dof)
+        t_obs = TPQ(nr, kern_par_obs, kernel, points, point_hyp, dof)
         super(TPQStudent, self).__init__(ssm, t_dyn, t_obs)
 
 

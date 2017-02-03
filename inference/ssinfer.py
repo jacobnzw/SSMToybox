@@ -154,13 +154,14 @@ class GaussianInference(StateSpaceInference):
 
 class StudentInference(GaussianInference):
     """
-    Student's t filter as described in Filip Tronarp's paper.
+    Base class for state-space inference algorithms, which assume that the state and measurement variables are jointly
+    Student distributed.
 
     Note, that even though Student's t distribution is not parametrized by the covariance matrix like the Gaussian,
     the filter still produces mean and covariance of the state.
     """
 
-    def __init__(self, ssm, tf_dyn, tf_meas, nu=3, fixed_dof=True):
+    def __init__(self, ssm, tf_dyn, tf_meas, dof=4.0, fixed_dof=True):
         """
 
         Parameters
@@ -168,14 +169,14 @@ class StudentInference(GaussianInference):
         ssm : StateSpaceModel
             State space model to perform inference on. Must implement the 'q_dof' and 'r_dof' properties.
         tf_dyn : MomentTransform
-            Moment transform for system dynamics
+            Moment transform for system dynamics.
         tf_meas : MomentTransform
-            Moment transform for measurement function
-        nu : float
-            DOF of the filtered scale matrix
+            Moment transform for measurement function.
+        dof : float
+            Degree of freedom parameter of the filtered density.
         fixed_dof : bool
-            If True, DOF will be fixed for all time steps, which preserves the heavy-tailed behaviour of the filter.
-            If False, DOF will be increasing after each measurement update, which means the heavy-tailed behaviour is
+            If `True`, DOF will be fixed for all time steps, which preserves the heavy-tailed behaviour of the filter.
+            If `False`, DOF will be increasing after each measurement update, which means the heavy-tailed behaviour is
             not preserved and therefore converges to a Gaussian filter.
         """
 
@@ -184,7 +185,7 @@ class StudentInference(GaussianInference):
 
         # state and measurement noise DOF
         self.q_dof, self.r_dof = ssm.get_pars('q_dof', 'r_dof')
-        self.dof = nu
+        self.dof = dof
         self.fixed_dof = fixed_dof
 
     def _time_update(self, time, theta_dyn=None, theta_obs=None):
@@ -226,6 +227,9 @@ class StudentInference(GaussianInference):
 
         # update degrees of freedom
         self.dof += self.ssm.zD
+
+    def _smoothing_update(self):
+        raise NotImplementedError('Student smoother has not been developed yet.')
 
 
 class MarginalInference(StateSpaceInference):
