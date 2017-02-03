@@ -197,7 +197,7 @@ class StudentInference(GaussianInference):
 
             # rescale filtered covariance and noise scale matrices
             scale = (dof_pr - 2) / dof_pr
-            self.fi_cov *= scale
+            self.x_cov_fi *= scale
             self.q_cov *= scale * self.q_dof / (self.q_dof - 2)
             self.r_cov *= scale * self.r_dof / (self.r_dof - 2)
 
@@ -229,7 +229,8 @@ class StudentInference(GaussianInference):
         self.dof += self.ssm.zD
 
     def _smoothing_update(self):
-        raise NotImplementedError('Student smoother has not been developed yet.')
+        # Student smoother has not been developed yet.
+        pass
 
 
 class MarginalInference(StateSpaceInference):
