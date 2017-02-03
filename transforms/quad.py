@@ -74,7 +74,7 @@ class SphericalRadialTrunc(SigmaPointTruncTransform):
 
 class Unscented(SigmaPointTransform):
     """
-    General purpose class implementing Uscented transform.
+    General purpose class implementing Unscented transform.
     """
 
     def __init__(self, dim, kappa=None, alpha=1.0, beta=2.0):
@@ -162,14 +162,33 @@ class FullySymmetricStudent(SigmaPointTransform):
     _supported_degrees_ = [3, 5]
 
     def __init__(self, dim, degree=3, kappa=None, dof=4):
-        self.degree = degree
-        self.dof = 4
+        """
+        Initialize moment transform for Student distributed random variables based on fully-symmetric quadrature rule.
+
+        Parameters
+        ----------
+        dim : int
+            Dimension of the input random variable (Dimension of the integration domain).
+        degree : int
+            Degree (order) of the quadrature rule.
+        kappa : float
+            Tuning parameter of the fully-symmetric point set. If `kappa=None`, chooses `kappa = max(3-dim, 0)`.
+        dof : float
+            Degree of freedom of the input density.
+        """
+
+        # init parameters stored in object variables
+        self.degree, self.kappa, self.dof = degree, kappa, dof
+
+        # init weights
         self.wm = self.weights(dim, degree, kappa, dof)
         self.Wc = np.diag(self.wm)
+
+        # init unit sigma-points
         self.unit_sp = self.unit_sigma_points(dim, degree, kappa, dof)
 
     @staticmethod
-    def weights(dim, degree=3, kappa=None, dof=4):
+    def weights(dim, degree=3, kappa=None, dof=4.0):
         """
         Weights of the fully symmetric rule for Student-t distribution.
 
@@ -225,7 +244,28 @@ class FullySymmetricStudent(SigmaPointTransform):
             return np.hstack((A0, A1 * np.ones(2*dim), A11 * np.ones(2*dim*(dim-1))))
 
     @staticmethod
-    def unit_sigma_points(dim, degree=3, kappa=None, dof=4):
+    def unit_sigma_points(dim, degree=3, kappa=None, dof=4.0):
+        """
+        Fully-symmetric unit sigma-point set.
+
+        Parameters
+        ----------
+        dim : int
+            Dimension of the input random variable (dimension of the integration domain).
+        degree : int
+            Order of the quadrature rule, only `degree=3` or `degree=5` implemented.
+        kappa : float
+            Tuning parameter controlling spread of points from the center.
+            If `kappa=None`, chooses `kappa = max(3-dim, 0)`.
+        dof : float
+            Degree of freedom parameter of the input density.
+
+        Returns
+        -------
+        : numpy.ndarray
+            Shape (dim, num_pts)
+
+        """
 
         if degree not in FullySymmetricStudent._supported_degrees_:
             print("Defaulting to degree 3. Supplied degree {} not supported. Supported degrees: {}", degree,
