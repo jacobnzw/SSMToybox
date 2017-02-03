@@ -86,8 +86,8 @@ class SyntheticSSM(StudentStateSpaceModel):
 
     def __init__(self):
         pars = {
-            'x0_mean': np.zeros(self.xD),
-            'x0_cov': np.eye(self.xD),
+            'x0_mean': np.array([0.0, 50.0]),
+            'x0_cov': 0.1 * np.eye(self.xD),
             'q_mean': np.zeros(self.qD),
             'q_cov': 0.01 * np.eye(self.qD),
             'q_dof': 4.0,
@@ -131,30 +131,66 @@ class SyntheticSSM(StudentStateSpaceModel):
 
 class ExtendedStudent(StudentInference):
 
-    def __init__(self, sys):
+    def __init__(self, sys, dof=4.0, fixed_dof=True):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
         tf = Taylor1stOrder(nq)
         th = Taylor1stOrder(nr)
-        super(ExtendedStudent, self).__init__(sys, tf, th)
+        super(ExtendedStudent, self).__init__(sys, tf, th, dof, fixed_dof)
 
 
 class GPQStudent(StudentInference):
 
-    def __init__(self, ssm, kern_par_dyn, kern_par_obs, kernel='rq', points='fs', point_hyp=None):
-        assert isinstance(ssm, StateSpaceModel)
+    def __init__(self, ssm, kern_par_dyn, kern_par_obs, point_hyp=None, dof=4.0, fixed_dof=True):
+        """
+        Student filter with Gaussian Process quadrature moment transforms using fully-symmetric sigma-point set.
+
+        Parameters
+        ----------
+        ssm : StudentStateSpaceModel
+        kern_par_dyn : numpy.ndarray
+            Kernel parameters for the GPQ moment transform of the dynamics.
+        kern_par_obs : numpy.ndarray
+            Kernel parameters for the GPQ moment transform of the measurement function.
+        point_hyp : dict
+            Point set parameters with keys:
+              * `'degree'`: Degree (order) of the quadrature rule.
+              * `'kappa'`: Tuning parameter of controlling spread of sigma-points around the center.
+        dof : float
+            Desired degree of freedom for the filtered density.
+        fixed_dof : bool
+            If `True`, DOF will be fixed for all time steps, which preserves the heavy-tailed behaviour of the filter.
+            If `False`, DOF will be increasing after each measurement update, which means the heavy-tailed behaviour is
+            not preserved and therefore converges to a Gaussian filter.
+        """
+        assert isinstance(ssm, StudentStateSpaceModel)
+
+        # correct input dimension if noise non-additive
         nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
         nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
-        t_dyn = GPQ(nq, kern_par_dyn, kernel, points, point_hyp)
-        t_obs = GPQ(nr, kern_par_obs, kernel, points, point_hyp)
-        super(GPQStudent, self).__init__(ssm, t_dyn, t_obs)
+
+        # degrees of freedom for SSM noises
+        q_dof, r_dof = ssm.get_pars('q_dof', 'r_dof')
+
+        # add DOF of the noises to the sigma-point parameters
+        if point_hyp is None:
+                point_hyp = dict()
+        point_hyp_dyn = point_hyp
+        point_hyp_obs = point_hyp
+        point_hyp_dyn.update({'dof': q_dof})
+        point_hyp_obs.update({'dof': r_dof})
+
+        # init moment transforms
+        t_dyn = GPQ(nq, kern_par_dyn, 'rq', 'fs', point_hyp_dyn)
+        t_obs = GPQ(nr, kern_par_obs, 'rq', 'fs', point_hyp_obs)
+        super(GPQStudent, self).__init__(ssm, t_dyn, t_obs, dof, fixed_dof)
 
 
 class FSQStudent(StudentInference):
     """Filter based on fully symmetric quadrature rules."""
 
-    def __init__(self, ssm, degree=3, kappa=None):
+    def __init__(self, ssm, degree=3, kappa=None, dof=4.0, fixed_dof=True):
         assert isinstance(ssm, StudentStateSpaceModel)
 
         # correct input dimension if noise non-additive
@@ -167,7 +203,7 @@ class FSQStudent(StudentInference):
         # init moment transforms
         t_dyn = FullySymmetricStudent(nq, degree, kappa, q_dof)
         t_obs = FullySymmetricStudent(nr, degree, kappa, r_dof)
-        super(FSQStudent, self).__init__(ssm, t_dyn, t_obs)
+        super(FSQStudent, self).__init__(ssm, t_dyn, t_obs, dof, fixed_dof)
 
 
 def synthetic_demo(steps=250, mc_sims=5000):
@@ -193,15 +229,17 @@ def synthetic_demo(steps=250, mc_sims=5000):
     ssm = SyntheticSSM()
 
     # kernel parameters for TPQ and GPQ filters
+    # TODO: Does the DOF of input density show up in kernel parameters?
     par_dyn = np.array([[1.0, 1.0, 3.0, 3.0]])
     par_obs = np.array([[1.0, 1.0, 3.0, 3.0, 3.0, 3.0]])
 
     # init filters
+    # TODO: StudentSSM stores scale matrix parameter in *_cov variables, SPs created from cov = nu/(nu-2) * scale_matrix
     filters = (
         # ExtendedStudent(ssm),
         FSQStudent(ssm, kappa=-1),
-        UnscentedKalman(ssm, kappa=-1),
-        # TPQStudent(ssm, par_dyn, par_obs, nu=4.0),
+        # UnscentedKalman(ssm, kappa=-1),
+        # TPQStudent(ssm, par_dyn, par_obs, dof=4.0),
         # GPQStudent(ssm, par_dyn, par_obs),
     )
     num_filt = len(filters)
@@ -212,6 +250,7 @@ def synthetic_demo(steps=250, mc_sims=5000):
 
     # run filters
     for i, f in enumerate(filters):
+        print('Running {} ...'.format(f.__class__.__name__))
         for imc in range(mc_sims):
             mf[..., imc, i], Pf[..., imc, i] = f.forward_pass(z[..., imc])
 
