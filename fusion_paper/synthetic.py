@@ -179,9 +179,9 @@ def synthetic_demo(steps=250, mc_sims=5000):
     # init filters
     filters = (
         # ExtendedStudent(ssm),
-        UnscentedKalman(ssm),
-        TPQStudent(ssm, par_dyn, par_obs, nu=4.0),
-        GPQStudent(ssm, par_dyn, par_obs),
+        UnscentedKalman(ssm, kappa=-1),
+        # TPQStudent(ssm, par_dyn, par_obs, nu=4.0),
+        # GPQStudent(ssm, par_dyn, par_obs),
     )
     num_filt = len(filters)
 
@@ -195,7 +195,6 @@ def synthetic_demo(steps=250, mc_sims=5000):
             mf[..., imc, i], Pf[..., imc, i] = f.forward_pass(z[..., imc])
 
     # evaluate performance metrics
-    # FIXME: RMSE is a norm thus number -> sum out dimension
     rmse = np.sqrt(((x[...,  na] - mf) ** 2).sum(axis=0))
     rmse_avg = rmse.mean(axis=1)  # average RMSE over simulations
 
@@ -203,8 +202,23 @@ def synthetic_demo(steps=250, mc_sims=5000):
     import pandas as pd
     f_label = [f.__class__.__name__ for f in filters]
     m_label = ['MEAN_RMSE', 'MAX_RMSE']
-    table = pd.DataFrame([rmse_avg.mean(axis=1), rmse_avg.max(axis=1)], f_label, m_label)
+    data = np.array([rmse_avg.mean(axis=0), rmse_avg.max(axis=0)]).T
+    table = pd.DataFrame(data, f_label, m_label)
     print(table)
 
+
+def synthetic_plots(steps=250, mc_sims=20):
+
+    # generate data
+    sys = SyntheticSys()
+    x, z = sys.simulate(steps, mc_sims)
+
+    import matplotlib.pyplot as plt
+    for i in range(mc_sims):
+        plt.plot(x[0, :, i], x[1, :, i], 'b', alpha=0.15)
+    plt.show()
+
+
 if __name__ == '__main__':
-    synthetic_demo(mc_sims=50)
+    synthetic_demo(mc_sims=500)
+    # synthetic_plots()
