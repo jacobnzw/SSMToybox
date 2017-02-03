@@ -352,13 +352,13 @@ class GaussianStateSpaceModel(StateSpaceModel):
 
         # use default value of statistics for Gaussian SSM if None provided
         kwargs = {
-            'x0_mean': x0_mean if not None else np.zeros(self.xD),
-            'x0_cov': x0_cov if not None else np.eye(self.xD),
-            'q_mean': q_mean if not None else np.zeros(self.qD),
-            'q_cov': q_cov if not None else np.eye(self.qD),
-            'r_mean': r_mean if not None else np.zeros(self.rD),
-            'r_cov': r_cov if not None else np.eye(self.rD),
-            'q_gain': q_gain if not None else np.eye(self.qD)  # FIXME: does not give eye if q_gain is None
+            'x0_mean': x0_mean if x0_mean is not None else np.zeros(self.xD),
+            'x0_cov': x0_cov if x0_cov is not None else np.eye(self.xD),
+            'q_mean': q_mean if q_mean is not None else np.zeros(self.qD),
+            'q_cov': q_cov if q_cov is not None else np.eye(self.qD),
+            'r_mean': r_mean if r_mean is not None else np.zeros(self.rD),
+            'r_cov': r_cov if r_cov is not None else np.eye(self.rD),
+            'q_gain': q_gain if q_gain is not None else np.eye(self.qD)
         }
         super(GaussianStateSpaceModel, self).__init__(**kwargs)
 
