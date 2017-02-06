@@ -58,6 +58,7 @@ class SyntheticSys(StateSpaceModel):
         pass
 
     def state_noise_sample(self, size=None):
+        # FIXME: wrong way to sample from GMM
         m0, m1, c0, c1 = self.get_pars('q_mean_0', 'q_mean_1', 'q_cov_0', 'q_cov_1')
         q0 = np.random.multivariate_normal(m0, c0, size).T
         q1 = np.random.multivariate_normal(m1, c1, size).T
