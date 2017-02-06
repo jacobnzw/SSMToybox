@@ -82,7 +82,7 @@ class SyntheticSSM(StudentStateSpaceModel):
     qD = 2
     rD = 2
 
-    q_additive = True
+    q_additive = False
     r_additive = False
 
     def __init__(self):
@@ -90,7 +90,7 @@ class SyntheticSSM(StudentStateSpaceModel):
             'x0_mean': np.array([0.0, 50.0]),
             'x0_cov': 0.1 * np.eye(self.xD),
             'q_mean': np.zeros(self.qD),
-            'q_cov': 0.01 * np.eye(self.qD),
+            'q_cov': np.eye(self.qD),
             'q_dof': 4.0,
             'r_mean': np.zeros(self.rD),
             'r_cov': 0.01 * np.eye(self.rD),
@@ -281,5 +281,5 @@ def synthetic_plots(steps=250, mc_sims=20):
 
 
 if __name__ == '__main__':
-    synthetic_demo(mc_sims=500)
+    synthetic_demo(mc_sims=50)
     # synthetic_plots()

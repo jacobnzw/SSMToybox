@@ -180,11 +180,15 @@ class StudentInference(GaussianInference):
             not preserved and therefore converges to a Gaussian filter.
         """
 
+        ssm.pars['x0_cov'] *= (dof - 2) / dof
+
         # assert isinstance(ssm, StudentStateSpaceModel)
         super(StudentInference, self).__init__(ssm, tf_dyn, tf_meas)
 
         # state and measurement noise DOF
         self.q_dof, self.r_dof = ssm.get_pars('q_dof', 'r_dof')
+
+        self.dof_fi = dof
         self.dof = dof
         self.fixed_dof = fixed_dof
 
@@ -193,13 +197,13 @@ class StudentInference(GaussianInference):
         if self.fixed_dof:  # fixed-DOF version
 
             # pick the smallest DOF
-            dof_pr = np.min((self.dof, self.q_dof, self.r_dof))
+            dof_pr = np.min((self.dof_fi, self.q_dof, self.r_dof))
 
             # rescale filtered covariance and noise scale matrices
             scale = (dof_pr - 2) / dof_pr
-            self.x_cov_fi *= scale
-            self.q_cov *= scale * self.q_dof / (self.q_dof - 2)
-            self.r_cov *= scale * self.r_dof / (self.r_dof - 2)
+            self.x_cov_fi *= scale * self.dof_fi / (self.dof_fi - 2)
+            self.q_cov *= scale #* self.q_dof / (self.q_dof - 2)
+            self.r_cov *= scale #* self.r_dof / (self.r_dof - 2)
 
         else:  # increasing DOF version
             scale = (self.dof - 2) / self.dof
@@ -208,7 +212,7 @@ class StudentInference(GaussianInference):
         super(StudentInference, self)._time_update(time, theta_dyn, theta_obs)
 
         # scale the predicted covariance
-        self.pr_cov *= scale
+        self.x_cov_pr *= scale
 
     def _measurement_update(self, y, time=None):
 
@@ -223,10 +227,10 @@ class StudentInference(GaussianInference):
         # filtered state covariance
         delta = cho_solve(cho_factor(self.y_cov_pr), y - self.y_mean_pr)
         scale = (self.dof + delta.T.dot(delta)) / (self.dof + self.ssm.zD)
-        self.x_cov_fi *= scale
+        self.x_cov_fi *= scale  # * ((self.dof - 2)/self.dof) * ((self.dof + self.ssm.zD)/(self.dof + self.ssm.zD - 2))
 
         # update degrees of freedom
-        self.dof += self.ssm.zD
+        self.dof_fi += self.ssm.zD
 
     def _smoothing_update(self):
         # Student smoother has not been developed yet.
