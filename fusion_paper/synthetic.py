@@ -223,8 +223,13 @@ def synthetic_demo(steps=250, mc_sims=5000):
     """
 
     # generate data
-    sys = SyntheticSys()
-    x, z = sys.simulate(steps, mc_sims)
+    # sys = SyntheticSys()
+    # x, z = sys.simulate(steps, mc_sims)
+
+    # load data from mat-file
+    from scipy.io import loadmat
+    datadict = loadmat('synth_data', variable_names=('x', 'y'))
+    x, z = datadict['x'], datadict['y']
 
     # init SSM for the filter
     ssm = SyntheticSSM()

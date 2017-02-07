@@ -152,7 +152,7 @@ class GaussianInference(StateSpaceInference):
         self.x_cov_sm = self.x_cov_fi + gain.dot(self.x_cov_sm - self.x_cov_pr).dot(gain.T)
 
 
-class StudentInference(GaussianInference):
+class StudentInference(GaussianInference):  # FIXME: Don't inherit from GaussianInference, modify _time_update
     """
     Base class for state-space inference algorithms, which assume that the state and measurement variables are jointly
     Student distributed.
@@ -212,7 +212,7 @@ class StudentInference(GaussianInference):
         super(StudentInference, self)._time_update(time, theta_dyn, theta_obs)
 
         # scale the predicted covariance
-        self.x_cov_pr *= scale
+        self.x_cov_pr *= scale  # FIXME: needs to happen in _time_update! before meas. stats are computed
 
     def _measurement_update(self, y, time=None):
 

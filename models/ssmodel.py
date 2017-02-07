@@ -489,7 +489,7 @@ class GaussianStateSpaceModel(StateSpaceModel):
         return np.random.multivariate_normal(x0_mean, x0_cov, size).T
 
 
-class StudentStateSpaceModel(GaussianStateSpaceModel):
+class StudentStateSpaceModel(GaussianStateSpaceModel):  # FIXME: don't inherit from GaussianSSM
 
     def __init__(self, x0_mean=None, x0_cov=None, q_mean=None, q_cov=None, r_mean=None, r_cov=None, q_gain=None,
                  q_dof=None, r_dof=None):
