@@ -39,6 +39,9 @@ class StateSpaceInference(metaclass=ABCMeta):
         self.D, self.N = data.shape
         self.fi_mean = np.zeros((self.ssm.xD, self.N))
         self.fi_cov = np.zeros((self.ssm.xD, self.ssm.xD, self.N))
+        # FIXME: saving initial conditions to filtered state is redundant
+        # NOTE: if init. conds must be saved (smoother?) than fi_mean should be one larger than # measurements to
+        # accommodate inits.
         self.fi_mean[:, 0], self.fi_cov[..., 0] = self.x_mean_fi, self.x_cov_fi
         self.pr_mean = self.fi_mean.copy()
         self.pr_cov = self.fi_cov.copy()
