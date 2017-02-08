@@ -37,27 +37,39 @@ class StateSpaceInference(metaclass=ABCMeta):
 
     def forward_pass(self, data):
         self.D, self.N = data.shape
-        self.fi_mean = np.zeros((self.ssm.xD, self.N))
-        self.fi_cov = np.zeros((self.ssm.xD, self.ssm.xD, self.N))
+        self.fi_mean = np.zeros((self.ssm.xD, self.N+1))
+        self.fi_cov = np.zeros((self.ssm.xD, self.ssm.xD, self.N+1))
         # FIXME: saving initial conditions to filtered state is redundant
         # NOTE: if init. conds must be saved (smoother?) than fi_mean should be one larger than # measurements to
         # accommodate inits.
+
+        # first step == initial conditions
         self.fi_mean[:, 0], self.fi_cov[..., 0] = self.x_mean_fi, self.x_cov_fi
         self.pr_mean = self.fi_mean.copy()
         self.pr_cov = self.fi_cov.copy()
         self.pr_xx_cov = self.fi_cov.copy()
-        for k in range(1, self.N):  # iterate over columns of data
+
+        # pad data with zeros so that indices align with states
+        data = np.hstack((self.fi_mean[:, 0, na], data))
+
+        for k in range(1, self.N+1):  # iterate over columns of data
+
+            # compute predicted moments
             self._time_update(k - 1)
             self.pr_mean[..., k] = self.x_mean_pr
             self.pr_cov[..., k] = self.x_cov_pr
             self.pr_xx_cov[..., k] = self.xx_cov
+
+            # compute filtered moments
             self._measurement_update(data[:, k], k)
             self.fi_mean[..., k], self.fi_cov[..., k] = self.x_mean_fi, self.x_cov_fi
+
         # set flag that filtered state sequence is available
         self.set_flag('filtered', True)
+
         # smoothing estimate at the last time step == the filtering estimate at the last time step
         self.x_mean_sm, self.x_cov_sm = self.x_mean_fi, self.x_cov_fi
-        return self.fi_mean, self.fi_cov
+        return self.fi_mean[:, 1:, ...], self.fi_cov[:, :, 1:, ...]
 
     def backward_pass(self):
         assert self.get_flag('filtered')  # require filtered state
@@ -208,6 +220,7 @@ class StudentInference(StateSpaceInference):
         super(StudentInference, self).__init__(ssm, tf_dyn, tf_meas)
 
     def reset(self):
+        self.x_mean_fi, self.x_cov_fi = self.ssm.get_pars('x0_mean', 'x0_cov')
         scale = (self.dof - 2) / self.dof
         self.x_smat_fi = scale * self.x_cov_fi
         self.x_smat_pr, self.y_smat_pr, self.xy_smat = None, None, None
