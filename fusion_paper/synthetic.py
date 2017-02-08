@@ -229,7 +229,7 @@ def synthetic_demo(steps=250, mc_sims=5000):
     # load data from mat-file
     from scipy.io import loadmat
     datadict = loadmat('synth_data', variable_names=('x', 'y'))
-    x, z = datadict['x'], datadict['y']
+    x, z = datadict['x'][:, 1:, :], datadict['y'][:, 1:, :]
 
     # init SSM for the filter
     ssm = SyntheticSSM()
@@ -243,7 +243,7 @@ def synthetic_demo(steps=250, mc_sims=5000):
     # TODO: StudentSSM stores scale matrix parameter in *_cov variables, SPs created from cov = nu/(nu-2) * scale_matrix
     filters = (
         # ExtendedStudent(ssm),
-        FSQStudent(ssm, kappa=-1),
+        FSQStudent(ssm, kappa=-3),
         # UnscentedKalman(ssm, kappa=-1),
         # TPQStudent(ssm, par_dyn, par_obs, dof=4.0),
         # GPQStudent(ssm, par_dyn, par_obs),
@@ -259,6 +259,7 @@ def synthetic_demo(steps=250, mc_sims=5000):
         print('Running {} ...'.format(f.__class__.__name__))
         for imc in range(mc_sims):
             mf[..., imc, i], Pf[..., imc, i] = f.forward_pass(z[..., imc])
+            f.reset()
 
     # evaluate performance metrics
     rmse = np.sqrt(((x[...,  na] - mf) ** 2).sum(axis=0))
