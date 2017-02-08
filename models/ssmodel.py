@@ -489,14 +489,40 @@ class GaussianStateSpaceModel(StateSpaceModel):
         return np.random.multivariate_normal(x0_mean, x0_cov, size).T
 
 
-class StudentStateSpaceModel(GaussianStateSpaceModel):  # FIXME: don't inherit from GaussianSSM
+class StudentStateSpaceModel(StateSpaceModel):
 
-    def __init__(self, x0_mean=None, x0_cov=None, q_mean=None, q_cov=None, r_mean=None, r_cov=None, q_gain=None,
-                 q_dof=None, r_dof=None):
+    def __init__(self, x0_mean=None, x0_cov=None, x0_dof=None, q_mean=None, q_cov=None, q_dof=None, q_gain=None,
+                 r_mean=None, r_cov=None, r_dof=None):
+        """
+        State-space model where the noises are Student distributed.
+        Takes covariances instead of scale matrices.
 
-        super(StudentStateSpaceModel, self).__init__(x0_mean, x0_cov, q_mean, q_cov, r_mean, r_cov, q_gain)
-        self.set_pars('q_dof', q_dof)
-        self.set_pars('r_dof', r_dof)
+        Parameters
+        ----------
+        x0_mean
+        x0_cov
+        x0_dof
+        q_mean
+        q_cov
+        q_dof
+        q_gain
+        r_mean
+        r_cov
+        r_dof
+        """
+        kwargs = {
+            'x0_mean': x0_mean if x0_mean is not None else np.zeros(self.xD),
+            'x0_cov': x0_cov if x0_cov is not None else np.eye(self.xD),
+            'x0_dof': x0_dof if x0_dof is not None else 4.0,  # desired DOF
+            'q_mean': q_mean if q_mean is not None else np.zeros(self.qD),
+            'q_cov': q_cov if q_cov is not None else np.eye(self.qD),
+            'q_gain': q_gain if q_gain is not None else np.eye(self.qD),
+            'q_dof': q_dof if q_dof is not None else 4.0,
+            'r_mean': r_mean if r_mean is not None else np.zeros(self.rD),
+            'r_cov': r_cov if r_cov is not None else np.eye(self.rD),
+            'r_dof': r_dof if r_dof is not None else 4.0,
+        }
+        super(StudentStateSpaceModel, self).__init__(**kwargs)
 
     @abstractmethod
     def dyn_fcn(self, x, q, pars):

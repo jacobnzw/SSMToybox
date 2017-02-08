@@ -4,14 +4,14 @@ import numpy.linalg as la
 from scipy.linalg import cho_factor, cho_solve, block_diag
 from scipy.stats import multivariate_normal
 from numpy import newaxis as na
-from models.ssmodel import StateSpaceModel, GaussianStateSpaceModel
+from models.ssmodel import StateSpaceModel, GaussianStateSpaceModel, StudentStateSpaceModel
 from transforms.mtform import MomentTransform
 
 
 class StateSpaceInference(metaclass=ABCMeta):
     def __init__(self, ssm, tf_dyn, tf_meas):
 
-        # dynamical system whose state is to be estimated
+        # state-space model of a dynamical system whose state is to be estimated
         assert isinstance(ssm, StateSpaceModel)
         self.ssm = ssm
 
@@ -152,7 +152,7 @@ class GaussianInference(StateSpaceInference):
         self.x_cov_sm = self.x_cov_fi + gain.dot(self.x_cov_sm - self.x_cov_pr).dot(gain.T)
 
 
-class StudentInference(GaussianInference):  # FIXME: Don't inherit from GaussianInference, modify _time_update
+class StudentInference(StateSpaceInference):
     """
     Base class for state-space inference algorithms, which assume that the state and measurement variables are jointly
     Student distributed.
@@ -180,17 +180,35 @@ class StudentInference(GaussianInference):  # FIXME: Don't inherit from Gaussian
             not preserved and therefore converges to a Gaussian filter.
         """
 
-        ssm.pars['x0_cov'] *= (dof - 2) / dof
+        assert isinstance(ssm, StudentStateSpaceModel)
 
-        # assert isinstance(ssm, StudentStateSpaceModel)
-        super(StudentInference, self).__init__(ssm, tf_dyn, tf_meas)
+        # extract SSM parameters
+        # initial statistics are taken to be filtered statistics
+        self.x_mean_fi, self.x_cov_fi, self.dof_fi = ssm.get_pars('x0_mean', 'x0_cov', 'x0_dof')
 
-        # state and measurement noise DOF
-        self.q_dof, self.r_dof = ssm.get_pars('q_dof', 'r_dof')
+        # state noise statistics
+        self.q_mean, self.q_cov, self.q_dof, self.q_gain = ssm.get_pars('q_mean', 'q_cov', 'q_dof', 'q_gain')
 
-        self.dof_fi = dof
+        # measurement noise statistics
+        self.r_mean, self.r_cov, self.r_dof = ssm.get_pars('r_mean', 'r_cov', 'r_dof')
+
+        # scale matrix variables
+        scale = (dof - 2)/dof
+        self.x_smat_fi = scale * self.x_cov_fi  # turn initial covariance into initial scale matrix
+        self.q_smat = scale * self.q_cov
+        self.r_smat = scale * self.r_cov
+        self.x_smat_pr, self.y_smat_pr, self.xy_smat = None, None, None
+
         self.dof = dof
         self.fixed_dof = fixed_dof
+
+        super(StudentInference, self).__init__(ssm, tf_dyn, tf_meas)
+
+    def reset(self):
+        scale = (self.dof - 2) / self.dof
+        self.x_smat_fi = scale * self.x_cov_fi
+        self.x_smat_pr, self.y_smat_pr, self.xy_smat = None, None, None
+        super(StudentInference, self).reset()
 
     def _time_update(self, time, theta_dyn=None, theta_obs=None):
 
@@ -199,35 +217,67 @@ class StudentInference(GaussianInference):  # FIXME: Don't inherit from Gaussian
             # pick the smallest DOF
             dof_pr = np.min((self.dof_fi, self.q_dof, self.r_dof))
 
-            # rescale filtered covariance and noise scale matrices
+            # rescale filtered scale matrix?
             scale = (dof_pr - 2) / dof_pr
-            self.x_cov_fi *= scale * self.dof_fi / (self.dof_fi - 2)
-            self.q_cov *= scale #* self.q_dof / (self.q_dof - 2)
-            self.r_cov *= scale #* self.r_dof / (self.r_dof - 2)
+            # self.x_smat_fi = self.x_smat_fi * scale * self.dof_fi / (self.dof_fi - 2)
 
         else:  # increasing DOF version
             scale = (self.dof - 2) / self.dof
 
-        # call the Kalman time update
-        super(StudentInference, self)._time_update(time, theta_dyn, theta_obs)
+        # in non-additive case, augment mean and covariance
+        mean = self.x_mean_fi if self.ssm.q_additive else np.hstack((self.x_mean_fi, self.q_mean))
+        smat = self.x_smat_fi if self.ssm.q_additive else block_diag(self.x_smat_fi, self.q_smat)
+        assert mean.ndim == 1 and smat.ndim == 2
 
-        # scale the predicted covariance
-        self.x_cov_pr *= scale  # FIXME: needs to happen in _time_update! before meas. stats are computed
+        # predicted state statistics
+        self.x_mean_pr, self.x_cov_pr, self.xx_cov = self.tf_dyn.apply(self.ssm.dyn_eval, mean, smat,
+                                                                       self.ssm.par_fcn(time), theta_dyn)
+        # predicted covariance -> predicted scale matrix
+        self.x_smat_pr = scale * self.x_cov_pr
+
+        if self.ssm.q_additive:
+            self.x_cov_pr += self.q_gain.dot(self.q_cov).dot(self.q_gain.T)
+            self.x_smat_pr += self.q_gain.dot(self.q_smat).dot(self.q_gain.T)
+
+        # in non-additive case, augment mean and covariance
+        mean = self.x_mean_pr if self.ssm.r_additive else np.hstack((self.x_mean_pr, self.r_mean))
+        smat = self.x_smat_pr if self.ssm.r_additive else block_diag(self.x_smat_pr, self.r_smat)
+        assert mean.ndim == 1 and smat.ndim == 2
+
+        # predicted measurement statistics
+        self.y_mean_pr, self.y_cov_pr, self.xy_cov = self.tf_meas.apply(self.ssm.meas_eval, mean, smat,
+                                                                        self.ssm.par_fcn(time), theta_obs)
+        # turn covariance to scale matrix
+        self.y_smat_pr = scale * self.y_cov_pr
+        self.xy_smat = scale * self.xy_cov
+
+        # in additive case, noise covariances need to be added
+        if self.ssm.r_additive:
+            self.y_cov_pr += self.r_cov
+            self.y_smat_pr += self.r_smat
+
+        # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)
+        self.xy_cov = self.xy_cov[:, :self.ssm.xD]
+        self.xx_cov = self.xx_cov[:, :self.ssm.xD]
+        self.xy_smat = self.xy_smat[:, :self.ssm.xD]
 
     def _measurement_update(self, y, time=None):
 
         # scale the covariance matrices
-        scale = (self.dof - 2) / self.dof
-        self.y_cov_pr *= scale
-        self.xy_cov *= scale
+        # scale = (self.dof - 2) / self.dof
+        # self.y_cov_pr *= scale
+        # self.xy_cov *= scale
 
-        # call the Kalman update
-        super(StudentInference, self)._measurement_update(y, time)
+        # Kalman update
+        gain = cho_solve(cho_factor(self.y_smat_pr), self.xy_smat).T
+        self.x_mean_fi = self.x_mean_pr + gain.dot(y - self.y_mean_pr)
+        self.x_cov_fi = self.x_smat_pr - gain.dot(self.y_smat_pr).dot(gain.T)
 
-        # filtered state covariance
-        delta = cho_solve(cho_factor(self.y_cov_pr), y - self.y_mean_pr)
+        # filtered covariance to filtered scale matrix
+        # delta = cho_solve(cho_factor(self.y_smat_pr), y - self.y_mean_pr)
+        delta = la.solve(la.cholesky(self.y_smat_pr), y - self.y_mean_pr)
         scale = (self.dof + delta.T.dot(delta)) / (self.dof + self.ssm.zD)
-        self.x_cov_fi *= scale  # * ((self.dof - 2)/self.dof) * ((self.dof + self.ssm.zD)/(self.dof + self.ssm.zD - 2))
+        self.x_smat_fi = scale * self.x_cov_fi
 
         # update degrees of freedom
         self.dof_fi += self.ssm.zD
