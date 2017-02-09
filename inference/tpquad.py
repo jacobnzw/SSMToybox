@@ -26,8 +26,8 @@ class TPQStudent(StudentInference):
     mixture representation which facilitates analytical tractability.
     """
 
-    def __init__(self, ssm, kern_par_dyn, kern_par_obs, kernel='rq', points='fs', point_hyp=None, dof=3.0,
-                 fixed_dof=True):
+    def __init__(self, ssm, kern_par_dyn, kern_par_obs, kernel='rq', points='fs', point_hyp=None, dof=4.0,
+                 fixed_dof=True, dof_tp=4.0):
         assert isinstance(ssm, StateSpaceModel)
         nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
         nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
@@ -44,8 +44,8 @@ class TPQStudent(StudentInference):
         point_hyp_obs.update({'dof': r_dof})
         # TODO: finish fixing DOFs, DOF for TPQ and DOF for the filtered state.
 
-        t_dyn = TPQ(nq, kern_par_dyn, kernel, points, point_hyp_dyn)
-        t_obs = TPQ(nr, kern_par_obs, kernel, points, point_hyp_obs)
+        t_dyn = TPQ(nq, kern_par_dyn, kernel, points, point_hyp_dyn, nu=dof_tp)
+        t_obs = TPQ(nr, kern_par_obs, kernel, points, point_hyp_obs, nu=dof_tp)
         super(TPQStudent, self).__init__(ssm, t_dyn, t_obs, dof, fixed_dof)
 
 
