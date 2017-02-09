@@ -82,7 +82,7 @@ class SyntheticSSM(StudentStateSpaceModel):
     qD = 2
     rD = 2
 
-    q_additive = False
+    q_additive = True
     r_additive = False
 
     def __init__(self):
@@ -236,17 +236,29 @@ def synthetic_demo(steps=250, mc_sims=5000):
 
     # kernel parameters for TPQ and GPQ filters
     # TODO: Does the DOF of input density show up in kernel parameters?
-    par_dyn = np.array([[1.0, 1.0, 3.0, 3.0]])
-    par_obs = np.array([[1.0, 1.0, 3.0, 3.0, 3.0, 3.0]])
+    # TPQ Student
+    # par_dyn_tp = np.array([[1.0, 1.0, 0.8, 0.8]])
+    # par_obs_tp = np.array([[1.0, 1.0, 1.1, 1.1, 1.1, 1.1]])
+    par_dyn_tp = np.array([[1.0, 2.0, 3.0, 3.0]])
+    par_obs_tp = np.array([[1.0, 2.0, 5.0, 5.0, 5.0, 5.0]])
+    # GPQ Student
+    par_dyn_gpqs = np.array([[1.1, 1.0, 1.0, 1.0]])
+    par_obs_gpqs = np.array([[1.1, 1.0, 1.1, 1.1, 1.1, 1.1]])
+    # GPQ Kalman
+    par_dyn_gpqk = np.array([[1.0, 2.0, 2.0]])
+    par_obs_gpqk = np.array([[1.0, 2.0, 2.0, 2.0, 2.0]])
+    # parameters of the point-set
+    par_pt = {'kappa': 1}
 
     # init filters
-    # TODO: StudentSSM stores scale matrix parameter in *_cov variables, SPs created from cov = nu/(nu-2) * scale_matrix
     filters = (
         # ExtendedStudent(ssm),
-        FSQStudent(ssm, kappa=-3),
+        # FSQStudent(ssm, kappa=1),
         # UnscentedKalman(ssm, kappa=-1),
-        # TPQStudent(ssm, par_dyn, par_obs, dof=4.0),
-        # GPQStudent(ssm, par_dyn, par_obs),
+        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=3.0, point_hyp=par_pt),
+        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
+        TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
+        GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
     )
     num_filt = len(filters)
 
