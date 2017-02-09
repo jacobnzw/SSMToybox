@@ -115,7 +115,7 @@ class GaussianInference(StateSpaceInference):
     def __init__(self, ssm, tf_dyn, tf_meas):
 
         # dynamical system whose state is to be estimated
-        assert isinstance(ssm, GaussianStateSpaceModel)
+        assert isinstance(ssm, StateSpaceModel)
 
         # set initial condition mean and covariance, and noise covariances
         self.x_mean_fi, self.x_cov_fi, self.q_mean, self.q_cov, self.r_mean, self.r_cov, self.G = ssm.get_pars(
