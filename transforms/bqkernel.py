@@ -402,6 +402,95 @@ class RBF(Kernel):
         return par[0], np.diag(par[1:] ** -1)
 
 
+class RBFStudent(RBF):
+    """
+    RBF kernel with Student's expectations approximated by Monte Carlo.
+    """
+
+    def __init__(self, dim, par, jitter=1e-8, dof=4.0, num_mc=1000):
+
+        # samples from standard Student's density
+        mean = np.zeros((dim, ))
+        cov = np.eye(dim)
+        self.num_mc = num_mc
+        self.x_samples = self._multivariate_t(mean, cov, dof, size=num_mc).T
+        self.y_samples = self._multivariate_t(mean, cov, dof, size=num_mc).T
+        super(RBFStudent, self).__init__(dim, par, jitter)
+
+    def exp_x_kx(self, par, x, scaling=False):
+        return (1/self.num_mc) * self.eval(par, self.x_samples, x, scaling=scaling).sum(axis=0)
+
+    def exp_x_xkx(self, par, x):
+        k = self.eval(par, self.x_samples, x, scaling=False)
+        return (1 / self.num_mc) * (self.x_samples[:, na, :] * k[na, ...]).sum(axis=1)
+
+    def exp_x_kxkx(self, par_0, par_1, x, scaling=False):
+        """
+        Correlation matrix of kernels with elements
+
+        .. math:
+        \[
+            \mathbb{E}[k(x, x_i), k(x, x_j)] = \int\! k(x, x_i), k(x, x_j) N(x \mid 0, I)\, \mathrm{d}x
+        \]
+
+        Parameters
+        ----------
+        x : numpy.ndarray
+            Data points, shape (D, N)
+        par_0 : numpy.ndarray
+        par_1 : numpy.ndarray
+            Kernel parameters, shape (D, )
+        scaling : bool
+            Kernel scaling parameter used when `scaling=True`.
+
+        Returns
+        -------
+        : numpy.ndarray
+            Correlation matrix of kernels computed for given pair of kernel parameters.
+        """
+
+        k0 = self.eval(par_0, self.x_samples, x, scaling=scaling)  # (MC, N)
+        k1 = self.eval(par_1, self.x_samples, x, scaling=scaling)
+        return (1/self.num_mc) * (k0[:, na, :] * k1[..., na]).sum(axis=0)
+
+    def exp_x_kxx(self, par):
+        k = self.eval(par, self.x_samples, self.x_samples, diag=True, scaling=False)
+        return (1/self.num_mc) * k.sum()
+
+    def exp_xy_kxy(self, par):
+        return (1/self.num_mc) * self.eval(par, self.x_samples, self.x_samples).sum()
+
+    @staticmethod
+    def _multivariate_t(mean, scale, nu, size=None):
+        """
+        Samples of a random variable :math:`X` following a multivariate t-distribution
+        :math:`X \sim \mathrm{St}(\mu, \Sigma, \nu)`.
+
+        Parameters
+        ----------
+        mean
+            Mean vector
+        scale
+            Scale matrix
+        nu : float
+            Degrees of freedom
+        size : int or tuple of ints
+
+
+        Notes
+        -----
+        If :math:`y \sim \mathrm{N}(0, \Sigma)` and :math:`u \sim \mathrm{Gamma}(k=\nu/2, \theta=2/\nu)`,
+        then :math:`x \sim \mathrm{St}(\mu, \Sigma, \nu)`, where :math:`x = \mu + \frac{y}{\sqrt{u}}`.
+
+        Returns
+        -------
+
+        """
+        v = np.random.gamma(nu / 2, 2 / nu, size)[:, na]
+        n = np.random.multivariate_normal(np.zeros_like(mean), scale, size)
+        return mean[na, :] + n / np.sqrt(v)
+
+
 class RQ(Kernel):
 
     def __init__(self, dim, par, jitter=1e-8):
