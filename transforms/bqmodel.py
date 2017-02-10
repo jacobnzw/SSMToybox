@@ -509,7 +509,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         par = self.kernel.get_parameters(par)
         q = self.kernel.exp_x_kx(par, self.points)
         iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
-        kbar = self.kernel.exp_x_kxx(par)
+        kbar = self.kernel.exp_xy_kxy(par)
         return kbar - q.T.dot(iK).dot(q)
 
     def neg_log_marginal_likelihood(self, log_par, fcn_obs):
@@ -620,7 +620,7 @@ class GaussianProcessMO(Model):
         for i in range(self.dim_out):
             q = self.kernel.exp_x_kx(par[i, :], self.points)
             iK = self.kernel.eval_inv_dot(par[i, :], self.points, scaling=False)
-            kbar = self.kernel.exp_x_kxx(par[i, :])
+            kbar = self.kernel.exp_xy_kxy(par[i, :])
             ivar[i] = kbar - q.T.dot(iK).dot(q)
         return ivar
 
@@ -746,7 +746,7 @@ class StudentTProcess(Model):
 
         par = self.kernel.get_parameters(par)
 
-        kbar = self.kernel.exp_x_kxx(par)
+        kbar = self.kernel.exp_xy_kxy(par)
         q = self.kernel.exp_x_kx(par, self.points)
         iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
 
