@@ -260,7 +260,7 @@ class RBF(Kernel):
             Input dimension
         par : numpy.ndarray
             Kernel parameters in a matrix of shape (dim_out, num_par), where i-th row contains parameters for i-th
-            output. Each row is :math: `[\alpha, \ell_1, \ldots, \ell_dim]`
+            output. Each row is :math: `[s, \ell_1, \ldots, \ell_dim]`
         jitter : float
             Jitter for stabilizing inversion of the kernel matrix. Default ``jitter=1e-8``.
 
@@ -419,8 +419,7 @@ class RQ(Kernel):
             Input dimension
         par : numpy.ndarray
             Kernel parameters in a matrix of shape (dim_out, num_par), where i-th row contains parameters
-            for i-th
-            output. Each row is :math: `[\alpha, \ell_1, \ldots, \ell_dim]`
+            for i-th output. Each row is :math: `[s, \alpha, \ell_1, \ldots, \ell_dim]`
         jitter : float
             Jitter for stabilizing inversion of the kernel matrix. Default ``jitter=1e-8``.
 
