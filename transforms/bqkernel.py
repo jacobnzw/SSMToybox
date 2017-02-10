@@ -413,16 +413,15 @@ class RBFStudent(RBF):
         mean = np.zeros((dim, ))
         cov = np.eye(dim)
         self.num_mc = num_mc
-        self.x_samples = self._multivariate_t(mean, cov, dof, size=num_mc).T
-        self.y_samples = self._multivariate_t(mean, cov, dof, size=num_mc).T
+        self.x_samples = self._multivariate_t(mean, cov, dof, size=num_mc).T  # (D, MC)
         super(RBFStudent, self).__init__(dim, par, jitter)
 
     def exp_x_kx(self, par, x, scaling=False):
         return (1/self.num_mc) * self.eval(par, self.x_samples, x, scaling=scaling).sum(axis=0)
 
     def exp_x_xkx(self, par, x):
-        k = self.eval(par, self.x_samples, x, scaling=False)
-        return (1 / self.num_mc) * (self.x_samples[:, na, :] * k[na, ...]).sum(axis=1)
+        k = self.eval(par, self.x_samples, x, scaling=False)  # (MC, N)
+        return (1 / self.num_mc) * (self.x_samples[..., na] * k[na, ...]).sum(axis=1)
 
     def exp_x_kxkx(self, par_0, par_1, x, scaling=False):
         """
@@ -454,7 +453,7 @@ class RBFStudent(RBF):
         return (1/self.num_mc) * (k0[:, na, :] * k1[..., na]).sum(axis=0)
 
     def exp_x_kxx(self, par):
-        k = self.eval(par, self.x_samples, self.x_samples, diag=True, scaling=False)
+        k = self.eval(par, self.x_samples, self.x_samples, diag=True, scaling=True)
         return (1/self.num_mc) * k.sum()
 
     def exp_xy_kxy(self, par):
