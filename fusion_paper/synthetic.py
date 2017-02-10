@@ -8,6 +8,7 @@ from inference.tpquad import TPQKalman, TPQStudent
 from inference.gpquad import GPQKalman, GPQ
 from inference.ssinfer import StudentInference
 from inference.unscented import UnscentedKalman
+from utils import log_cred_ratio
 
 
 class SyntheticSys(StateSpaceModel):
@@ -130,6 +131,51 @@ class SyntheticSSM(StudentStateSpaceModel):
         return np.random.multivariate_normal(m, c, size)
 
 
+class UNGMnonadd(StudentStateSpaceModel):
+    """
+    Univariate Non-linear Growth Model with non-additive noise for testing.
+    """
+
+    xD = 1  # state dimension
+    zD = 1  # measurement dimension
+    qD = 1
+    rD = 1
+
+    q_additive = True
+    r_additive = False
+
+    def __init__(self, x0_mean=0.0, x0_cov=1.0, q_mean=0.0, q_cov=10.0, r_mean=0.0, r_cov=1.0, **kwargs):
+        super(UNGMnonadd, self).__init__(**kwargs)
+        kwargs = {
+            'x0_mean': np.atleast_1d(x0_mean),
+            'x0_cov': np.atleast_2d(x0_cov),
+            'x0_dof': 4.0,
+            'q_mean': np.atleast_1d(q_mean),
+            'q_cov': np.atleast_2d(q_cov),
+            'q_dof': 4.0,
+            'r_mean': np.atleast_1d(r_mean),
+            'r_cov': np.atleast_2d(r_cov),
+            'r_dof': 4.0,
+        }
+        super(UNGMnonadd, self).__init__(**kwargs)
+
+    def dyn_fcn(self, x, q, pars):
+        return np.asarray([0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * np.cos(1.2 * pars[0])]) + q
+
+    def meas_fcn(self, x, r, pars):
+        return np.asarray([0.05 * r[0] * x[0] ** 2])
+
+    def par_fcn(self, time):
+        return np.atleast_1d(time)
+
+    def dyn_fcn_dx(self, x, q, pars):
+        return np.asarray([0.5 + 25 * (1 - x[0] ** 2) / (1 + x[0] ** 2) ** 2, 8 * np.cos(1.2 * pars[0])])
+
+    def meas_fcn_dx(self, x, r, pars):
+        return np.asarray([0.1 * r[0] * x[0], 0.05 * x[0] ** 2])
+
+
+# Student's t-filters
 class ExtendedStudent(StudentInference):
 
     def __init__(self, sys, dof=4.0, fixed_dof=True):
@@ -183,8 +229,8 @@ class GPQStudent(StudentInference):
         point_hyp_obs.update({'dof': r_dof})
 
         # init moment transforms
-        t_dyn = GPQ(nq, kern_par_dyn, 'rq', 'fs', point_hyp_dyn)
-        t_obs = GPQ(nr, kern_par_obs, 'rq', 'fs', point_hyp_obs)
+        t_dyn = GPQ(nq, kern_par_dyn, 'rbf-student', 'fs', point_hyp_dyn)
+        t_obs = GPQ(nr, kern_par_obs, 'rbf-student', 'fs', point_hyp_obs)
         super(GPQStudent, self).__init__(ssm, t_dyn, t_obs, dof, fixed_dof)
 
 
@@ -239,11 +285,11 @@ def synthetic_demo(steps=250, mc_sims=5000):
     # TPQ Student
     # par_dyn_tp = np.array([[1.0, 1.0, 0.8, 0.8]])
     # par_obs_tp = np.array([[1.0, 1.0, 1.1, 1.1, 1.1, 1.1]])
-    par_dyn_tp = np.array([[1.0, 2.0, 3.0, 3.0]])
-    par_obs_tp = np.array([[1.0, 2.0, 5.0, 5.0, 5.0, 5.0]])
+    par_dyn_tp = np.array([[1.0, 3.8, 3.8]])
+    par_obs_tp = np.array([[1.0, 4.0, 4.0, 4.0, 4.0]])
     # GPQ Student
-    par_dyn_gpqs = np.array([[1.1, 1.0, 1.0, 1.0]])
-    par_obs_gpqs = np.array([[1.1, 1.0, 1.1, 1.1, 1.1, 1.1]])
+    par_dyn_gpqs = np.array([[1.0, 1, 1]])
+    par_obs_gpqs = np.array([[1.0, 5, 5, 5, 5]])
     # GPQ Kalman
     par_dyn_gpqk = np.array([[1.0, 2.0, 2.0]])
     par_obs_gpqk = np.array([[1.0, 2.0, 2.0, 2.0, 2.0]])
@@ -255,10 +301,10 @@ def synthetic_demo(steps=250, mc_sims=5000):
         # ExtendedStudent(ssm),
         # FSQStudent(ssm, kappa=1),
         # UnscentedKalman(ssm, kappa=-1),
-        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=3.0, point_hyp=par_pt),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
         # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
-        TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
-        GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
+        # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
+        # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
     )
     num_filt = len(filters)
 
@@ -276,6 +322,7 @@ def synthetic_demo(steps=250, mc_sims=5000):
     # evaluate performance metrics
     rmse = np.sqrt(((x[...,  na] - mf) ** 2).sum(axis=0))
     rmse_avg = rmse.mean(axis=1)  # average RMSE over simulations
+    # TODO: inclination indicator
 
     # print out table
     import pandas as pd
@@ -284,6 +331,13 @@ def synthetic_demo(steps=250, mc_sims=5000):
     data = np.array([rmse_avg.mean(axis=0), rmse_avg.max(axis=0)]).T
     table = pd.DataFrame(data, f_label, m_label)
     print(table)
+
+    # print kernel parameters
+    parlab = ['alpha'] + ['ell_{}'.format(d+1) for d in range(4)]
+    partable = pd.DataFrame(np.vstack((np.hstack((par_dyn_tp.squeeze(), np.zeros((2,)))), par_obs_tp)),
+                            columns=parlab, index=['dyn', 'obs'])
+    print()
+    print(partable)
 
 
 def synthetic_plots(steps=250, mc_sims=20):
