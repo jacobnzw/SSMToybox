@@ -5,7 +5,7 @@ import numpy as np
 import numpy.linalg as la
 from scipy.optimize import minimize
 
-from .bqkernel import RBF, RQ
+from .bqkernel import RBF, RQ, RBFStudent
 from .quad import SphericalRadial, Unscented, GaussHermite, FullySymmetricStudent
 
 
@@ -50,7 +50,7 @@ class Model(object, metaclass=ABCMeta):
     """
 
     _supported_points_ = ['sr', 'ut', 'gh', 'fs']
-    _supported_kernels_ = ['rbf', 'rq']
+    _supported_kernels_ = ['rbf', 'rq', 'rbf-student']
 
     def __init__(self, dim, kern_par, kernel, points, point_par=None):
         """
@@ -413,6 +413,8 @@ class Model(object, metaclass=ABCMeta):
         # initialize the chosen kernel
         if kernel == 'rbf':
             return RBF(dim, par)
+        elif kernel == 'rbf-student':
+            return RBFStudent(dim, par)
         elif kernel == 'rq':
             return RQ(dim, par)
 
