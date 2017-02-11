@@ -131,6 +131,73 @@ class SyntheticSSM(StudentStateSpaceModel):
         return np.random.multivariate_normal(m, c, size)
 
 
+class UNGMnonaddSys(StateSpaceModel):
+    """
+    Univariate Non-linear Growth Model with non-additive noise for testing.
+    """
+
+    xD = 1  # state dimension
+    zD = 1  # measurement dimension
+    qD = 1
+    rD = 1
+
+    q_additive = True
+    r_additive = False
+
+    def __init__(self):
+        pars = {
+            'x0_mean': np.atleast_1d(0.0),
+            'x0_cov': np.atleast_2d(1.0),
+            'q_mean_0': np.zeros(self.rD),
+            'q_mean_1': np.zeros(self.rD),
+            'q_cov_0': 0.01 * np.eye(self.qD),
+            'q_cov_1': 5 * np.eye(self.qD),
+            'r_mean_0': np.zeros(self.rD),
+            'r_mean_1': np.zeros(self.rD),
+            'r_cov_0': 0.01 * np.eye(self.rD),
+            'r_cov_1': 5 * np.eye(self.rD),
+        }
+        super(UNGMnonaddSys, self).__init__(**pars)
+
+    def dyn_fcn(self, x, q, pars):
+        return np.asarray([0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * np.cos(1.2 * pars[0])]) + q
+
+    def meas_fcn(self, x, r, pars):
+        return np.asarray([0.05 * r[0] * x[0] ** 2])
+
+    def par_fcn(self, time):
+        return np.atleast_1d(time)
+
+    def dyn_fcn_dx(self, x, q, pars):
+        return np.asarray([0.5 + 25 * (1 - x[0] ** 2) / (1 + x[0] ** 2) ** 2, 8 * np.cos(1.2 * pars[0])])
+
+    def meas_fcn_dx(self, x, r, pars):
+        return np.asarray([0.1 * r[0] * x[0], 0.05 * x[0] ** 2])
+
+    def initial_condition_sample(self, size=None):
+        m, c = self.get_pars('x0_mean', 'x0_cov')
+        return np.random.multivariate_normal(m, c, size)
+
+    def state_noise_sample(self, size=None):
+        m0, c0 = self.get_pars('q_mean_0', 'q_cov_0')
+        m1, c1 = self.get_pars('q_mean_1', 'q_cov_1')
+        assert len(size) <= 2
+
+        # samples from 2-component Gaussian mixture
+        mi = np.random.binomial(1, 0.95, size)  # 1 w.p. 0.95, 0 w.p. 0.05
+        n0 = np.random.multivariate_normal(m0, c0, size).T
+        n1 = np.random.multivariate_normal(m1, c1, size).T
+        n0 = n0[:, mi == 0]
+        n1 = n1[:, mi == 1]
+        return np.vstack((n0, n1))
+
+    def measurement_noise_sample(self, size=None):
+        m0, c0 = self.get_pars('r_mean_0', 'r_cov_0')
+        m1, c1 = self.get_pars('r_mean_1', 'r_cov_1')
+
+
+
+
 class UNGMnonadd(StudentStateSpaceModel):
     """
     Univariate Non-linear Growth Model with non-additive noise for testing.
@@ -350,6 +417,11 @@ def synthetic_plots(steps=250, mc_sims=20):
     for i in range(mc_sims):
         plt.plot(x[0, :, i], x[1, :, i], 'b', alpha=0.15)
     plt.show()
+
+
+def ungm_demo(steps=250, mc_sims=100):
+
+    pass
 
 
 if __name__ == '__main__':
