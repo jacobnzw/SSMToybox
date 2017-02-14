@@ -8,7 +8,7 @@ from inference.tpquad import TPQKalman, TPQStudent
 from inference.gpquad import GPQKalman, GPQ
 from inference.ssinfer import StudentInference
 from inference.unscented import UnscentedKalman
-from utils import log_cred_ratio, mse_matrix
+from utils import log_cred_ratio, mse_matrix, bigauss_mixture
 
 
 class SyntheticSys(StateSpaceModel):
@@ -176,24 +176,20 @@ class UNGMnonaddSys(StateSpaceModel):
 
     def initial_condition_sample(self, size=None):
         m, c = self.get_pars('x0_mean', 'x0_cov')
-        return np.random.multivariate_normal(m, c, size)
+        return np.random.multivariate_normal(m, c, size).T
 
     def state_noise_sample(self, size=None):
         m0, c0 = self.get_pars('q_mean_0', 'q_cov_0')
         m1, c1 = self.get_pars('q_mean_1', 'q_cov_1')
-        assert len(size) <= 2
 
         # samples from 2-component Gaussian mixture
-        mi = np.random.binomial(1, 0.95, size)  # 1 w.p. 0.95, 0 w.p. 0.05
-        n0 = np.random.multivariate_normal(m0, c0, size).T
-        n1 = np.random.multivariate_normal(m1, c1, size).T
-        n0 = n0[:, mi == 0]
-        n1 = n1[:, mi == 1]
-        return np.vstack((n0, n1))
+        return bigauss_mixture(m0, c0, m1, c1, 0.95, size)
 
     def measurement_noise_sample(self, size=None):
         m0, c0 = self.get_pars('r_mean_0', 'r_cov_0')
         m1, c1 = self.get_pars('r_mean_1', 'r_cov_1')
+
+        return bigauss_mixture(m0, c0, m1, c1, 0.9, size)
 
 
 class UNGMnonadd(StudentStateSpaceModel):
@@ -318,6 +314,45 @@ class FSQStudent(StudentInference):
         super(FSQStudent, self).__init__(ssm, t_dyn, t_obs, dof, fixed_dof)
 
 
+def eval_perf_scores(x, mf, Pf):
+    xD, steps, mc_sims, num_filt = mf.shape
+
+    # average RMSE over simulations
+    rmse = np.sqrt(((x[..., na] - mf) ** 2).sum(axis=0))
+    rmse_avg = rmse.mean(axis=1)
+
+    # average inclination indicator over simulations
+    lcr = np.empty((steps, mc_sims, num_filt))
+    for f in range(num_filt):
+        for k in range(steps):
+            mse = mse_matrix(x[:, k, :], mf[:, k, :, f])
+            for imc in range(mc_sims):
+                lcr[k, imc, f] = log_cred_ratio(x[:, k, imc], mf[:, k, imc, f], Pf[..., k, imc, f], mse)
+    lcr_avg = lcr.mean(axis=1)
+
+    return lcr_avg, rmse_avg
+
+
+def run_filters(filters, z):
+    num_filt = len(filters)
+    zD, steps, mc_sims = z.shape
+    xD = filters[0].ssm.xD
+
+    # init space for filtered mean and covariance
+    mf = np.zeros((xD, steps, mc_sims, num_filt))
+    Pf = np.zeros((xD, xD, steps, mc_sims, num_filt))
+
+    # run filters
+    for i, f in enumerate(filters):
+        print('Running {} ...'.format(f.__class__.__name__))
+        for imc in range(mc_sims):
+            mf[..., imc, i], Pf[..., imc, i] = f.forward_pass(z[..., imc])
+            f.reset()
+
+    # return filtered mean and covariance
+    return mf, Pf
+
+
 def synthetic_demo(steps=250, mc_sims=5000):
     """
     An experiment replicating the conditions of the synthetic example in _[1] used for testing non-additive
@@ -346,7 +381,6 @@ def synthetic_demo(steps=250, mc_sims=5000):
     ssm = SyntheticSSM()
 
     # kernel parameters for TPQ and GPQ filters
-    # TODO: Does the DOF of input density show up in kernel parameters?
     # TPQ Student
     # par_dyn_tp = np.array([[1.0, 1.0, 0.8, 0.8]])
     # par_obs_tp = np.array([[1.0, 1.0, 1.1, 1.1, 1.1, 1.1]])
@@ -371,31 +405,10 @@ def synthetic_demo(steps=250, mc_sims=5000):
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
         # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
     )
-    num_filt = len(filters)
 
-    # init space for filtered mean and covariance
-    mf = np.zeros((ssm.xD, steps, mc_sims, num_filt))
-    Pf = np.zeros((ssm.xD, ssm.xD, steps, mc_sims, num_filt))
+    mf, Pf = run_filters(filters, z)
 
-    # run filters
-    for i, f in enumerate(filters):
-        print('Running {} ...'.format(f.__class__.__name__))
-        for imc in range(mc_sims):
-            mf[..., imc, i], Pf[..., imc, i] = f.forward_pass(z[..., imc])
-            f.reset()
-
-    # average RMSE over simulations
-    rmse = np.sqrt(((x[...,  na] - mf) ** 2).sum(axis=0))
-    rmse_avg = rmse.mean(axis=1)
-
-    # # average inclination indicator over simulations
-    lcr = np.empty((steps, mc_sims, num_filt))
-    for f in range(num_filt):
-        for k in range(steps):
-            mse = mse_matrix(x[:, k, :], mf[:, k, :, f])
-            for imc in range(mc_sims):
-                lcr[k, imc, f] = log_cred_ratio(x[:, k, imc], mf[:, k, imc, f], Pf[..., k, imc, f], mse)
-    lcr_avg = lcr.mean(axis=1)
+    lcr_avg, rmse_avg = eval_perf_scores(x, mf, Pf)
 
     # print out table
     import pandas as pd
@@ -426,10 +439,58 @@ def synthetic_plots(steps=250, mc_sims=20):
 
 
 def ungm_demo(steps=250, mc_sims=100):
+    sys = UNGMnonaddSys()
+    x, z = sys.simulate(steps, mc_sims)
 
-    pass
+    # SSM noise covariances should follow the system
+    ssm = UNGMnonadd(q_cov=0.01, r_cov=0.01)
 
+    # kernel parameters for TPQ and GPQ filters
+    # TPQ Student
+    # par_dyn_tp = np.array([[1.0, 1.0, 0.8, 0.8]])
+    # par_obs_tp = np.array([[1.0, 1.0, 1.1, 1.1, 1.1, 1.1]])
+    par_dyn_tp = np.array([[1.0, 3.8]])
+    par_obs_tp = np.array([[1.0, 4.0, 4.0]])
+    # GPQ Student
+    par_dyn_gpqs = np.array([[1.0, 1, 1]])
+    par_obs_gpqs = np.array([[1.0, 5, 5, 5, 5]])
+    # GPQ Kalman
+    par_dyn_gpqk = np.array([[1.0, 2.0, 2.0]])
+    par_obs_gpqk = np.array([[1.0, 2.0, 2.0, 2.0, 2.0]])
+    # parameters of the point-set
+    par_pt = {'kappa': 1}
+
+    # init filters
+    filters = (
+        # ExtendedStudent(ssm),
+        # FSQStudent(ssm, kappa=1),
+        # UnscentedKalman(ssm, kappa=-1),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
+        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
+        # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
+        # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
+    )
+
+    mf, Pf = run_filters(filters, z)
+
+    rmse_avg, lcr_avg = eval_perf_scores(x, mf, Pf)
+    # WTF: negative RMSE?!
+
+    # print out table
+    import pandas as pd
+    f_label = [f.__class__.__name__ for f in filters]
+    m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
+    data = np.array([rmse_avg.mean(axis=0), rmse_avg.max(axis=0), lcr_avg.mean(axis=0), lcr_avg.max(axis=0)]).T
+    table = pd.DataFrame(data, f_label, m_label)
+    print(table)
+
+    # print kernel parameters
+    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(2)]
+    partable = pd.DataFrame(np.vstack((np.hstack((par_dyn_tp.squeeze(), np.zeros((1,)))), par_obs_tp)),
+                            columns=parlab, index=['dyn', 'obs'])
+    print()
+    print(partable)
 
 if __name__ == '__main__':
-    synthetic_demo(mc_sims=50)
-    # synthetic_plots()
+    # synthetic_demo(mc_sims=50)
+    ungm_demo(mc_sims=50)
