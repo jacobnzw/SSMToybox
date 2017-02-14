@@ -449,11 +449,11 @@ def ungm_demo(steps=250, mc_sims=100):
     # TPQ Student
     # par_dyn_tp = np.array([[1.0, 1.0, 0.8, 0.8]])
     # par_obs_tp = np.array([[1.0, 1.0, 1.1, 1.1, 1.1, 1.1]])
-    par_dyn_tp = np.array([[1.0, 3.8]])
-    par_obs_tp = np.array([[1.0, 4.0, 4.0]])
+    par_dyn_tp = np.array([[1.0, 0.5]])
+    par_obs_tp = np.array([[1.0, 1.0, 10.0]])
     # GPQ Student
-    par_dyn_gpqs = np.array([[1.0, 1, 1]])
-    par_obs_gpqs = np.array([[1.0, 5, 5, 5, 5]])
+    par_dyn_gpqs = np.array([[1.0, 0.5]])
+    par_obs_gpqs = np.array([[1.0, 1, 10]])
     # GPQ Kalman
     par_dyn_gpqk = np.array([[1.0, 2.0, 2.0]])
     par_obs_gpqk = np.array([[1.0, 2.0, 2.0, 2.0, 2.0]])
@@ -463,10 +463,10 @@ def ungm_demo(steps=250, mc_sims=100):
     # init filters
     filters = (
         # ExtendedStudent(ssm),
-        # FSQStudent(ssm, kappa=1),
+        # FSQStudent(ssm, kappa=1),  # TODO: why does it crash?
         # UnscentedKalman(ssm, kappa=-1),
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
-        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
+        GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
         # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
     )
