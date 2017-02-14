@@ -8,7 +8,7 @@ from inference.tpquad import TPQKalman, TPQStudent
 from inference.gpquad import GPQKalman, GPQ
 from inference.ssinfer import StudentInference
 from inference.unscented import UnscentedKalman
-from utils import log_cred_ratio
+from utils import log_cred_ratio, mse_matrix
 
 
 class SyntheticSys(StateSpaceModel):
@@ -196,8 +196,6 @@ class UNGMnonaddSys(StateSpaceModel):
         m1, c1 = self.get_pars('r_mean_1', 'r_cov_1')
 
 
-
-
 class UNGMnonadd(StudentStateSpaceModel):
     """
     Univariate Non-linear Growth Model with non-additive noise for testing.
@@ -366,7 +364,7 @@ def synthetic_demo(steps=250, mc_sims=5000):
     # init filters
     filters = (
         # ExtendedStudent(ssm),
-        # FSQStudent(ssm, kappa=1),
+        FSQStudent(ssm, kappa=1),
         # UnscentedKalman(ssm, kappa=-1),
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
         # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
@@ -386,16 +384,24 @@ def synthetic_demo(steps=250, mc_sims=5000):
             mf[..., imc, i], Pf[..., imc, i] = f.forward_pass(z[..., imc])
             f.reset()
 
-    # evaluate performance metrics
+    # average RMSE over simulations
     rmse = np.sqrt(((x[...,  na] - mf) ** 2).sum(axis=0))
-    rmse_avg = rmse.mean(axis=1)  # average RMSE over simulations
-    # TODO: inclination indicator
+    rmse_avg = rmse.mean(axis=1)
+
+    # # average inclination indicator over simulations
+    lcr = np.empty((steps, mc_sims, num_filt))
+    for f in range(num_filt):
+        for k in range(steps):
+            mse = mse_matrix(x[:, k, :], mf[:, k, :, f])
+            for imc in range(mc_sims):
+                lcr[k, imc, f] = log_cred_ratio(x[:, k, imc], mf[:, k, imc, f], Pf[..., k, imc, f], mse)
+    lcr_avg = lcr.mean(axis=1)
 
     # print out table
     import pandas as pd
     f_label = [f.__class__.__name__ for f in filters]
-    m_label = ['MEAN_RMSE', 'MAX_RMSE']
-    data = np.array([rmse_avg.mean(axis=0), rmse_avg.max(axis=0)]).T
+    m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
+    data = np.array([rmse_avg.mean(axis=0), rmse_avg.max(axis=0), lcr_avg.mean(axis=0), lcr_avg.max(axis=0)]).T
     table = pd.DataFrame(data, f_label, m_label)
     print(table)
 
