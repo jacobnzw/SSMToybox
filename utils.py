@@ -215,3 +215,66 @@ def print_table(data, row_labels=None, col_labels=None, latex=False):
     print(pd)
     if latex:
         pd.to_latex()
+
+
+def bigauss_mixture(m0, c0, m1, c1, alpha, size):
+    """
+    Draw samples of a random variable :math:`X` following a Gaussian mixture density with two components,
+    given by :math:`X \sim \alpha \mathrm{N}(m_0, C_0) + (1 - \alpha)\mathrm{N}(m_1, C_1)`.
+
+    Parameters
+    ----------
+    m0 : numpy.ndarray
+        Mean of the first component.
+    c0 : numpy.ndarray
+        Covariance of the first component.
+    m1 : numpy.ndarray
+        Mean of the second component.
+    c1 : numpy.ndarray
+        Covariance of the second component.
+    alpha : float
+        Mixing proportions, alpha
+    size : int or tuple of ints
+        Number of samples to draw, gets passed into Numpy's random number generators.
+
+    Returns
+    -------
+    : numpy.ndarray
+        Samples of a Gaussian mixture with two components.
+    """
+    mi = np.random.binomial(1, alpha, size)  # 1 w.p. alpha, 0 w.p. 1-alpha
+    n0 = np.random.multivariate_normal(m0, c0, size).T
+    n1 = np.random.multivariate_normal(m1, c1, size).T
+    n0 = n0[:, mi == 0]
+    n1 = n1[:, mi == 1]
+    return np.vstack((n0, n1))
+
+
+def multivariate_t(mean, scale, nu, size):
+    """
+    Samples of a random variable :math:`X` following a multivariate t-distribution
+    :math:`X \sim \mathrm{St}(\mu, \Sigma, \nu)`.
+
+    Parameters
+    ----------
+    mean
+        Mean vector
+    scale
+        Scale matrix
+    nu : float
+        Degrees of freedom
+    size : int or tuple of ints
+
+
+    Notes
+    -----
+    If :math:`y \sim \mathrm{N}(0, \Sigma)` and :math:`u \sim \mathrm{Gamma}(k=\nu/2, \theta=2/\nu)`,
+    then :math:`x \sim \mathrm{St}(\mu, \Sigma, \nu)`, where :math:`x = \mu + \frac{y}{\sqrt{u}}`.
+
+    Returns
+    -------
+
+    """
+    v = np.random.gamma(nu / 2, 2 / nu, size)[:, na]
+    n = np.random.multivariate_normal(np.zeros_like(mean), scale, size)
+    return mean[na, :] + n / np.sqrt(v)
