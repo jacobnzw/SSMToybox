@@ -242,12 +242,12 @@ def bigauss_mixture(m0, c0, m1, c1, alpha, size):
     : numpy.ndarray
         Samples of a Gaussian mixture with two components.
     """
-    mi = np.random.binomial(1, alpha, size)  # 1 w.p. alpha, 0 w.p. 1-alpha
+    mi = np.random.binomial(1, alpha, size).T  # 1 w.p. alpha, 0 w.p. 1-alpha
     n0 = np.random.multivariate_normal(m0, c0, size).T
     n1 = np.random.multivariate_normal(m1, c1, size).T
-    n0 = n0[:, mi == 0]
-    n1 = n1[:, mi == 1]
-    return np.vstack((n0, n1))
+    m1 = (mi[na, ...] == True)
+    m0 = np.logical_not(m1)
+    return m1 * n0 + m0 * n1
 
 
 def multivariate_t(mean, scale, nu, size):
