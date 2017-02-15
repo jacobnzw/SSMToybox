@@ -330,7 +330,7 @@ def eval_perf_scores(x, mf, Pf):
                 lcr[k, imc, f] = log_cred_ratio(x[:, k, imc], mf[:, k, imc, f], Pf[..., k, imc, f], mse)
     lcr_avg = lcr.mean(axis=1)
 
-    return lcr_avg, rmse_avg
+    return rmse_avg, lcr_avg
 
 
 def run_filters(filters, z):
@@ -382,13 +382,13 @@ def synthetic_demo(steps=250, mc_sims=5000):
 
     # kernel parameters for TPQ and GPQ filters
     # TPQ Student
-    # par_dyn_tp = np.array([[1.0, 1.0, 0.8, 0.8]])
-    # par_obs_tp = np.array([[1.0, 1.0, 1.1, 1.1, 1.1, 1.1]])
-    par_dyn_tp = np.array([[1.0, 3.8, 3.8]])
-    par_obs_tp = np.array([[1.0, 4.0, 4.0, 4.0, 4.0]])
+    # par_dyn_tp = np.array([[1.0, 3.8, 3.8]])
+    # par_obs_tp = np.array([[1.0, 4.0, 4.0, 4.0, 4.0]])
+    par_dyn_tp = np.array([[1.0, 5, 5]])
+    par_obs_tp = np.array([[0.9, 4.0, 4.0, 4.0, 4.0]])
     # GPQ Student
-    par_dyn_gpqs = np.array([[1.0, 1, 1]])
-    par_obs_gpqs = np.array([[1.0, 5, 5, 5, 5]])
+    par_dyn_gpqs = np.array([[1.0, 5, 5]])
+    par_obs_gpqs = np.array([[0.9, 4, 4, 4, 4]])
     # GPQ Kalman
     par_dyn_gpqk = np.array([[1.0, 2.0, 2.0]])
     par_obs_gpqk = np.array([[1.0, 2.0, 2.0, 2.0, 2.0]])
@@ -455,18 +455,18 @@ def ungm_demo(steps=250, mc_sims=100):
     par_dyn_gpqs = np.array([[1.0, 0.5]])
     par_obs_gpqs = np.array([[1.0, 1, 10]])
     # GPQ Kalman
-    par_dyn_gpqk = np.array([[1.0, 2.0, 2.0]])
-    par_obs_gpqk = np.array([[1.0, 2.0, 2.0, 2.0, 2.0]])
+    par_dyn_gpqk = np.array([[1.0, 0.5]])
+    par_obs_gpqk = np.array([[1.0, 1, 10]])
     # parameters of the point-set
     par_pt = {'kappa': 1}
 
     # init filters
     filters = (
         # ExtendedStudent(ssm),
-        # FSQStudent(ssm, kappa=1),  # TODO: why does it crash?
-        # UnscentedKalman(ssm, kappa=-1),
+        # FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
+        # UnscentedKalman(ssm, kappa=None),
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
-        GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
+        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
         # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
     )
@@ -474,7 +474,6 @@ def ungm_demo(steps=250, mc_sims=100):
     mf, Pf = run_filters(filters, z)
 
     rmse_avg, lcr_avg = eval_perf_scores(x, mf, Pf)
-    # WTF: negative RMSE?!
 
     # print out table
     import pandas as pd
