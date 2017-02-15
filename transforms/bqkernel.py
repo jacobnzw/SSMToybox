@@ -388,6 +388,7 @@ class RBFStudent(RBF):
         mean = np.zeros((dim, ))
         cov = np.eye(dim)
         self.num_mc = num_mc
+        self.dof = dof
         self.x_samples = multivariate_t(mean, cov, dof, size=num_mc).T  # (D, MC)
         super(RBFStudent, self).__init__(dim, par, jitter)
 

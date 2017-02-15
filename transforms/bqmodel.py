@@ -489,6 +489,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
         """
 
+        # FIXME: Q and iK should be pre-computed
         par = self.kernel.get_parameters(par)
         Q = self.kernel.exp_x_kxkx(par, par, self.points)
         iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)

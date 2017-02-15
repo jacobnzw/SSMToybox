@@ -1,6 +1,5 @@
 import numpy as np
 from numpy import newaxis as na
-from datagen import System
 from transforms.taylor import Taylor1stOrder
 from transforms.quad import FullySymmetricStudent
 from models.ssmodel import StateSpaceModel, StudentStateSpaceModel
@@ -8,7 +7,8 @@ from inference.tpquad import TPQKalman, TPQStudent
 from inference.gpquad import GPQKalman, GPQ
 from inference.ssinfer import StudentInference
 from inference.unscented import UnscentedKalman
-from utils import log_cred_ratio, mse_matrix, bigauss_mixture
+from transforms.bqkernel import RBFStudent
+from utils import log_cred_ratio, mse_matrix, bigauss_mixture, multivariate_t
 
 
 class SyntheticSys(StateSpaceModel):
@@ -309,6 +309,52 @@ class FSQStudent(StudentInference):
         super(FSQStudent, self).__init__(ssm, t_dyn, t_obs, dof, fixed_dof)
 
 
+def RBFStudentMCWeights(x, kern, num_samples, num_batch):
+    # MC approximated BQ weights using RBF kernel and Student density
+    # MC computed by batches, because without batches we would run out of memory for large sample sizes
+
+    assert isinstance(kern, RBFStudent)
+    # kernel parameters and input dimensionality
+    par = kern.par
+    dim, num_pts = x.shape
+
+    # inverse kernel matrix
+    iK = kern.eval_inv_dot(kern.par, x, scaling=False)
+    mean, scale, dof = np.zeros((dim, )), np.eye(dim), kern.dof
+
+    # compute MC estimates by batches
+    num_samples_batch = num_samples // num_batch
+    q_batch = np.zeros((num_pts, num_batch, ))
+    Q_batch = np.zeros((num_pts, num_pts, num_batch))
+    R_batch = np.zeros((dim, num_pts, num_batch))
+    for ib in range(num_batch):
+
+        # multivariate t samples
+        x_samples = multivariate_t(mean, scale, dof, num_samples_batch).T
+
+        # evaluate kernel
+        k_samples = kern.eval(par, x_samples, x, scaling=False)
+        kk_samples = k_samples[:, na, :] * k_samples[..., na]
+        xk_samples = x_samples[..., na] * k_samples[na, ...]
+
+        # intermediate sums
+        q_batch[..., ib] = k_samples.sum(axis=0)
+        Q_batch[..., ib] = kk_samples.sum(axis=0)
+        R_batch[..., ib] = xk_samples.sum(axis=1)
+
+    # MC approximations == sum the sums divide by num_samples
+    c = 1/num_samples
+    q = c * q_batch.sum(axis=-1)
+    Q = c * Q_batch.sum(axis=-1)
+    R = c * R_batch.sum(axis=-1)
+
+    # BQ moment transform weights
+    wm = q.dot(iK)
+    wc = iK.dot(Q).dot(iK)
+    wcc = R.dot(iK)
+    return wm, wc, wcc
+
+
 def eval_perf_scores(x, mf, Pf):
     xD, steps, mc_sims, num_filt = mf.shape
 
@@ -465,6 +511,15 @@ def ungm_demo(steps=250, mc_sims=100):
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
         # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
     )
+
+    # assign weights approximated by MC with lots of samples
+    pts = filters[0].tf_dyn.model.points
+    kern = filters[0].tf_dyn.model.kernel
+    filters[0].tf_dyn.wm, filters[0].tf_dyn.Wc, filters[0].tf_dyn.Wcc = RBFStudentMCWeights(pts, kern, int(1e4), 10)
+    pts = filters[0].tf_meas.model.points
+    kern = filters[0].tf_meas.model.kernel
+    filters[0].tf_meas.wm, filters[0].tf_meas.Wc, filters[0].tf_meas.Wcc = RBFStudentMCWeights(pts, kern, int(1e6),
+                                                                                               1000)
 
     mf, Pf = run_filters(filters, z)
 
