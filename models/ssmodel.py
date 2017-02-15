@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 
 import numpy as np
 from numpy import newaxis as na
+from utils import multivariate_t
 
 # NOTE : The class should recognize input dimensions of dynamics and observation models separately
 # This is because observation models do not always use all the state dimensions, e.g. radar only uses position
@@ -640,43 +641,12 @@ class StudentStateSpaceModel(StateSpaceModel):
 
     def state_noise_sample(self, size=None):
         q_mean, q_cov, q_dof = self.get_pars('q_mean', 'q_cov', 'q_dof')
-        return self._multivariate_t(q_mean, q_cov, q_dof, size).T
+        return multivariate_t(q_mean, q_cov, q_dof, size).T
 
     def measurement_noise_sample(self, size=None):
         r_mean, r_cov, r_dof = self.get_pars('r_mean', 'r_cov', 'r_dof')
-        return self._multivariate_t(r_mean, r_cov, r_dof, size).T
+        return multivariate_t(r_mean, r_cov, r_dof, size).T
 
     def initial_condition_sample(self, size=None):
         x0_mean, x0_cov, x0_dof = self.get_pars('x0_mean', 'x0_cov', 'x0_dof')
-        return self._multivariate_t(x0_mean, x0_cov, x0_dof, size).T
-
-    @staticmethod
-    def _multivariate_t(mean, scale, nu, size=None):
-        """
-        Samples of a random variable :math:`X` following a multivariate t-distribution
-        :math:`X \sim \mathrm{St}(\mu, \Sigma, \nu)`.
-
-        Parameters
-        ----------
-        mean
-            Mean vector
-        scale
-            Scale matrix
-        nu : float
-            Degrees of freedom
-        size : int or tuple of ints
-
-
-        Notes
-        -----
-        If :math:`y \sim \mathrm{N}(0, \Sigma)` and :math:`u \sim \mathrm{Gamma}(k=\nu/2, \theta=2/\nu)`,
-        then :math:`x \sim \mathrm{St}(\mu, \Sigma, \nu)`, where :math:`x = \mu + \frac{y}{\sqrt{u}}`.
-
-        Returns
-        -------
-
-        """
-        v = np.random.gamma(nu / 2, 2 / nu, size)[:, na]
-        n = np.random.multivariate_normal(np.zeros_like(mean), scale, size)
-        return mean[na, :] + n / np.sqrt(v)
-
+        return multivariate_t(x0_mean, x0_cov, x0_dof, size).T

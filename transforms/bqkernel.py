@@ -5,32 +5,7 @@ import numpy.linalg as la
 from numpy import newaxis as na
 from scipy.linalg import cho_factor, cho_solve
 
-
-# TODO: documentation
-
-def maha(x, y, V=None):
-    """
-    Mahalanobis distance of all pairs of supplied data points.
-
-    Parameters
-    ----------
-    x : numpy.ndarray
-        Data points in (N, D) matrix.
-    y : numpy.ndarray
-        Data points in (N, D) matrix.
-    V : numpy.ndarray
-        Weight matrix (D, D), if `V=None`, `V=eye(D)` is used
-
-    Returns
-    -------
-    : numpy.ndarray
-        Pair-wise Mahalanobis distance of rows of x and y with given weight matrix V.
-    """
-    if V is None:
-        V = np.eye(x.shape[1])
-    x2V = np.sum(x.dot(V) * x, 1)
-    y2V = np.sum(y.dot(V) * y, 1)
-    return (x2V[:, na] + y2V[:, na].T) - 2 * x.dot(V).dot(y.T)
+from utils import maha, multivariate_t
 
 
 class Kernel(object, metaclass=ABCMeta):
@@ -413,7 +388,7 @@ class RBFStudent(RBF):
         mean = np.zeros((dim, ))
         cov = np.eye(dim)
         self.num_mc = num_mc
-        self.x_samples = self._multivariate_t(mean, cov, dof, size=num_mc).T  # (D, MC)
+        self.x_samples = multivariate_t(mean, cov, dof, size=num_mc).T  # (D, MC)
         super(RBFStudent, self).__init__(dim, par, jitter)
 
     def exp_x_kx(self, par, x, scaling=False):
@@ -458,36 +433,6 @@ class RBFStudent(RBF):
 
     def exp_xy_kxy(self, par):
         return (1/self.num_mc) * self.eval(par, self.x_samples, self.x_samples).sum()
-
-    @staticmethod
-    def _multivariate_t(mean, scale, nu, size=None):
-        """
-        Samples of a random variable :math:`X` following a multivariate t-distribution
-        :math:`X \sim \mathrm{St}(\mu, \Sigma, \nu)`.
-
-        Parameters
-        ----------
-        mean
-            Mean vector
-        scale
-            Scale matrix
-        nu : float
-            Degrees of freedom
-        size : int or tuple of ints
-
-
-        Notes
-        -----
-        If :math:`y \sim \mathrm{N}(0, \Sigma)` and :math:`u \sim \mathrm{Gamma}(k=\nu/2, \theta=2/\nu)`,
-        then :math:`x \sim \mathrm{St}(\mu, \Sigma, \nu)`, where :math:`x = \mu + \frac{y}{\sqrt{u}}`.
-
-        Returns
-        -------
-
-        """
-        v = np.random.gamma(nu / 2, 2 / nu, size)[:, na]
-        n = np.random.multivariate_normal(np.zeros_like(mean), scale, size)
-        return mean[na, :] + n / np.sqrt(v)
 
 
 class RQ(Kernel):

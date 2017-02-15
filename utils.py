@@ -219,6 +219,8 @@ def print_table(data, row_labels=None, col_labels=None, latex=False):
 
 def bigauss_mixture(m0, c0, m1, c1, alpha, size):
     """
+    Samples from a Gaussian mixture with two components.
+
     Draw samples of a random variable :math:`X` following a Gaussian mixture density with two components,
     given by :math:`X \sim \alpha \mathrm{N}(m_0, C_0) + (1 - \alpha)\mathrm{N}(m_1, C_1)`.
 
@@ -237,6 +239,10 @@ def bigauss_mixture(m0, c0, m1, c1, alpha, size):
     size : int or tuple of ints
         Number of samples to draw, gets passed into Numpy's random number generators.
 
+    Notes
+    -----
+    Very inefficient implementation, because it throws away a lot of the samples!
+
     Returns
     -------
     : numpy.ndarray
@@ -252,6 +258,8 @@ def bigauss_mixture(m0, c0, m1, c1, alpha, size):
 
 def multivariate_t(mean, scale, nu, size):
     """
+    Samples from a multivariate Student's t-distribution.
+
     Samples of a random variable :math:`X` following a multivariate t-distribution
     :math:`X \sim \mathrm{St}(\mu, \Sigma, \nu)`.
 
@@ -278,3 +286,28 @@ def multivariate_t(mean, scale, nu, size):
     v = np.random.gamma(nu / 2, 2 / nu, size)[:, na]
     n = np.random.multivariate_normal(np.zeros_like(mean), scale, size)
     return mean[na, :] + n / np.sqrt(v)
+
+
+def maha(x, y, V=None):
+    """
+    Mahalanobis distance of all pairs of supplied data points.
+
+    Parameters
+    ----------
+    x : numpy.ndarray
+        Data points in (N, D) matrix.
+    y : numpy.ndarray
+        Data points in (N, D) matrix.
+    V : numpy.ndarray
+        Weight matrix (D, D), if `V=None`, `V=eye(D)` is used
+
+    Returns
+    -------
+    : numpy.ndarray
+        Pair-wise Mahalanobis distance of rows of x and y with given weight matrix V.
+    """
+    if V is None:
+        V = np.eye(x.shape[1])
+    x2V = np.sum(x.dot(V) * x, 1)
+    y2V = np.sum(y.dot(V) * y, 1)
+    return (x2V[:, na] + y2V[:, na].T) - 2 * x.dot(V).dot(y.T)
