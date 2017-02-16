@@ -352,7 +352,7 @@ def RBFStudentMCWeights(x, kern, num_samples, num_batch):
     wm = q.dot(iK)
     wc = iK.dot(Q).dot(iK)
     wcc = R.dot(iK)
-    return wm, wc, wcc
+    return wm, wc, wcc, Q
 
 
 def eval_perf_scores(x, mf, Pf):
@@ -515,11 +515,14 @@ def ungm_demo(steps=250, mc_sims=100):
     # assign weights approximated by MC with lots of samples
     pts = filters[0].tf_dyn.model.points
     kern = filters[0].tf_dyn.model.kernel
-    filters[0].tf_dyn.wm, filters[0].tf_dyn.Wc, filters[0].tf_dyn.Wcc = RBFStudentMCWeights(pts, kern, int(1e4), 10)
+    wm, wc, wcc, Q = RBFStudentMCWeights(pts, kern, int(1e6), 1000)
+    filters[0].tf_dyn.wm, filters[0].tf_dyn.Wc, filters[0].tf_dyn.Wcc = wm, wc, wcc
+    filters[0].tf_dyn.Q = Q
     pts = filters[0].tf_meas.model.points
     kern = filters[0].tf_meas.model.kernel
-    filters[0].tf_meas.wm, filters[0].tf_meas.Wc, filters[0].tf_meas.Wcc = RBFStudentMCWeights(pts, kern, int(1e6),
-                                                                                               1000)
+    wm, wc, wcc, Q = RBFStudentMCWeights(pts, kern, int(1e6), 1000)
+    filters[0].tf_meas.wm, filters[0].tf_meas.Wc, filters[0].tf_meas.Wcc = wm, wc, wcc
+    filters[0].tf_meas.Q = Q
 
     mf, Pf = run_filters(filters, z)
 

@@ -270,6 +270,24 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
     def _fcn_eval(self, fcn, x, fcn_par):
         return np.apply_along_axis(fcn, 0, x, fcn_par)
 
+    def _covariance(self, weights, fcn_evals, mean_out):
+        """
+        Transformed covariance.
+
+        Parameters
+        ----------
+        weights : numpy.ndarray
+        fcn_evals : numpy.ndarray
+        mean_out : numpy.ndarray
+
+        Returns
+        -------
+        : numpy.ndarray
+
+        """
+        expected_model_var = self.model.exp_model_variance(fcn_evals, Q=self.Q, iK=self.iK)
+        return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + expected_model_var
+
     def _integral_variance(self, points, kern_par):
         pass
 
@@ -468,7 +486,7 @@ class TPQ(BQTransform):
         return np.apply_along_axis(fcn, 0, x, fcn_par)
 
     def _covariance(self, weights, fcn_evals, mean_out):
-        expected_model_var = self.model.exp_model_variance(fcn_evals)
+        expected_model_var = self.model.exp_model_variance(fcn_evals, Q=self.Q, iK=self.iK)
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + expected_model_var
 
     def _integral_variance(self, points, kern_par):

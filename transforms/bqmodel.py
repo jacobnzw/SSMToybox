@@ -475,24 +475,28 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         var = np.squeeze(kxx - np.einsum('im,mn,mi->i', kx, iK, kx.T))
         return mean, var
 
-    def exp_model_variance(self, fcn_obs=None, par=None):
+    def exp_model_variance(self, fcn_obs=None, par=None, Q=None, iK=None):
         """
 
         Parameters
         ----------
         fcn_obs : numpy.ndarray
         par : numpy.ndarray
+        Q : numpy.ndarray
+        iK : numpy.ndarray
 
         Returns
         -------
         : float
 
         """
+        if Q is None:
+            par = self.kernel.get_parameters(par)
+            Q = self.kernel.exp_x_kxkx(par, par, self.points)
+        if iK is None:
+            par = self.kernel.get_parameters(par)
+            iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
 
-        # FIXME: Q and iK should be pre-computed
-        par = self.kernel.get_parameters(par)
-        Q = self.kernel.exp_x_kxkx(par, par, self.points)
-        iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
         return self.kernel.scale.squeeze() ** 2 * (1 - np.trace(Q.dot(iK)))
 
     def integral_variance(self, fcn_obs, par=None):
@@ -713,23 +717,28 @@ class StudentTProcess(Model):
         scale = (nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (nu - 2 + self.num_pts)
         return mean, scale * var
 
-    def exp_model_variance(self, fcn_obs, par=None):
+    def exp_model_variance(self, fcn_obs, par=None, Q=None, iK=None):
         """
 
         Parameters
         ----------
         fcn_obs
         par
+        Q
+        iK
 
         Returns
         -------
 
         """
 
-        par = self.kernel.get_parameters(par)
+        if Q is None:
+            par = self.kernel.get_parameters(par)
+            Q = self.kernel.exp_x_kxkx(par, par, self.points)
+        if iK is None:
+            par = self.kernel.get_parameters(par)
+            iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
 
-        Q = self.kernel.exp_x_kxkx(par, par, self.points)
-        iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
         fcn_obs = np.squeeze(fcn_obs)
         scale = (self.nu - 2 + fcn_obs.dot(iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
         return scale * self.kernel.scale.squeeze() ** 2 * (1 - np.trace(Q.dot(iK)))
