@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from numpy import newaxis as na
 from transforms.taylor import Taylor1stOrder
 from transforms.quad import FullySymmetricStudent
@@ -8,6 +9,7 @@ from inference.gpquad import GPQKalman, GPQ
 from inference.ssinfer import StudentInference
 from inference.unscented import UnscentedKalman
 from transforms.bqkernel import RBFStudent
+from transforms.bayesquad import BQTransform
 from utils import log_cred_ratio, mse_matrix, bigauss_mixture, multivariate_t
 
 
@@ -143,14 +145,14 @@ class UNGMnonaddSys(StateSpaceModel):
         pars = {
             'x0_mean': np.atleast_1d(0.0),
             'x0_cov': np.atleast_2d(1.0),
-            'q_mean_0': np.zeros(self.rD),
-            'q_mean_1': np.zeros(self.rD),
-            'q_cov_0': 0.01 * np.eye(self.qD),
-            'q_cov_1': 5 * np.eye(self.qD),
+            'q_mean_0': np.zeros(self.qD),
+            'q_mean_1': np.zeros(self.qD),
+            'q_cov_0': 10 * np.eye(self.qD),
+            'q_cov_1': 100 * np.eye(self.qD),
             'r_mean_0': np.zeros(self.rD),
             'r_mean_1': np.zeros(self.rD),
             'r_cov_0': 0.01 * np.eye(self.rD),
-            'r_cov_1': 5 * np.eye(self.rD),
+            'r_cov_1': 1 * np.eye(self.rD),
         }
         super(UNGMnonaddSys, self).__init__(**pars)
 
@@ -184,7 +186,7 @@ class UNGMnonaddSys(StateSpaceModel):
         m0, c0 = self.get_pars('r_mean_0', 'r_cov_0')
         m1, c1 = self.get_pars('r_mean_1', 'r_cov_1')
 
-        return bigauss_mixture(m0, c0, m1, c1, 0.9, size)
+        return bigauss_mixture(m0, c0, m1, c1, 0.8, size)
 
 
 class UNGMnonadd(StudentStateSpaceModel):
@@ -484,12 +486,12 @@ def ungm_demo(steps=250, mc_sims=100):
     x, z = sys.simulate(steps, mc_sims)
 
     # SSM noise covariances should follow the system
-    ssm = UNGMnonadd(q_cov=0.01, r_cov=0.01)
+    ssm = UNGMnonadd(q_cov=1, r_cov=0.01)
 
     # kernel parameters for TPQ and GPQ filters
     # TPQ Student
-    # par_dyn_tp = np.array([[1.0, 1.0, 0.8, 0.8]])
-    # par_obs_tp = np.array([[1.0, 1.0, 1.1, 1.1, 1.1, 1.1]])
+    # par_dyn_tp = np.array([[1.8, 3.0]])
+    # par_obs_tp = np.array([[0.4, 1.0, 1.0]])
     par_dyn_tp = np.array([[1.0, 0.5]])
     par_obs_tp = np.array([[1.0, 1.0, 10.0]])
     # GPQ Student
@@ -505,7 +507,7 @@ def ungm_demo(steps=250, mc_sims=100):
     filters = (
         # ExtendedStudent(ssm),
         # FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
-        # UnscentedKalman(ssm, kappa=None),
+        UnscentedKalman(ssm, kappa=None),
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
         # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
@@ -513,16 +515,21 @@ def ungm_demo(steps=250, mc_sims=100):
     )
 
     # assign weights approximated by MC with lots of samples
-    pts = filters[0].tf_dyn.model.points
-    kern = filters[0].tf_dyn.model.kernel
+    # very dirty code
+    pts = filters[1].tf_dyn.model.points
+    kern = filters[1].tf_dyn.model.kernel
     wm, wc, wcc, Q = RBFStudentMCWeights(pts, kern, int(1e6), 1000)
-    filters[0].tf_dyn.wm, filters[0].tf_dyn.Wc, filters[0].tf_dyn.Wcc = wm, wc, wcc
-    filters[0].tf_dyn.Q = Q
-    pts = filters[0].tf_meas.model.points
-    kern = filters[0].tf_meas.model.kernel
+    for f in filters:
+        if isinstance(f.tf_dyn, BQTransform):
+            f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
+            f.tf_dyn.Q = Q
+    pts = filters[1].tf_meas.model.points
+    kern = filters[1].tf_meas.model.kernel
     wm, wc, wcc, Q = RBFStudentMCWeights(pts, kern, int(1e6), 1000)
-    filters[0].tf_meas.wm, filters[0].tf_meas.Wc, filters[0].tf_meas.Wcc = wm, wc, wcc
-    filters[0].tf_meas.Q = Q
+    for f in filters:
+        if isinstance(f.tf_meas, BQTransform):
+            f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
+            f.tf_meas.Q = Q
 
     mf, Pf = run_filters(filters, z)
 
@@ -543,6 +550,31 @@ def ungm_demo(steps=250, mc_sims=100):
     print()
     print(partable)
 
+    # plots
+    time = np.arange(1, steps+1)
+    plt.figure()
+
+    # true state
+    plt.plot(time, x[0, :, 0], 'r--', alpha=0.5)
+
+    # measurements
+    plt.plot(time, z[0, :, 0], 'k.')
+
+    # filtered state and covariance
+    xhat = mf[0, :, 0, 0]
+    std = np.sqrt(Pf[0, 0, :, 0, 0])
+    plt.plot(time, xhat, 'b-', label='UKF')
+    plt.fill_between(time, xhat - 2*std, xhat + 2*std, color='b', alpha=0.15)
+
+    xhat = mf[0, :, 0, 1]
+    std = np.sqrt(Pf[0, 0, :, 0, 1])
+    plt.plot(time, xhat, 'g-', label='TPQSF')
+    plt.fill_between(time, xhat - 2 * std, xhat + 2 * std, color='g', alpha=0.15)
+
+    plt.legend()
+    plt.axis([None, None, -50, 50])
+    plt.show()
+
 if __name__ == '__main__':
     # synthetic_demo(mc_sims=50)
-    ungm_demo(mc_sims=50)
+    ungm_demo(mc_sims=100)
