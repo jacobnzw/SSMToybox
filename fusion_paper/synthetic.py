@@ -449,9 +449,26 @@ def synthetic_demo(steps=250, mc_sims=5000):
         # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
     )
 
+    # assign weights approximated by MC with lots of samples
+    # very dirty code
+    pts = filters[1].tf_dyn.model.points
+    kern = filters[1].tf_dyn.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    for f in filters:
+        if isinstance(f.tf_dyn, BQTransform):
+            f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
+            f.tf_dyn.Q = Q
+    pts = filters[1].tf_meas.model.points
+    kern = filters[1].tf_meas.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    for f in filters:
+        if isinstance(f.tf_meas, BQTransform):
+            f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
+            f.tf_meas.Q = Q
+
     mf, Pf = run_filters(filters, z)
 
-    lcr_avg, rmse_avg = eval_perf_scores(x, mf, Pf)
+    rmse_avg, lcr_avg = eval_perf_scores(x, mf, Pf)
 
     # print out table
     import pandas as pd
