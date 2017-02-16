@@ -590,6 +590,84 @@ class ReentryRadar(GaussianSystem):
         pass
 
 
+class ReentryRadarSimple(GaussianSystem):
+    """
+    Radar tracking of the reentry vehicle as described in [1]_.
+    High velocity projectile is entering atmosphere, radar positioned 100,000ft above Earth's surface (and 100,
+    000ft horizontally) is producing range measurements.
+
+    State
+    -----
+    [p, v, x5]
+    p - altitude,
+    v - velocity,
+    x5 - aerodynamic parameter
+
+    Measurements
+    ------------
+    range and bearing
+
+
+    References
+    ----------
+    .. [1] S. J. Julier, J. K. Uhlmann, and H. F. Durrant-Whyte, "A New Method for the Nonlinear Transformation
+    of Means and Covariances in Filters and Estimators," IEEE Trans. Automat. Contr., vol. 45, no. 3, pp. 477–482, 2000.
+
+    """
+
+    xD = 3
+    zD = 1  # measurement dimension
+    qD = 3
+    rD = 1  # measurement noise dimension
+    q_additive = True
+    r_additive = True
+
+    R0 = 6371  # Earth's radius [km]  #2.0925e7  # Earth's radius [ft]
+    # radar location: 30km (~100k ft) above the surface, radar-to-body horizontal range
+    sx, sy = 30, 30
+    Gamma = 1/6.096
+
+    def __init__(self):
+        """
+
+        Parameters
+        ----------
+        dt :
+            time interval between two consecutive measurements
+        """
+        kwargs = {
+            'x0_mean': np.array([90, 6, 1.5]),  # km, km/s
+            'x0_cov': np.diag([0.3048**2, 1.2192**2, 1e-4]),  # km^2, km^2/s^2
+            'q_mean': np.zeros(self.qD),
+            'q_cov': np.array([[0, 0, 0],
+                               [0, 0, 0],
+                               [0, 0, 0]]),
+            'r_mean': np.zeros(self.rD),
+            'r_cov': np.array([[0.03048**2]]),
+            'q_factor': np.vstack(np.eye(3))
+        }
+        super(ReentryRadarSimple, self).__init__(**kwargs)
+
+    def dyn_fcn(self, x, q, pars):
+        return np.array([-x[1] + q[0],
+                         -np.exp(-self.Gamma * x[0]) * x[1]**2 * x[2] + q[1],
+                         q[2]])
+
+    def meas_fcn(self, x, r, pars):
+        # range
+        rng = np.sqrt(self.sx ** 2 + (x[0] - self.sy) ** 2)
+        return np.array([rng]) + r
+
+    def par_fcn(self, time):
+        pass
+
+    def dyn_fcn_dx(self, x, q, pars):
+        pass
+
+    def meas_fcn_dx(self, x, r, pars):
+        pass
+
+
 def radar_tracking_demo():
     import matplotlib.pyplot as plt
     from matplotlib.gridspec import GridSpec
