@@ -33,11 +33,11 @@ class SyntheticSys(StateSpaceModel):
             'q_mean_0': np.zeros(self.qD),
             'q_mean_1': np.zeros(self.qD),
             'q_cov_0': 0.01 * np.eye(self.qD),
-            'q_cov_1': 5 * np.eye(self.qD),
+            'q_cov_1': 1 * np.eye(self.qD),
             'r_mean_0': np.zeros(self.rD),
             'r_mean_1': np.zeros(self.rD),
             'r_cov_0': 0.01 * np.eye(self.rD),
-            'r_cov_1': 5 * np.eye(self.rD),
+            'r_cov_1': 1 * np.eye(self.rD),
         }
         super(SyntheticSys, self).__init__(**pars)
 
@@ -66,7 +66,7 @@ class SyntheticSys(StateSpaceModel):
 
     def measurement_noise_sample(self, size=None):
         m0, m1, c0, c1 = self.get_pars('r_mean_0', 'r_mean_1', 'r_cov_0', 'r_cov_1')
-        return bigauss_mixture(m0, c0, m1, c1, 0.95, size)
+        return bigauss_mixture(m0, c0, m1, c1, 0.7, size)
 
     def initial_condition_sample(self, size=None):
         m, c = self.get_pars('x0_mean', 'x0_cov')
@@ -412,23 +412,24 @@ def synthetic_demo(steps=250, mc_sims=5000):
     """
 
     # generate data
-    # sys = SyntheticSys()
-    # x, z = sys.simulate(steps, mc_sims)
+    sys = SyntheticSys()
+    x, z = sys.simulate(steps, mc_sims)
 
     # load data from mat-file
-    from scipy.io import loadmat
-    datadict = loadmat('synth_data', variable_names=('x', 'y'))
-    x, z = datadict['x'][:, 1:, :], datadict['y'][:, 1:, :]
+    # from scipy.io import loadmat
+    # datadict = loadmat('synth_data', variable_names=('x', 'y'))
+    # x, z = datadict['x'][:, 1:, :], datadict['y'][:, 1:, :]
 
     # init SSM for the filter
     ssm = SyntheticSSM()
 
     # kernel parameters for TPQ and GPQ filters
     # TPQ Student
-    # par_dyn_tp = np.array([[1.0, 3.8, 3.8]])
-    # par_obs_tp = np.array([[1.0, 4.0, 4.0, 4.0, 4.0]])
-    par_dyn_tp = np.array([[1.0, 5, 5]])
-    par_obs_tp = np.array([[0.9, 4.0, 4.0, 4.0, 4.0]])
+    a, b = 10, 30
+    par_dyn_tp = np.array([[0.4, a, a]])
+    par_obs_tp = np.array([[0.4, b, b, b, b]])
+    # par_dyn_tp = np.array([[1.0, 1.7, 1.7]])
+    # par_obs_tp = np.array([[1.1, 3.0, 3.0, 3.0, 3.0]])
     # GPQ Student
     par_dyn_gpqs = np.array([[1.0, 5, 5]])
     par_obs_gpqs = np.array([[0.9, 4, 4, 4, 4]])
@@ -436,12 +437,12 @@ def synthetic_demo(steps=250, mc_sims=5000):
     par_dyn_gpqk = np.array([[1.0, 2.0, 2.0]])
     par_obs_gpqk = np.array([[1.0, 2.0, 2.0, 2.0, 2.0]])
     # parameters of the point-set
-    par_pt = {'kappa': 1}
+    par_pt = {'kappa': None}
 
     # init filters
     filters = (
         # ExtendedStudent(ssm),
-        FSQStudent(ssm, kappa=1),
+        FSQStudent(ssm, kappa=None),
         # UnscentedKalman(ssm, kappa=-1),
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
         # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
