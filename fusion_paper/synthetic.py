@@ -311,7 +311,7 @@ class FSQStudent(StudentInference):
         super(FSQStudent, self).__init__(ssm, t_dyn, t_obs, dof, fixed_dof)
 
 
-def RBFStudentMCWeights(x, kern, num_samples, num_batch):
+def rbf_student_mc_weights(x, kern, num_samples, num_batch):
     # MC approximated BQ weights using RBF kernel and Student density
     # MC computed by batches, because without batches we would run out of memory for large sample sizes
 
@@ -518,14 +518,14 @@ def ungm_demo(steps=250, mc_sims=100):
     # very dirty code
     pts = filters[1].tf_dyn.model.points
     kern = filters[1].tf_dyn.model.kernel
-    wm, wc, wcc, Q = RBFStudentMCWeights(pts, kern, int(1e6), 1000)
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
     for f in filters:
         if isinstance(f.tf_dyn, BQTransform):
             f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
             f.tf_dyn.Q = Q
     pts = filters[1].tf_meas.model.points
     kern = filters[1].tf_meas.model.kernel
-    wm, wc, wcc, Q = RBFStudentMCWeights(pts, kern, int(1e6), 1000)
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
     for f in filters:
         if isinstance(f.tf_meas, BQTransform):
             f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
@@ -576,5 +576,5 @@ def ungm_demo(steps=250, mc_sims=100):
     plt.show()
 
 if __name__ == '__main__':
-    # synthetic_demo(mc_sims=50)
-    ungm_demo(mc_sims=100)
+    synthetic_demo(mc_sims=50)
+    # ungm_demo(mc_sims=100)
