@@ -1153,6 +1153,8 @@ def coordinated_demo(steps=100, mc_sims=100):
 
     mf, Pf = run_filters(filters, z)
 
+    # TODO: separate out dimensions for position, velocity, turn rate,
+    # TODO: compare with results in "On Gaussian Optimal Smoothing of Non-Linear State Space Models"
     rmse_avg, lcr_avg = eval_perf_scores(x, mf, Pf)
 
     # print out table
