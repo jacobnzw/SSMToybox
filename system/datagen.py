@@ -288,18 +288,18 @@ class System(object, metaclass=ABCMeta):
 
         # allocate space for system state and noise
         steps = int(np.floor(duration / dt))
-        x = np.zeros((self.xD, steps, mc_sims))
-        q = self.state_noise_sample((mc_sims, steps))
+        x = np.zeros((self.xD, steps+1, mc_sims))
+        q = self.state_noise_sample((mc_sims, steps+1))
         x0 = self.initial_condition_sample(mc_sims)  # (D, mc_sims)
         x[:, 0, :] = x0  # store initial states at k=0
 
         # continuous-time system simulation
         for imc in range(mc_sims):
-            for k in range(1, steps):
+            for k in range(1, steps+1):
                 theta = self.par_fcn(k - 1)
                 # computes next state x(t + dt) by ODE integration
                 x[:, k, imc] = ode_method(self.dyn_fcn, x[:, k - 1, imc], q[:, k - 1, imc], theta, dt)
-        return x
+        return x[:, 1:, :]
 
     def simulate_measurements(self, x, mc_per_step=1):
         # x - state trajectory, freq - sampling frequency [Hz],
@@ -311,7 +311,7 @@ class System(object, metaclass=ABCMeta):
         r = self.measurement_noise_sample((mc_per_step, steps))
         y = np.zeros((self.zD, steps, mc_per_step))
         for imc in range(mc_per_step):
-            for k in range(1, steps):
+            for k in range(steps):
                 theta = self.par_fcn(k - 1)
                 y[:, k, imc] = self.meas_fcn(x[:, k], r[:, k, imc], theta)
         return y
