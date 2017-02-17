@@ -10,6 +10,7 @@ from inference.ssinfer import StudentInference
 from inference.unscented import UnscentedKalman
 from transforms.bqkernel import RBFStudent
 from transforms.bayesquad import BQTransform
+from system.datagen import System
 from utils import log_cred_ratio, mse_matrix, bigauss_mixture, multivariate_t
 
 
@@ -231,6 +232,175 @@ class UNGMnonadd(StudentStateSpaceModel):
 
     def meas_fcn_dx(self, x, r, pars):
         return np.asarray([0.1 * r[0] * x[0], 0.05 * x[0] ** 2])
+
+
+class ReentryRadarSimpleSys(System):
+    """
+    Radar tracking of the reentry vehicle as described in [1]_.
+    High velocity projectile is entering atmosphere, radar positioned 100,000ft above Earth's surface (and 100,
+    000ft horizontally) is producing range measurements.
+
+    State
+    -----
+    [p, v, x5]
+    p - altitude,
+    v - velocity,
+    x5 - aerodynamic parameter
+
+    Measurements
+    ------------
+    range and bearing
+
+
+    References
+    ----------
+    .. [1] S. J. Julier, J. K. Uhlmann, and H. F. Durrant-Whyte, "A New Method for the Nonlinear Transformation
+    of Means and Covariances in Filters and Estimators," IEEE Trans. Automat. Contr., vol. 45, no. 3,
+    pp. 477–482, 2000.
+
+    """
+
+    xD = 3
+    zD = 1  # measurement dimension
+    qD = 3
+    rD = 1  # measurement noise dimension
+    q_additive = True
+    r_additive = True
+
+    R0 = 6371  # Earth's radius [km]  #2.0925e7  # Earth's radius [ft]
+    # radar location: 30km (~100k ft) above the surface, radar-to-body horizontal range
+    sx, sy = 30, 30
+    Gamma = 1 / 6.096
+
+    def __init__(self):
+        """
+
+        Parameters
+        ----------
+        dt :
+            time interval between two consecutive measurements
+        """
+        kwargs = {
+            'x0_mean': np.array([90, 6, 1.5]),  # km, km/s
+            'x0_cov': np.diag([0.3048 ** 2, 1.2192 ** 2, 1e-4]),  # km^2, km^2/s^2
+            'q_mean': np.zeros(self.qD),
+            'q_cov': 0.1 * np.eye(self.qD),
+            'r_mean_0': np.zeros(self.rD),
+            'r_cov_0': np.atleast_2d(0.03048 ** 2),
+            'r_mean_1': np.zeros(self.rD),
+            'r_cov_1': np.atleast_2d(0.1),
+            'q_factor': np.eye(3),
+        }
+        super(ReentryRadarSimpleSys, self).__init__(**kwargs)
+
+    def dyn_fcn(self, x, q, pars):
+        return np.array([-x[1] + q[0],
+                         -np.exp(-self.Gamma * x[0]) * x[1] ** 2 * x[2] + q[1],
+                         q[2]])
+
+    def meas_fcn(self, x, r, pars):
+        # range
+        rng = np.sqrt(self.sx ** 2 + (x[0] - self.sy) ** 2)
+        return np.array([rng]) + r
+
+    def par_fcn(self, time):
+        pass
+
+    def dyn_fcn_dx(self, x, q, pars):
+        pass
+
+    def meas_fcn_dx(self, x, r, pars):
+        pass
+
+    def initial_condition_sample(self, size=None):
+        m0, c0 = self.get_pars('x0_mean', 'x0_cov')
+        return np.random.multivariate_normal(m0, c0, size).T
+
+    def state_noise_sample(self, size=None):
+        m0, c0 = self.get_pars('q_mean', 'q_cov')
+        return np.random.multivariate_normal(m0, c0, size).T
+
+    def measurement_noise_sample(self, size=None):
+        m0, c0, m1, c1 = self.get_pars('r_mean_0', 'r_cov_0', 'r_mean_1', 'r_cov_1')
+        return bigauss_mixture(m0, c0, m1, c1, 0.95, size)
+
+
+class ReentryRadarSimple(StudentStateSpaceModel):
+    """
+    Radar tracking of the reentry vehicle as described in [1]_.
+    Vehicle is entering Earth's atmosphere at high altitude and with great speed, ground radar is tracking it.
+
+    State
+    -----
+    [px, py, vx, vy, x5]
+    (px, py) - position,
+    (vx, vy) - velocity,
+    x5 - aerodynamic parameter
+
+    Measurements
+    ------------
+    range and bearing
+
+
+    References
+    ----------
+    .. [1] Julier, S. J., & Uhlmann, J. K. (2004). Unscented Filtering and Nonlinear Estimation.
+           Proceedings of the IEEE, 92(3), 401-422
+
+    """
+
+    xD = 3
+    zD = 1  # measurement dimension
+    qD = 3
+    rD = 1  # measurement noise dimension
+    q_additive = True
+    r_additive = True
+
+    R0 = 6371  # Earth's radius [km]  #2.0925e7  # Earth's radius [ft]
+    # radar location: 30km (~100k ft) above the surface, radar-to-body horizontal range
+    sx, sy = 30, 30
+    Gamma = 1 / 6.096
+
+    def __init__(self, dt=0.1):
+        """
+
+        Parameters
+        ----------
+        dt :
+            time interval between two consecutive measurements
+        """
+        self.dt = dt
+        kwargs = {
+            'x0_mean': np.array([90, 6, 1.7]),  # km, km/s
+            'x0_cov': np.diag([0.3048 ** 2, 1.2192 ** 2, 10]),  # km^2, km^2/s^2
+            'q_mean': np.zeros(self.qD),
+            'q_cov': 0.1 * np.eye(self.qD),
+            'q_dof': 4.0,
+            'r_mean': np.zeros(self.rD),
+            'r_cov': np.array([[0.03048 ** 2]]),
+            'r_dof': 4.0,
+            'q_gain': np.eye(3),
+        }
+        super(ReentryRadarSimple, self).__init__(**kwargs)
+
+    def dyn_fcn(self, x, q, pars):
+        return np.array([x[0] - self.dt * x[1] + q[0],
+                         x[1] - self.dt * np.exp(-self.Gamma * x[0]) * x[1] ** 2 * x[2] + q[1],
+                         x[2] + q[2]])
+
+    def meas_fcn(self, x, r, pars):
+        # range
+        rng = np.sqrt(self.sx ** 2 + (x[0] - self.sy) ** 2)
+        return np.array([rng]) + r
+
+    def par_fcn(self, time):
+        pass
+
+    def dyn_fcn_dx(self, x, q, pars):
+        pass
+
+    def meas_fcn_dx(self, x, r, pars):
+        pass
 
 
 # Student's t-filters
@@ -593,6 +763,78 @@ def ungm_demo(steps=250, mc_sims=100):
     plt.axis([None, None, -50, 50])
     plt.show()
 
+
+def reentry_tracking_demo(mc_sims=100):
+
+    # generate some data (true trajectory)
+    sys = ReentryRadarSimpleSys()
+    x = sys.simulate_trajectory(method='rk4', dt=0.1, duration=30, mc_sims=mc_sims)
+
+    # pick only non-divergent trajectories
+    x = x[..., np.all(x >= 0, axis=(0, 1))]
+    mc = x.shape[2]
+
+    z = np.zeros((sys.zD,) + x.shape[1:])
+    for i in range(mc):
+        z[..., i] = sys.simulate_measurements(x[..., i]).squeeze()
+
+    # init SSM for the filters
+    ssm = ReentryRadarSimple(dt=0.1)
+
+    par_dyn_tp = np.array([[0.5, 10, 10, 10]])
+    par_obs_tp = np.array([[0.5, 15, 20, 20]])
+    par_dyn_gpqk = par_dyn_tp
+    par_obs_gpqk = par_obs_tp
+    par_pt = {'kappa': None}
+
+    # init filters
+    filters = (
+        # ExtendedStudent(ssm),
+        FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
+        UnscentedKalman(ssm, kappa=None),
+        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
+        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
+        # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
+        # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
+    )
+
+    # assign weights approximated by MC with lots of samples
+    # very dirty code
+    # pts = filters[1].tf_dyn.model.points
+    # kern = filters[1].tf_dyn.model.kernel
+    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    # for f in filters:
+    #     if isinstance(f.tf_dyn, BQTransform):
+    #         f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
+    #         f.tf_dyn.Q = Q
+    # pts = filters[1].tf_meas.model.points
+    # kern = filters[1].tf_meas.model.kernel
+    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    # for f in filters:
+    #     if isinstance(f.tf_meas, BQTransform):
+    #         f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
+    #         f.tf_meas.Q = Q
+
+    mf, Pf = run_filters(filters, z)
+
+    rmse_avg, lcr_avg = eval_perf_scores(x, mf, Pf)
+
+    # print out table
+    import pandas as pd
+    f_label = [f.__class__.__name__ for f in filters]
+    m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
+    data = np.array([rmse_avg.mean(axis=0), rmse_avg.max(axis=0), lcr_avg.mean(axis=0), lcr_avg.max(axis=0)]).T
+    table = pd.DataFrame(data, f_label, m_label)
+    print(table)
+
+    # print kernel parameters
+    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(sys.xD)]
+    partable = pd.DataFrame(np.vstack((par_dyn_tp, par_obs_tp)), columns=parlab, index=['dyn', 'obs'])
+    print()
+    print(partable)
+
+
 if __name__ == '__main__':
-    synthetic_demo(mc_sims=50)
+    # synthetic_demo(mc_sims=50)
     # ungm_demo(mc_sims=100)
+    reentry_tracking_demo(mc_sims=50)
