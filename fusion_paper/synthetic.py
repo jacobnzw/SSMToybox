@@ -464,7 +464,7 @@ class CoordinatedTurnBOTSys(StateSpaceModel):
                  [0, 0, 0, 0, self.rho_2 * self.dt]])
         kwargs = {
             'x0_mean': np.array([1000, 300, 1000, 0, -3.0 * np.pi / 180]),  # m, m/s, m m/s, rad/s
-            'x0_cov': np.diag([100, 10, 100, 10, 0.01]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
+            'x0_cov': 1e-5 * np.diag([100, 10, 100, 10, 0.01]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
             'q_mean_0': np.zeros(self.qD),
             'q_cov_0': q_cov,
             'q_mean_1': np.zeros(self.qD),
@@ -599,7 +599,7 @@ class CoordinatedTurnBOT(StudentStateSpaceModel):
         self.sensor_pos = sensor_pos  # np.vstack((np.eye(2), -np.eye(2)))
         kwargs = {
             'x0_mean': np.array([1000, 300, 1000, 0, -3.0 * np.pi / 180]),  # m, m/s, m m/s, rad/s
-            'x0_cov': np.diag([100, 10, 100, 10, 0.01]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
+            'x0_cov': 1e-5 * np.diag([100, 10, 100, 10, 0.01]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
             'x0_dof': 4.0,
             'q_mean': np.zeros(self.qD),
             'q_cov': np.array(
@@ -1105,7 +1105,10 @@ def reentry_tracking_demo(mc_sims=100):
 def coordinated_demo(steps=100, mc_sims=100):
 
     # sensor positions
-    S = 1000 * np.vstack((np.eye(2), -np.eye(2)))
+    S = np.array([[-2500, 5000],
+                  [0, -5000],
+                  [2500, 5000],
+                  [5000, -5000]])
     tau = 0.1
     # generate data
     sys = CoordinatedTurnBOTSys(dt=tau, sensor_pos=S)
@@ -1123,8 +1126,8 @@ def coordinated_demo(steps=100, mc_sims=100):
     # init filters
     filters = (
         # ExtendedStudent(ssm),
-        FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
-        # UnscentedKalman(ssm, kappa=None),
+        # FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
+        UnscentedKalman(ssm, kappa=None),
         # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
         # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
@@ -1171,4 +1174,4 @@ if __name__ == '__main__':
     # synthetic_demo(mc_sims=50)
     # ungm_demo(mc_sims=100)
     # reentry_tracking_demo(mc_sims=50)
-    coordinated_demo(mc_sims=100)
+    coordinated_demo(steps=100, mc_sims=100)
