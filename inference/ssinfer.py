@@ -50,7 +50,7 @@ class StateSpaceInference(metaclass=ABCMeta):
         self.pr_xx_cov = self.fi_cov.copy()
 
         # pad data with zeros so that indices align with states
-        data = np.hstack((self.fi_mean[:, 0, na], data))
+        data = np.hstack((np.zeros((self.D, 1)), data))
 
         for k in range(1, self.N+1):  # iterate over columns of data
 
