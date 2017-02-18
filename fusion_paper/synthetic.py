@@ -1153,17 +1153,29 @@ def coordinated_demo(steps=100, mc_sims=100):
 
     mf, Pf = run_filters(filters, z)
 
-    # TODO: separate out dimensions for position, velocity, turn rate,
     # TODO: compare with results in "On Gaussian Optimal Smoothing of Non-Linear State Space Models"
-    rmse_avg, lcr_avg = eval_perf_scores(x, mf, Pf)
+    pos_x, pos_mf, pos_Pf = x[[0, 2], ...], mf[[0, 2], ...], Pf[np.ix_([0, 2], [0, 2])]
+    vel_x, vel_mf, vel_Pf = x[[1, 3], ...], mf[[1, 3], ...], Pf[np.ix_([1, 3], [1, 3])]
+    ome_x, ome_mf, ome_Pf = x[4, na, ...], mf[4, na, ...], Pf[4, 4, na, na, ...]
+    pos_rmse, pos_lcr = eval_perf_scores(pos_x, pos_mf, pos_Pf)
+    vel_rmse, vel_lcr = eval_perf_scores(vel_x, vel_mf, vel_Pf)
+    ome_rmse, ome_lcr = eval_perf_scores(ome_x, ome_mf, ome_Pf)
 
     # print out table
     import pandas as pd
     f_label = [f.__class__.__name__ for f in filters]
     m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
-    data = np.array([rmse_avg.mean(axis=0), rmse_avg.max(axis=0), lcr_avg.mean(axis=0), lcr_avg.max(axis=0)]).T
-    table = pd.DataFrame(data, f_label, m_label)
-    print(table)
+
+    pos_data = np.array([pos_rmse.mean(axis=0), pos_rmse.max(axis=0), pos_lcr.mean(axis=0), pos_lcr.max(axis=0)]).T
+    vel_data = np.array([vel_rmse.mean(axis=0), vel_rmse.max(axis=0), vel_lcr.mean(axis=0), vel_lcr.max(axis=0)]).T
+    ome_data = np.array([ome_rmse.mean(axis=0), ome_rmse.max(axis=0), ome_lcr.mean(axis=0), ome_lcr.max(axis=0)]).T
+
+    pos_table = pd.DataFrame(pos_data, f_label, m_label)
+    vel_table = pd.DataFrame(vel_data, f_label, m_label)
+    ome_table = pd.DataFrame(ome_data, f_label, m_label)
+    print(pos_table)
+    print(vel_table)
+    print(ome_table)
 
     # print kernel parameters
     parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(sys.xD)]
