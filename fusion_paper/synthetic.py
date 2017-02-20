@@ -8,6 +8,7 @@ from inference.tpquad import TPQKalman, TPQStudent
 from inference.gpquad import GPQKalman, GPQ
 from inference.ssinfer import StudentInference
 from inference.unscented import UnscentedKalman
+from inference.cubature import CubatureKalman
 from transforms.bqkernel import RBFStudent
 from transforms.bayesquad import BQTransform
 from system.datagen import System
@@ -671,6 +672,270 @@ class CoordinatedTurnBOT(StudentStateSpaceModel):
         pass
 
 
+class CoordinatedTurnRadarSys(StateSpaceModel):
+    """
+    Maneuvering target tracking using radar measurements .
+
+    TODO:
+    Coordinated turn model [1]_ assumes constant turn rate (not implemented).
+    Model in [2]_ is implemented here, where the turn rate can change in time and measurements are range and bearing.
+    [3]_ considers only bearing measurements.
+
+    State
+    -----
+    x = [x_1, v_1, x_2, v_2, omega]
+        x_1, x_2 - target position [m]
+        v_1, v_2 - target velocity [m/s]
+        omega - target turn rate [deg/s]
+
+    Measurements
+    ------------
+
+
+    References
+    ----------
+    .. [1] Bar-Shalom, Y., Li, X. R. and Kirubarajan, T. (2001).
+           Estimation with applications to tracking and navigation. Wiley-Blackwell.
+    .. [2] Arasaratnam, I., and Haykin, S. (2009). Cubature Kalman Filters.
+           IEEE Transactions on Automatic Control, 54(6), 1254-1269.
+    .. [3] Sarkka, S., Hartikainen, J., Svensson, L., & Sandblom, F. (2015).
+           On the relation between Gaussian process quadratures and sigma-point methods.
+    """
+
+    xD = 5
+    zD = 2  # measurement dimension == # sensors
+    qD = 5
+    rD = 2  # measurement noise dimension == # sensors
+
+    q_additive = True
+    r_additive = True
+
+    rho_1, rho_2 = 0.1, 1.75e-4  # noise intensities
+
+    def __init__(self, dt=0.1):
+        """
+
+        Parameters
+        ----------
+        dt :
+            time interval between two consecutive measurements
+        """
+        self.dt = dt
+        q_cov = np.array(
+            [[self.rho_1 * (self.dt ** 3) / 3, self.rho_1 * (self.dt ** 2) / 2, 0, 0, 0],
+             [self.rho_1 * (self.dt ** 2) / 2, self.rho_1 * self.dt, 0, 0, 0],
+             [0, 0, self.rho_1 * (self.dt ** 3) / 3, self.rho_1 * (self.dt ** 2) / 2, 0],
+             [0, 0, self.rho_1 * (self.dt ** 2) / 2, self.rho_1 * self.dt, 0],
+             [0, 0, 0, 0, self.rho_2 * self.dt]])
+        r_cov = np.diag([100, 10e-6])
+        kwargs = {
+            'x0_mean': np.array([1000, 300, 1000, 0, -3.0 * np.pi / 180]),  # m, m/s, m m/s, rad/s
+            'x0_cov': np.diag([100, 10, 100, 10, 10e-4]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
+            'q_mean_0': np.zeros(self.qD),
+            'q_cov_0': q_cov,
+            'q_mean_1': np.zeros(self.qD),
+            'q_cov_1': 50 * q_cov,
+            'r_mean_0': np.zeros(self.rD),
+            'r_cov_0': r_cov,  # 10e-3 rad == 10 mrad
+            'r_mean_1': np.zeros(self.rD),
+            'r_cov_1': 50 * r_cov,  # 10e-3 rad == 10 mrad
+        }
+        super(CoordinatedTurnRadarSys, self).__init__(**kwargs)
+
+    def dyn_fcn(self, x, q, *args):
+        """
+        Model describing an object in 2D plane moving with constant speed (magnitude of the velocity vector) and
+        turning with a constant angular rate (executing a coordinated turn).
+
+        Parameters
+        ----------
+        x
+        q
+        args
+
+
+        Returns
+        -------
+
+        """
+        om = x[4]
+        a = np.sin(om * self.dt)
+        b = np.cos(om * self.dt)
+        c = np.sin(om * self.dt) / om
+        d = (1 - np.cos(om * self.dt)) / om
+        mdyn = np.array([[1, c, 0, -d, 0],
+                         [0, b, 0, -a, 0],
+                         [0, d, 1, c, 0],
+                         [0, a, 0, b, 0],
+                         [0, 0, 0, 0, 1]])
+        return mdyn.dot(x) + q
+
+    def meas_fcn(self, x, r, *args):
+        """
+        Range and bearing measurement from the sensor to the moving object.
+
+        Parameters
+        ----------
+        x
+        r
+        args
+
+        Returns
+        -------
+
+        """
+        rang = np.sqrt(x[0] ** 2 + x[2] ** 2)
+        theta = np.arctan(x[2] / x[0])
+        return np.asarray([rang, theta]) + r
+
+    def par_fcn(self, time):
+        pass
+
+    def dyn_fcn_dx(self, x, q, pars):
+        pass
+
+    def meas_fcn_dx(self, x, r, pars):
+        pass
+
+    def initial_condition_sample(self, size=None):
+        m0, c0 = self.get_pars('x0_mean', 'x0_cov')
+        return np.random.multivariate_normal(m0, c0, size).T
+
+    def state_noise_sample(self, size=None):
+        m0, c0, m1, c1 = self.get_pars('q_mean_0', 'q_cov_0', 'q_mean_1', 'q_cov_1')
+        return bigauss_mixture(m0, c0, m1, c1, 0.95, size)
+
+    def measurement_noise_sample(self, size=None):
+        m0, c0, m1, c1 = self.get_pars('r_mean_0', 'r_cov_0', 'r_mean_1', 'r_cov_1')
+        return bigauss_mixture(m0, c0, m1, c1, 0.95, size)
+
+
+class CoordinatedTurnRadar(StudentStateSpaceModel):
+    """
+    Maneuvering target tracking using radar measurements .
+
+    TODO:
+    Coordinated turn model [1]_ assumes constant turn rate (not implemented).
+    Model in [2]_ is implemented here, where the turn rate can change in time and measurements are range and
+    bearing.
+    [3]_ considers only bearing measurements.
+
+    State
+    -----
+    x = [x_1, v_1, x_2, v_2, omega]
+        x_1, x_2 - target position [m]
+        v_1, v_2 - target velocity [m/s]
+        omega - target turn rate [deg/s]
+
+    Measurements
+    ------------
+
+
+    References
+    ----------
+    .. [1] Bar-Shalom, Y., Li, X. R. and Kirubarajan, T. (2001).
+           Estimation with applications to tracking and navigation. Wiley-Blackwell.
+    .. [2] Arasaratnam, I., and Haykin, S. (2009). Cubature Kalman Filters.
+           IEEE Transactions on Automatic Control, 54(6), 1254-1269.
+    .. [3] Sarkka, S., Hartikainen, J., Svensson, L., & Sandblom, F. (2015).
+           On the relation between Gaussian process quadratures and sigma-point methods.
+    """
+
+    xD = 5
+    zD = 2  # measurement dimension == # sensors
+    qD = 5
+    rD = 2  # measurement noise dimension == # sensors
+
+    q_additive = True
+    r_additive = True
+
+    rho_1, rho_2 = 0.1, 1.75e-4  # noise intensities
+
+    def __init__(self, dt=0.1):
+        """
+
+        Parameters
+        ----------
+        dt :
+            time interval between two consecutive measurements
+        """
+        self.dt = dt
+        q_cov = np.array(
+            [[self.rho_1 * (self.dt ** 3) / 3, self.rho_1 * (self.dt ** 2) / 2, 0, 0, 0],
+             [self.rho_1 * (self.dt ** 2) / 2, self.rho_1 * self.dt, 0, 0, 0],
+             [0, 0, self.rho_1 * (self.dt ** 3) / 3, self.rho_1 * (self.dt ** 2) / 2, 0],
+             [0, 0, self.rho_1 * (self.dt ** 2) / 2, self.rho_1 * self.dt, 0],
+             [0, 0, 0, 0, self.rho_2 * self.dt]])
+        r_cov = np.diag([100, 10e-6])
+        kwargs = {
+            'x0_mean': np.array([1000, 300, 1000, 0, -3.0 * np.pi / 180]),  # m, m/s, m m/s, rad/s
+            'x0_cov': np.diag([100, 10, 100, 10, 10e-4]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
+            'x0_dof': 4.0,
+            'q_mean': np.zeros(self.qD),
+            'q_cov': q_cov,
+            'q_dof': 4.0,
+            'r_mean': np.zeros(self.rD),
+            'r_cov': r_cov,
+            'r_dof': 4.0,
+        }
+        super(CoordinatedTurnRadar, self).__init__(**kwargs)
+
+    def dyn_fcn(self, x, q, *args):
+        """
+        Model describing an object in 2D plane moving with constant speed (magnitude of the velocity vector) and
+        turning with a constant angular rate (executing a coordinated turn).
+
+        Parameters
+        ----------
+        x
+        q
+        args
+
+
+        Returns
+        -------
+
+        """
+        om = x[4]
+        a = np.sin(om * self.dt)
+        b = np.cos(om * self.dt)
+        c = np.sin(om * self.dt) / om
+        d = (1 - np.cos(om * self.dt)) / om
+        mdyn = np.array([[1, c, 0, -d, 0],
+                         [0, b, 0, -a, 0],
+                         [0, d, 1, c, 0],
+                         [0, a, 0, b, 0],
+                         [0, 0, 0, 0, 1]])
+        return mdyn.dot(x) + q
+
+    def meas_fcn(self, x, r, *args):
+        """
+        Range and bearing measurement from the sensor to the moving object.
+
+        Parameters
+        ----------
+        x
+        r
+        args
+
+        Returns
+        -------
+
+        """
+        rang = np.sqrt(x[0] ** 2 + x[2] ** 2)
+        theta = np.arctan(x[2] / x[0])
+        return np.asarray([rang, theta]) + r
+
+    def par_fcn(self, time):
+        pass
+
+    def dyn_fcn_dx(self, x, q, pars):
+        pass
+
+    def meas_fcn_dx(self, x, r, pars):
+        pass
+
+
 # Student's t-filters
 class ExtendedStudent(StudentInference):
 
@@ -1104,7 +1369,7 @@ def reentry_tracking_demo(mc_sims=100):
     print(partable)
 
 
-def coordinated_demo(steps=100, mc_sims=100):
+def coordinated_bot_demo(steps=100, mc_sims=100):
 
     # sensor positions
     S = np.array([[-2500, 5000],
@@ -1186,8 +1451,83 @@ def coordinated_demo(steps=100, mc_sims=100):
     print(partable)
 
 
+def coordinated_radar_demo(steps=100, mc_sims=100):
+    tau = 1.0
+    # generate data
+    sys = CoordinatedTurnRadarSys(dt=tau)
+    x, z = sys.simulate(steps, mc_sims)
+
+    # SSM for the filters
+    ssm = CoordinatedTurnRadar(dt=tau)
+
+    par_dyn_tp = np.array([[1.0, 1, 1, 1, 1, 1]])
+    par_obs_tp = np.array([[1.0, 1, 100, 1, 100, 100]])
+    par_dyn_gpqk = par_dyn_tp
+    par_obs_gpqk = par_obs_tp
+    par_pt = {'kappa': None}
+
+    # init filters
+    filters = (
+        # ExtendedStudent(ssm),
+        # FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
+        # CubatureKalman(ssm),
+        UnscentedKalman(ssm, kappa=None),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
+        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
+        # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
+        # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
+    )
+
+    # assign weights approximated by MC with lots of samples
+    # very dirty code
+    pts = filters[1].tf_dyn.model.points
+    kern = filters[1].tf_dyn.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    for f in filters:
+        if isinstance(f.tf_dyn, BQTransform):
+            f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
+            f.tf_dyn.Q = Q
+    pts = filters[1].tf_meas.model.points
+    kern = filters[1].tf_meas.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    for f in filters:
+        if isinstance(f.tf_meas, BQTransform):
+            f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
+            f.tf_meas.Q = Q
+
+    mf, Pf = run_filters(filters, z)
+
+    pos_x, pos_mf, pos_Pf = x[[0, 2], ...], mf[[0, 2], ...], Pf[np.ix_([0, 2], [0, 2])]
+    vel_x, vel_mf, vel_Pf = x[[1, 3], ...], mf[[1, 3], ...], Pf[np.ix_([1, 3], [1, 3])]
+    ome_x, ome_mf, ome_Pf = x[4, na, ...], mf[4, na, ...], Pf[4, 4, na, na, ...]
+    pos_rmse, pos_lcr = eval_perf_scores(pos_x, pos_mf, pos_Pf)
+    vel_rmse, vel_lcr = eval_perf_scores(vel_x, vel_mf, vel_Pf)
+    ome_rmse, ome_lcr = eval_perf_scores(ome_x, ome_mf, ome_Pf)
+
+    # print out table
+    import pandas as pd
+    f_label = [f.__class__.__name__ for f in filters]
+    m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
+
+    pos_data = np.array([pos_rmse.mean(axis=0), pos_rmse.max(axis=0), pos_lcr.mean(axis=0), pos_lcr.max(axis=0)]).T
+    vel_data = np.array([vel_rmse.mean(axis=0), vel_rmse.max(axis=0), vel_lcr.mean(axis=0), vel_lcr.max(axis=0)]).T
+    ome_data = np.array([ome_rmse.mean(axis=0), ome_rmse.max(axis=0), ome_lcr.mean(axis=0), ome_lcr.max(axis=0)]).T
+
+    pos_table = pd.DataFrame(pos_data, f_label, m_label)
+    vel_table = pd.DataFrame(vel_data, f_label, m_label)
+    ome_table = pd.DataFrame(ome_data, f_label, m_label)
+    print(pos_table)
+    print(vel_table)
+    print(ome_table)
+
+    # print kernel parameters
+    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(sys.xD)]
+    partable = pd.DataFrame(np.vstack((par_dyn_tp, par_obs_tp)), columns=parlab, index=['dyn', 'obs'])
+    print()
+    print(partable)
+
 if __name__ == '__main__':
     # synthetic_demo(mc_sims=50)
-    ungm_demo(mc_sims=100)
+    # ungm_demo(mc_sims=100)
     # reentry_tracking_demo(mc_sims=50)
-    # coordinated_demo(steps=100, mc_sims=100)
+    coordinated_radar_demo(steps=100, mc_sims=200)
