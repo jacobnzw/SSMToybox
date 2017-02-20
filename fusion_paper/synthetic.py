@@ -1504,6 +1504,16 @@ def coordinated_radar_demo(steps=100, mc_sims=100):
     vel_rmse, vel_lcr = eval_perf_scores(vel_x, vel_mf, vel_Pf)
     ome_rmse, ome_lcr = eval_perf_scores(ome_x, ome_mf, ome_Pf)
 
+    # plot metrics
+    time = np.arange(1, steps+1)
+    fig, ax = plt.subplots(3, 1, sharex=True)
+    for fi, f in enumerate(filters):
+        ax[0].semilogy(time, pos_rmse[..., fi], label=f.__class__.__name__)
+        ax[1].semilogy(time, vel_rmse[..., fi], label=f.__class__.__name__)
+        ax[2].semilogy(time, ome_rmse[..., fi], label=f.__class__.__name__)
+    plt.legend()
+    plt.show()
+
     # print out table
     import pandas as pd
     f_label = [f.__class__.__name__ for f in filters]
