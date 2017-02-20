@@ -129,7 +129,7 @@ class SyntheticSSM(StudentStateSpaceModel):
         return np.random.multivariate_normal(m, c, size)
 
 
-class UNGMnonaddSys(StateSpaceModel):
+class UNGMSys(StateSpaceModel):
     """
     Univariate Non-linear Growth Model with non-additive noise for testing.
     """
@@ -140,7 +140,7 @@ class UNGMnonaddSys(StateSpaceModel):
     rD = 1
 
     q_additive = True
-    r_additive = False
+    r_additive = True
 
     def __init__(self):
         pars = {
@@ -155,13 +155,13 @@ class UNGMnonaddSys(StateSpaceModel):
             'r_cov_0': 0.01 * np.eye(self.rD),
             'r_cov_1': 1 * np.eye(self.rD),
         }
-        super(UNGMnonaddSys, self).__init__(**pars)
+        super(UNGMSys, self).__init__(**pars)
 
     def dyn_fcn(self, x, q, pars):
         return np.asarray([0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * np.cos(1.2 * pars[0])]) + q
 
     def meas_fcn(self, x, r, pars):
-        return np.asarray([0.05 * r[0] * x[0] ** 2])
+        return np.asarray([0.05 * x[0] ** 2]) + r
 
     def par_fcn(self, time):
         return np.atleast_1d(time)
@@ -190,7 +190,7 @@ class UNGMnonaddSys(StateSpaceModel):
         return bigauss_mixture(m0, c0, m1, c1, 0.8, size)
 
 
-class UNGMnonadd(StudentStateSpaceModel):
+class UNGM(StudentStateSpaceModel):
     """
     Univariate Non-linear Growth Model with non-additive noise for testing.
     """
@@ -201,10 +201,10 @@ class UNGMnonadd(StudentStateSpaceModel):
     rD = 1
 
     q_additive = True
-    r_additive = False
+    r_additive = True
 
     def __init__(self, x0_mean=0.0, x0_cov=1.0, q_mean=0.0, q_cov=10.0, r_mean=0.0, r_cov=1.0, **kwargs):
-        super(UNGMnonadd, self).__init__(**kwargs)
+        super(UNGM, self).__init__(**kwargs)
         kwargs = {
             'x0_mean': np.atleast_1d(x0_mean),
             'x0_cov': np.atleast_2d(x0_cov),
@@ -216,13 +216,13 @@ class UNGMnonadd(StudentStateSpaceModel):
             'r_cov': np.atleast_2d(r_cov),
             'r_dof': 4.0,
         }
-        super(UNGMnonadd, self).__init__(**kwargs)
+        super(UNGM, self).__init__(**kwargs)
 
     def dyn_fcn(self, x, q, pars):
         return np.asarray([0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * np.cos(1.2 * pars[0])]) + q
 
     def meas_fcn(self, x, r, pars):
-        return np.asarray([0.05 * r[0] * x[0] ** 2])
+        return np.asarray([0.05 * x[0] ** 2]) + r
 
     def par_fcn(self, time):
         return np.atleast_1d(time)
@@ -938,18 +938,18 @@ def synthetic_plots(steps=250, mc_sims=20):
 
 
 def ungm_demo(steps=250, mc_sims=100):
-    sys = UNGMnonaddSys()
+    sys = UNGMSys()
     x, z = sys.simulate(steps, mc_sims)
 
     # SSM noise covariances should follow the system
-    ssm = UNGMnonadd(q_cov=1, r_cov=0.01)
+    ssm = UNGM(q_cov=1, r_cov=0.01)
 
     # kernel parameters for TPQ and GPQ filters
     # TPQ Student
     # par_dyn_tp = np.array([[1.8, 3.0]])
     # par_obs_tp = np.array([[0.4, 1.0, 1.0]])
-    par_dyn_tp = np.array([[1.0, 0.5]])
-    par_obs_tp = np.array([[1.0, 1.0, 10.0]])
+    par_dyn_tp = np.array([[1.0, 1.0]])
+    par_obs_tp = np.array([[1.0, 1.0]])
     # GPQ Student
     par_dyn_gpqs = np.array([[1.0, 0.5]])
     par_obs_gpqs = np.array([[1.0, 1, 10]])
@@ -957,14 +957,14 @@ def ungm_demo(steps=250, mc_sims=100):
     par_dyn_gpqk = np.array([[1.0, 0.5]])
     par_obs_gpqk = np.array([[1.0, 1, 10]])
     # parameters of the point-set
-    par_pt = {'kappa': 1}
+    par_pt = {'kappa': None}
 
     # init filters
     filters = (
         # ExtendedStudent(ssm),
-        # FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
-        UnscentedKalman(ssm, kappa=None),
+        FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
+        UnscentedKalman(ssm, kappa=None),
         # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
         # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
@@ -1000,35 +1000,37 @@ def ungm_demo(steps=250, mc_sims=100):
     print(table)
 
     # print kernel parameters
-    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(2)]
-    partable = pd.DataFrame(np.vstack((np.hstack((par_dyn_tp.squeeze(), np.zeros((1,)))), par_obs_tp)),
-                            columns=parlab, index=['dyn', 'obs'])
+    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(1)]
+    partable = pd.DataFrame(np.vstack((par_dyn_tp, par_obs_tp)), columns=parlab, index=['dyn', 'obs'])
     print()
     print(partable)
 
     # plots
     time = np.arange(1, steps+1)
-    plt.figure()
-
-    # true state
-    plt.plot(time, x[0, :, 0], 'r--', alpha=0.5)
-
-    # measurements
-    plt.plot(time, z[0, :, 0], 'k.')
 
     # filtered state and covariance
-    xhat = mf[0, :, 0, 0]
-    std = np.sqrt(Pf[0, 0, :, 0, 0])
-    plt.plot(time, xhat, 'b-', label='UKF')
-    plt.fill_between(time, xhat - 2*std, xhat + 2*std, color='b', alpha=0.15)
+    fig, ax = plt.subplots(3, 1, sharex=True)
+    for fi, f in enumerate(filters):
+        # true state
+        ax[fi].plot(time, x[0, :, 0], 'r--', alpha=0.5)
 
-    xhat = mf[0, :, 0, 1]
-    std = np.sqrt(Pf[0, 0, :, 0, 1])
-    plt.plot(time, xhat, 'g-', label='TPQSF')
-    plt.fill_between(time, xhat - 2 * std, xhat + 2 * std, color='g', alpha=0.15)
+        # measurements
+        ax[fi].plot(time, z[0, :, 0], 'k.')
 
+        xhat = mf[0, :, 0, fi]
+        std = np.sqrt(Pf[0, 0, :, 0, fi])
+        ax[fi].plot(time, xhat, label=f.__class__.__name__)
+        ax[fi].fill_between(time, xhat - 2 * std, xhat + 2 * std, alpha=0.15)
+        ax[fi].axis([None, None, -50, 50])
+        ax[fi].legend()
+    plt.show()
+
+    # compare posterior variances with outliers
+    plt.figure()
+    plt.plot(time, z[0, :, 0], 'k.')
+    for fi, f in enumerate(filters):
+        plt.plot(time, 2*np.sqrt(Pf[0, 0, :, 0, fi]), label=f.__class__.__name__)
     plt.legend()
-    plt.axis([None, None, -50, 50])
     plt.show()
 
 
@@ -1186,6 +1188,6 @@ def coordinated_demo(steps=100, mc_sims=100):
 
 if __name__ == '__main__':
     # synthetic_demo(mc_sims=50)
-    # ungm_demo(mc_sims=100)
+    ungm_demo(mc_sims=100)
     # reentry_tracking_demo(mc_sims=50)
-    coordinated_demo(steps=100, mc_sims=100)
+    # coordinated_demo(steps=100, mc_sims=100)
