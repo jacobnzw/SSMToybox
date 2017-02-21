@@ -220,7 +220,7 @@ class StudentInference(StateSpaceInference):
         super(StudentInference, self).__init__(ssm, tf_dyn, tf_meas)
 
     def reset(self):
-        self.x_mean_fi, self.x_cov_fi = self.ssm.get_pars('x0_mean', 'x0_cov')
+        self.x_mean_fi, self.x_cov_fi, self.dof_fi = self.ssm.get_pars('x0_mean', 'x0_cov', 'x0_dof')
         scale = (self.dof - 2) / self.dof
         self.x_smat_fi = scale * self.x_cov_fi
         self.x_smat_pr, self.y_smat_pr, self.xy_smat = None, None, None
