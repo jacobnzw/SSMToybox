@@ -1,6 +1,8 @@
 import numpy as np
+import scipy as sp
 from numpy import newaxis as na
 import pandas as pd
+import sys
 
 """
 Preliminary implementation of routines computing various performance metrics used in state estimation.
@@ -107,9 +109,13 @@ def log_cred_ratio(x, m, P, MSE):
     """
 
     dx = x - m
-    dx_icov_dx = dx.dot(np.linalg.inv(P)).dot(dx)
-    dx_imse_dx = dx.dot(np.linalg.inv(MSE)).dot(dx)
-    return 10 * (np.log10(dx_icov_dx) - np.log10(dx_imse_dx))
+    sqrtP = mat_sqrt(P)
+    sqrtMSE = mat_sqrt(MSE)
+    sqrtP_dx = sp.linalg.solve(sqrtP, dx)
+    sqrtMSE_dx = sp.linalg.solve(sqrtMSE, dx)
+    dx_icov_dx = sqrtP_dx.T.dot(sqrtP_dx)
+    dx_imse_dx = sqrtMSE_dx.T.dot(sqrtMSE_dx)
+    return 10 * (sp.log10(dx_icov_dx) - sp.log10(dx_imse_dx))
 
 
 def nll(x, m, P):
@@ -311,3 +317,26 @@ def maha(x, y, V=None):
     x2V = np.sum(x.dot(V) * x, 1)
     y2V = np.sum(y.dot(V) * y, 1)
     return (x2V[:, na] + y2V[:, na].T) - 2 * x.dot(V).dot(y.T)
+
+
+def mat_sqrt(a):
+    """
+    Matrix square-root.
+
+    Parameters
+    ----------
+    a : numpy.ndarray
+
+
+    Returns
+    -------
+    : numpy.ndarray
+        Returns `cholesky(a)` for SPD matrices, and `u.dot(sqrt(s))`, where `u, s, v = svd(a)`.
+    """
+    try:
+        b = sp.linalg.cholesky(a, lower=True)
+    except np.linalg.linalg.LinAlgError:
+        print('Cholesky failed, using SVD.', file=sys.stderr)
+        u, s, v = sp.linalg.svd(a)
+        b = u.dot(np.diag(np.sqrt(s)))
+    return b
