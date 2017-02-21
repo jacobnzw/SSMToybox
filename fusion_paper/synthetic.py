@@ -785,7 +785,7 @@ class CoordinatedTurnRadarSys(StateSpaceModel):
 
         """
         rang = np.sqrt(x[0] ** 2 + x[2] ** 2)
-        theta = np.arctan(x[2] / x[0])
+        theta = np.arctan2(x[2], x[0])
         return np.asarray([rang, theta]) + r
 
     def par_fcn(self, time):
@@ -923,7 +923,7 @@ class CoordinatedTurnRadar(StudentStateSpaceModel):
 
         """
         rang = np.sqrt(x[0] ** 2 + x[2] ** 2)
-        theta = np.arctan(x[2] / x[0])
+        theta = np.arctan2(x[2], x[0])
         return np.asarray([rang, theta]) + r
 
     def par_fcn(self, time):
@@ -1469,7 +1469,7 @@ def coordinated_radar_demo(steps=100, mc_sims=100):
     # init filters
     filters = (
         # ExtendedStudent(ssm),
-        # FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
+        FSQStudent(ssm, kappa=None),
         # CubatureKalman(ssm),
         UnscentedKalman(ssm, kappa=None),
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
@@ -1477,18 +1477,19 @@ def coordinated_radar_demo(steps=100, mc_sims=100):
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
         # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
     )
+    itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze()
 
     # assign weights approximated by MC with lots of samples
     # very dirty code
-    pts = filters[1].tf_dyn.model.points
-    kern = filters[1].tf_dyn.model.kernel
+    pts = filters[itpq].tf_dyn.model.points
+    kern = filters[itpq].tf_dyn.model.kernel
     wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
     for f in filters:
         if isinstance(f.tf_dyn, BQTransform):
             f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
             f.tf_dyn.Q = Q
-    pts = filters[1].tf_meas.model.points
-    kern = filters[1].tf_meas.model.kernel
+    pts = filters[itpq].tf_meas.model.points
+    kern = filters[itpq].tf_meas.model.kernel
     wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
     for f in filters:
         if isinstance(f.tf_meas, BQTransform):
