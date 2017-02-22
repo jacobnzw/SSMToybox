@@ -15,6 +15,171 @@ from system.datagen import System
 from utils import log_cred_ratio, mse_matrix, bigauss_mixture, multivariate_t
 
 
+# Student's t-filters
+class ExtendedStudent(StudentInference):
+
+    def __init__(self, sys, dof=4.0, fixed_dof=True):
+        assert isinstance(sys, StateSpaceModel)
+        nq = sys.xD if sys.q_additive else sys.xD + sys.qD
+        nr = sys.xD if sys.r_additive else sys.xD + sys.rD
+        tf = Taylor1stOrder(nq)
+        th = Taylor1stOrder(nr)
+        super(ExtendedStudent, self).__init__(sys, tf, th, dof, fixed_dof)
+
+
+class GPQStudent(StudentInference):
+
+    def __init__(self, ssm, kern_par_dyn, kern_par_obs, point_hyp=None, dof=4.0, fixed_dof=True):
+        """
+        Student filter with Gaussian Process quadrature moment transforms using fully-symmetric sigma-point set.
+
+        Parameters
+        ----------
+        ssm : StudentStateSpaceModel
+        kern_par_dyn : numpy.ndarray
+            Kernel parameters for the GPQ moment transform of the dynamics.
+        kern_par_obs : numpy.ndarray
+            Kernel parameters for the GPQ moment transform of the measurement function.
+        point_hyp : dict
+            Point set parameters with keys:
+              * `'degree'`: Degree (order) of the quadrature rule.
+              * `'kappa'`: Tuning parameter of controlling spread of sigma-points around the center.
+        dof : float
+            Desired degree of freedom for the filtered density.
+        fixed_dof : bool
+            If `True`, DOF will be fixed for all time steps, which preserves the heavy-tailed behaviour of the filter.
+            If `False`, DOF will be increasing after each measurement update, which means the heavy-tailed behaviour is
+            not preserved and therefore converges to a Gaussian filter.
+        """
+        assert isinstance(ssm, StudentStateSpaceModel)
+
+        # correct input dimension if noise non-additive
+        nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
+        nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
+
+        # degrees of freedom for SSM noises
+        q_dof, r_dof = ssm.get_pars('q_dof', 'r_dof')
+
+        # add DOF of the noises to the sigma-point parameters
+        if point_hyp is None:
+                point_hyp = dict()
+        point_hyp_dyn = point_hyp
+        point_hyp_obs = point_hyp
+        point_hyp_dyn.update({'dof': q_dof})
+        point_hyp_obs.update({'dof': r_dof})
+
+        # init moment transforms
+        t_dyn = GPQ(nq, kern_par_dyn, 'rbf-student', 'fs', point_hyp_dyn)
+        t_obs = GPQ(nr, kern_par_obs, 'rbf-student', 'fs', point_hyp_obs)
+        super(GPQStudent, self).__init__(ssm, t_dyn, t_obs, dof, fixed_dof)
+
+
+class FSQStudent(StudentInference):
+    """Filter based on fully symmetric quadrature rules."""
+
+    def __init__(self, ssm, degree=3, kappa=None, dof=4.0, fixed_dof=True):
+        assert isinstance(ssm, StudentStateSpaceModel)
+
+        # correct input dimension if noise non-additive
+        nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
+        nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
+
+        # degrees of freedom for SSM noises
+        q_dof, r_dof = ssm.get_pars('q_dof', 'r_dof')
+
+        # init moment transforms
+        t_dyn = FullySymmetricStudent(nq, degree, kappa, q_dof)
+        t_obs = FullySymmetricStudent(nr, degree, kappa, r_dof)
+        super(FSQStudent, self).__init__(ssm, t_dyn, t_obs, dof, fixed_dof)
+
+
+def rbf_student_mc_weights(x, kern, num_samples, num_batch):
+    # MC approximated BQ weights using RBF kernel and Student density
+    # MC computed by batches, because without batches we would run out of memory for large sample sizes
+
+    assert isinstance(kern, RBFStudent)
+    # kernel parameters and input dimensionality
+    par = kern.par
+    dim, num_pts = x.shape
+
+    # inverse kernel matrix
+    iK = kern.eval_inv_dot(kern.par, x, scaling=False)
+    mean, scale, dof = np.zeros((dim, )), np.eye(dim), kern.dof
+
+    # compute MC estimates by batches
+    num_samples_batch = num_samples // num_batch
+    q_batch = np.zeros((num_pts, num_batch, ))
+    Q_batch = np.zeros((num_pts, num_pts, num_batch))
+    R_batch = np.zeros((dim, num_pts, num_batch))
+    for ib in range(num_batch):
+
+        # multivariate t samples
+        x_samples = multivariate_t(mean, scale, dof, num_samples_batch).T
+
+        # evaluate kernel
+        k_samples = kern.eval(par, x_samples, x, scaling=False)
+        kk_samples = k_samples[:, na, :] * k_samples[..., na]
+        xk_samples = x_samples[..., na] * k_samples[na, ...]
+
+        # intermediate sums
+        q_batch[..., ib] = k_samples.sum(axis=0)
+        Q_batch[..., ib] = kk_samples.sum(axis=0)
+        R_batch[..., ib] = xk_samples.sum(axis=1)
+
+    # MC approximations == sum the sums divide by num_samples
+    c = 1/num_samples
+    q = c * q_batch.sum(axis=-1)
+    Q = c * Q_batch.sum(axis=-1)
+    R = c * R_batch.sum(axis=-1)
+
+    # BQ moment transform weights
+    wm = q.dot(iK)
+    wc = iK.dot(Q).dot(iK)
+    wcc = R.dot(iK)
+    return wm, wc, wcc, Q
+
+
+def eval_perf_scores(x, mf, Pf):
+    xD, steps, mc_sims, num_filt = mf.shape
+
+    # average RMSE over simulations
+    rmse = np.sqrt(((x[..., na] - mf) ** 2).sum(axis=0))
+    rmse_avg = rmse.mean(axis=1)
+
+    reg = 1e-6 * np.eye(xD)
+
+    # average inclination indicator over simulations
+    lcr = np.empty((steps, mc_sims, num_filt))
+    for f in range(num_filt):
+        for k in range(steps):
+            mse = mse_matrix(x[:, k, :], mf[:, k, :, f]) + reg
+            for imc in range(mc_sims):
+                lcr[k, imc, f] = log_cred_ratio(x[:, k, imc], mf[:, k, imc, f], Pf[..., k, imc, f], mse)
+    lcr_avg = lcr.mean(axis=1)
+
+    return rmse_avg, lcr_avg
+
+
+def run_filters(filters, z):
+    num_filt = len(filters)
+    zD, steps, mc_sims = z.shape
+    xD = filters[0].ssm.xD
+
+    # init space for filtered mean and covariance
+    mf = np.zeros((xD, steps, mc_sims, num_filt))
+    Pf = np.zeros((xD, xD, steps, mc_sims, num_filt))
+
+    # run filters
+    for i, f in enumerate(filters):
+        print('Running {} ...'.format(f.__class__.__name__))
+        for imc in range(mc_sims):
+            mf[..., imc, i], Pf[..., imc, i] = f.forward_pass(z[..., imc])
+            f.reset()
+
+    # return filtered mean and covariance
+    return mf, Pf
+
+
 class SyntheticSys(StateSpaceModel):
     """
     Synthetic system from Filip Tronarp.
@@ -130,6 +295,109 @@ class SyntheticSSM(StudentStateSpaceModel):
         return np.random.multivariate_normal(m, c, size)
 
 
+def synthetic_demo(steps=250, mc_sims=5000):
+    """
+    An experiment replicating the conditions of the synthetic example in _[1] used for testing non-additive
+    student's t sigma-point filters.
+
+    Parameters
+    ----------
+    steps
+    mc_sims
+
+    Returns
+    -------
+
+    """
+
+    # generate data
+    sys = SyntheticSys()
+    x, z = sys.simulate(steps, mc_sims)
+
+    # load data from mat-file
+    # from scipy.io import loadmat
+    # datadict = loadmat('synth_data', variable_names=('x', 'y'))
+    # x, z = datadict['x'][:, 1:, :], datadict['y'][:, 1:, :]
+
+    # init SSM for the filter
+    ssm = SyntheticSSM()
+
+    # kernel parameters for TPQ and GPQ filters
+    # TPQ Student
+    a, b = 10, 30
+    par_dyn_tp = np.array([[0.4, a, a]])
+    par_obs_tp = np.array([[0.4, b, b, b, b]])
+    # par_dyn_tp = np.array([[1.0, 1.7, 1.7]])
+    # par_obs_tp = np.array([[1.1, 3.0, 3.0, 3.0, 3.0]])
+    # GPQ Student
+    par_dyn_gpqs = np.array([[1.0, 5, 5]])
+    par_obs_gpqs = np.array([[0.9, 4, 4, 4, 4]])
+    # GPQ Kalman
+    par_dyn_gpqk = np.array([[1.0, 2.0, 2.0]])
+    par_obs_gpqk = np.array([[1.0, 2.0, 2.0, 2.0, 2.0]])
+    # parameters of the point-set
+    par_pt = {'kappa': None}
+
+    # init filters
+    filters = (
+        # ExtendedStudent(ssm),
+        FSQStudent(ssm, kappa=None),
+        # UnscentedKalman(ssm, kappa=-1),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
+        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
+        # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
+        # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
+    )
+
+    # assign weights approximated by MC with lots of samples
+    # very dirty code
+    pts = filters[1].tf_dyn.model.points
+    kern = filters[1].tf_dyn.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    for f in filters:
+        if isinstance(f.tf_dyn, BQTransform):
+            f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
+            f.tf_dyn.Q = Q
+    pts = filters[1].tf_meas.model.points
+    kern = filters[1].tf_meas.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    for f in filters:
+        if isinstance(f.tf_meas, BQTransform):
+            f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
+            f.tf_meas.Q = Q
+
+    mf, Pf = run_filters(filters, z)
+
+    rmse_avg, lcr_avg = eval_perf_scores(x, mf, Pf)
+
+    # print out table
+    import pandas as pd
+    f_label = [f.__class__.__name__ for f in filters]
+    m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
+    data = np.array([rmse_avg.mean(axis=0), rmse_avg.max(axis=0), lcr_avg.mean(axis=0), lcr_avg.max(axis=0)]).T
+    table = pd.DataFrame(data, f_label, m_label)
+    print(table)
+
+    # print kernel parameters
+    parlab = ['alpha'] + ['ell_{}'.format(d+1) for d in range(4)]
+    partable = pd.DataFrame(np.vstack((np.hstack((par_dyn_tp.squeeze(), np.zeros((2,)))), par_obs_tp)),
+                            columns=parlab, index=['dyn', 'obs'])
+    print()
+    print(partable)
+
+
+def synthetic_plots(steps=250, mc_sims=20):
+
+    # generate data
+    sys = SyntheticSys()
+    x, z = sys.simulate(steps, mc_sims)
+
+    import matplotlib.pyplot as plt
+    for i in range(mc_sims):
+        plt.plot(x[0, :, i], x[1, :, i], 'b', alpha=0.15)
+    plt.show()
+
+
 class UNGMSys(StateSpaceModel):
     """
     Univariate Non-linear Growth Model with non-additive noise for testing.
@@ -233,6 +501,103 @@ class UNGM(StudentStateSpaceModel):
 
     def meas_fcn_dx(self, x, r, pars):
         return np.asarray([0.1 * r[0] * x[0], 0.05 * x[0] ** 2])
+
+
+def ungm_demo(steps=250, mc_sims=100):
+    sys = UNGMSys()
+    x, z = sys.simulate(steps, mc_sims)
+
+    # SSM noise covariances should follow the system
+    ssm = UNGM(q_cov=1, r_cov=0.01)
+
+    # kernel parameters for TPQ and GPQ filters
+    # TPQ Student
+    # par_dyn_tp = np.array([[1.8, 3.0]])
+    # par_obs_tp = np.array([[0.4, 1.0, 1.0]])
+    par_dyn_tp = np.array([[1.0, 1.0]])
+    par_obs_tp = np.array([[1.0, 1.0]])
+    # GPQ Student
+    par_dyn_gpqs = np.array([[1.0, 0.5]])
+    par_obs_gpqs = np.array([[1.0, 1, 10]])
+    # GPQ Kalman
+    par_dyn_gpqk = np.array([[1.0, 0.5]])
+    par_obs_gpqk = np.array([[1.0, 1, 10]])
+    # parameters of the point-set
+    par_pt = {'kappa': None}
+
+    # init filters
+    filters = (
+        # ExtendedStudent(ssm),
+        FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
+        UnscentedKalman(ssm, kappa=None),
+        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
+        # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
+        # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
+    )
+
+    # assign weights approximated by MC with lots of samples
+    # very dirty code
+    pts = filters[1].tf_dyn.model.points
+    kern = filters[1].tf_dyn.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    for f in filters:
+        if isinstance(f.tf_dyn, BQTransform):
+            f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
+            f.tf_dyn.Q = Q
+    pts = filters[1].tf_meas.model.points
+    kern = filters[1].tf_meas.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    for f in filters:
+        if isinstance(f.tf_meas, BQTransform):
+            f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
+            f.tf_meas.Q = Q
+
+    mf, Pf = run_filters(filters, z)
+
+    rmse_avg, lcr_avg = eval_perf_scores(x, mf, Pf)
+
+    # print out table
+    import pandas as pd
+    f_label = [f.__class__.__name__ for f in filters]
+    m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
+    data = np.array([rmse_avg.mean(axis=0), rmse_avg.max(axis=0), lcr_avg.mean(axis=0), lcr_avg.max(axis=0)]).T
+    table = pd.DataFrame(data, f_label, m_label)
+    print(table)
+
+    # print kernel parameters
+    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(1)]
+    partable = pd.DataFrame(np.vstack((par_dyn_tp, par_obs_tp)), columns=parlab, index=['dyn', 'obs'])
+    print()
+    print(partable)
+
+    # plots
+    time = np.arange(1, steps+1)
+
+    # filtered state and covariance
+    fig, ax = plt.subplots(3, 1, sharex=True)
+    for fi, f in enumerate(filters):
+        # true state
+        ax[fi].plot(time, x[0, :, 0], 'r--', alpha=0.5)
+
+        # measurements
+        ax[fi].plot(time, z[0, :, 0], 'k.')
+
+        xhat = mf[0, :, 0, fi]
+        std = np.sqrt(Pf[0, 0, :, 0, fi])
+        ax[fi].plot(time, xhat, label=f.__class__.__name__)
+        ax[fi].fill_between(time, xhat - 2 * std, xhat + 2 * std, alpha=0.15)
+        ax[fi].axis([None, None, -50, 50])
+        ax[fi].legend()
+    plt.show()
+
+    # compare posterior variances with outliers
+    plt.figure()
+    plt.plot(time, z[0, :, 0], 'k.')
+    for fi, f in enumerate(filters):
+        plt.plot(time, 2*np.sqrt(Pf[0, 0, :, 0, fi]), label=f.__class__.__name__)
+    plt.legend()
+    plt.show()
 
 
 class ReentryRadarSimpleSys(System):
@@ -402,6 +767,76 @@ class ReentryRadarSimple(StudentStateSpaceModel):
 
     def meas_fcn_dx(self, x, r, pars):
         pass
+
+
+def reentry_tracking_demo(mc_sims=100):
+
+    # generate some data (true trajectory)
+    sys = ReentryRadarSimpleSys()
+    x = sys.simulate_trajectory(method='rk4', dt=0.1, duration=30, mc_sims=mc_sims)
+
+    # pick only non-divergent trajectories
+    x = x[..., np.all(x >= 0, axis=(0, 1))]
+    mc = x.shape[2]
+
+    z = np.zeros((sys.zD,) + x.shape[1:])
+    for i in range(mc):
+        z[..., i] = sys.simulate_measurements(x[..., i]).squeeze()
+
+    # init SSM for the filters
+    ssm = ReentryRadarSimple(dt=0.1)
+
+    par_dyn_tp = np.array([[0.5, 10, 10, 10]])
+    par_obs_tp = np.array([[0.5, 15, 20, 20]])
+    par_dyn_gpqk = par_dyn_tp
+    par_obs_gpqk = par_obs_tp
+    par_pt = {'kappa': None}
+
+    # init filters
+    filters = (
+        # ExtendedStudent(ssm),
+        FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
+        UnscentedKalman(ssm, kappa=None),
+        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
+        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
+        # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
+        # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
+    )
+
+    # assign weights approximated by MC with lots of samples
+    # very dirty code
+    # pts = filters[1].tf_dyn.model.points
+    # kern = filters[1].tf_dyn.model.kernel
+    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    # for f in filters:
+    #     if isinstance(f.tf_dyn, BQTransform):
+    #         f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
+    #         f.tf_dyn.Q = Q
+    # pts = filters[1].tf_meas.model.points
+    # kern = filters[1].tf_meas.model.kernel
+    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    # for f in filters:
+    #     if isinstance(f.tf_meas, BQTransform):
+    #         f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
+    #         f.tf_meas.Q = Q
+
+    mf, Pf = run_filters(filters, z)
+
+    rmse_avg, lcr_avg = eval_perf_scores(x, mf, Pf)
+
+    # print out table
+    import pandas as pd
+    f_label = [f.__class__.__name__ for f in filters]
+    m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
+    data = np.array([rmse_avg.mean(axis=0), rmse_avg.max(axis=0), lcr_avg.mean(axis=0), lcr_avg.max(axis=0)]).T
+    table = pd.DataFrame(data, f_label, m_label)
+    print(table)
+
+    # print kernel parameters
+    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(sys.xD)]
+    partable = pd.DataFrame(np.vstack((par_dyn_tp, par_obs_tp)), columns=parlab, index=['dyn', 'obs'])
+    print()
+    print(partable)
 
 
 class CoordinatedTurnBOTSys(StateSpaceModel):
@@ -687,6 +1122,95 @@ class CoordinatedTurnBOT(StudentStateSpaceModel):
         pass
 
 
+def coordinated_bot_demo(steps=100, mc_sims=100):
+
+    # sensor positions
+    x_min, x_max = -10000, 10000
+    y_min, y_max = -10000, 10000
+    S = np.array([[x_min, y_min],
+                  [x_min, y_max],
+                  [x_max, y_min],
+                  [x_max, y_max]])
+    tau = 1.0
+    # generate data
+    sys = CoordinatedTurnBOTSys(dt=tau, sensor_pos=S)
+    x, z = sys.simulate(steps, mc_sims)
+
+    # weed out trajectories venturing outside of the sensor rectangle
+    ix = np.all(np.abs(x[(0, 2), ...]) <= x_max, axis=(0, 1))
+    x, z = x[..., ix], z[..., ix]
+    print('{:.2f}% of trajectories weeded out.'.format(100 * np.count_nonzero(ix==False)/len(ix)))
+
+    # SSM for the filters
+    ssm = CoordinatedTurnBOT(dt=tau, sensor_pos=S)
+
+    par_dyn_tp = np.array([[1.0, 1, 1, 1, 1, 1]])
+    par_obs_tp = np.array([[1.0, 1, 100, 1, 100, 100]])
+    par_dyn_gpqk = par_dyn_tp
+    par_obs_gpqk = par_obs_tp
+    par_pt = {'kappa': None}
+
+    # init filters
+    filters = (
+        # ExtendedStudent(ssm),
+        FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
+        UnscentedKalman(ssm, kappa=None),
+        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
+        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
+        # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
+        # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
+    )
+
+    # assign weights approximated by MC with lots of samples
+    # very dirty code
+    # pts = filters[1].tf_dyn.model.points
+    # kern = filters[1].tf_dyn.model.kernel
+    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    # for f in filters:
+    #     if isinstance(f.tf_dyn, BQTransform):
+    #         f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
+    #         f.tf_dyn.Q = Q
+    # pts = filters[1].tf_meas.model.points
+    # kern = filters[1].tf_meas.model.kernel
+    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    # for f in filters:
+    #     if isinstance(f.tf_meas, BQTransform):
+    #         f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
+    #         f.tf_meas.Q = Q
+
+    mf, Pf = run_filters(filters, z)
+
+    # TODO: compare with results in "On Gaussian Optimal Smoothing of Non-Linear State Space Models"
+    pos_x, pos_mf, pos_Pf = x[[0, 2], ...], mf[[0, 2], ...], Pf[np.ix_([0, 2], [0, 2])]
+    vel_x, vel_mf, vel_Pf = x[[1, 3], ...], mf[[1, 3], ...], Pf[np.ix_([1, 3], [1, 3])]
+    ome_x, ome_mf, ome_Pf = x[4, na, ...], mf[4, na, ...], Pf[4, 4, na, na, ...]
+    pos_rmse, pos_lcr = eval_perf_scores(pos_x, pos_mf, pos_Pf)
+    vel_rmse, vel_lcr = eval_perf_scores(vel_x, vel_mf, vel_Pf)
+    ome_rmse, ome_lcr = eval_perf_scores(ome_x, ome_mf, ome_Pf)
+
+    # print out table
+    import pandas as pd
+    f_label = [f.__class__.__name__ for f in filters]
+    m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
+
+    pos_data = np.array([pos_rmse.mean(axis=0), pos_rmse.max(axis=0), pos_lcr.mean(axis=0), pos_lcr.max(axis=0)]).T
+    vel_data = np.array([vel_rmse.mean(axis=0), vel_rmse.max(axis=0), vel_lcr.mean(axis=0), vel_lcr.max(axis=0)]).T
+    ome_data = np.array([ome_rmse.mean(axis=0), ome_rmse.max(axis=0), ome_lcr.mean(axis=0), ome_lcr.max(axis=0)]).T
+
+    pos_table = pd.DataFrame(pos_data, f_label, m_label)
+    vel_table = pd.DataFrame(vel_data, f_label, m_label)
+    ome_table = pd.DataFrame(ome_data, f_label, m_label)
+    print(pos_table)
+    print(vel_table)
+    print(ome_table)
+
+    # print kernel parameters
+    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(sys.xD)]
+    partable = pd.DataFrame(np.vstack((par_dyn_tp, par_obs_tp)), columns=parlab, index=['dyn', 'obs'])
+    print()
+    print(partable)
+
+
 class CoordinatedTurnRadarSys(StateSpaceModel):
     """
     Maneuvering target tracking using radar measurements .
@@ -744,7 +1268,7 @@ class CoordinatedTurnRadarSys(StateSpaceModel):
              [0, 0, 0, 0, self.rho_2 * self.dt]])
         r_cov = np.diag([100, 10e-6])
         kwargs = {
-            'x0_mean': np.array([1000, 300, 1000, 0, -3.0 * np.pi / 180]),  # m, m/s, m m/s, rad/s
+            'x0_mean': np.array([1000, 300, 300, 0, -1.0 * np.pi / 180]),  # m, m/s, m m/s, rad/s
             'x0_cov': np.diag([100, 10, 100, 10, 10e-4]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
             'q_mean_0': np.zeros(self.qD),
             'q_cov_0': q_cov,
@@ -883,15 +1407,15 @@ class CoordinatedTurnRadar(StudentStateSpaceModel):
              [0, 0, 0, 0, self.rho_2 * self.dt]])
         r_cov = np.diag([100, 10e-6])
         kwargs = {
-            'x0_mean': np.array([1000, 300, 1000, 0, -3.0 * np.pi / 180]),  # m, m/s, m m/s, rad/s
+            'x0_mean': np.array([1000, 300, 300, 0, -1.0 * np.pi / 180]),  # m, m/s, m m/s, rad/s
             'x0_cov': np.diag([100, 10, 100, 10, 10e-4]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
-            'x0_dof': 40.0,
+            'x0_dof': 4.0,
             'q_mean': np.zeros(self.qD),
             'q_cov': q_cov,
-            'q_dof': 40.0,
+            'q_dof': 4.0,
             'r_mean': np.zeros(self.rD),
             'r_cov': r_cov,
-            'r_dof': 40.0,
+            'r_dof': 4.0,
         }
         super(CoordinatedTurnRadar, self).__init__(**kwargs)
 
@@ -951,528 +1475,6 @@ class CoordinatedTurnRadar(StudentStateSpaceModel):
         pass
 
 
-# Student's t-filters
-class ExtendedStudent(StudentInference):
-
-    def __init__(self, sys, dof=4.0, fixed_dof=True):
-        assert isinstance(sys, StateSpaceModel)
-        nq = sys.xD if sys.q_additive else sys.xD + sys.qD
-        nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        tf = Taylor1stOrder(nq)
-        th = Taylor1stOrder(nr)
-        super(ExtendedStudent, self).__init__(sys, tf, th, dof, fixed_dof)
-
-
-class GPQStudent(StudentInference):
-
-    def __init__(self, ssm, kern_par_dyn, kern_par_obs, point_hyp=None, dof=4.0, fixed_dof=True):
-        """
-        Student filter with Gaussian Process quadrature moment transforms using fully-symmetric sigma-point set.
-
-        Parameters
-        ----------
-        ssm : StudentStateSpaceModel
-        kern_par_dyn : numpy.ndarray
-            Kernel parameters for the GPQ moment transform of the dynamics.
-        kern_par_obs : numpy.ndarray
-            Kernel parameters for the GPQ moment transform of the measurement function.
-        point_hyp : dict
-            Point set parameters with keys:
-              * `'degree'`: Degree (order) of the quadrature rule.
-              * `'kappa'`: Tuning parameter of controlling spread of sigma-points around the center.
-        dof : float
-            Desired degree of freedom for the filtered density.
-        fixed_dof : bool
-            If `True`, DOF will be fixed for all time steps, which preserves the heavy-tailed behaviour of the filter.
-            If `False`, DOF will be increasing after each measurement update, which means the heavy-tailed behaviour is
-            not preserved and therefore converges to a Gaussian filter.
-        """
-        assert isinstance(ssm, StudentStateSpaceModel)
-
-        # correct input dimension if noise non-additive
-        nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
-        nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
-
-        # degrees of freedom for SSM noises
-        q_dof, r_dof = ssm.get_pars('q_dof', 'r_dof')
-
-        # add DOF of the noises to the sigma-point parameters
-        if point_hyp is None:
-                point_hyp = dict()
-        point_hyp_dyn = point_hyp
-        point_hyp_obs = point_hyp
-        point_hyp_dyn.update({'dof': q_dof})
-        point_hyp_obs.update({'dof': r_dof})
-
-        # init moment transforms
-        t_dyn = GPQ(nq, kern_par_dyn, 'rbf-student', 'fs', point_hyp_dyn)
-        t_obs = GPQ(nr, kern_par_obs, 'rbf-student', 'fs', point_hyp_obs)
-        super(GPQStudent, self).__init__(ssm, t_dyn, t_obs, dof, fixed_dof)
-
-
-class FSQStudent(StudentInference):
-    """Filter based on fully symmetric quadrature rules."""
-
-    def __init__(self, ssm, degree=3, kappa=None, dof=4.0, fixed_dof=True):
-        assert isinstance(ssm, StudentStateSpaceModel)
-
-        # correct input dimension if noise non-additive
-        nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
-        nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
-
-        # degrees of freedom for SSM noises
-        q_dof, r_dof = ssm.get_pars('q_dof', 'r_dof')
-
-        # init moment transforms
-        t_dyn = FullySymmetricStudent(nq, degree, kappa, q_dof)
-        t_obs = FullySymmetricStudent(nr, degree, kappa, r_dof)
-        super(FSQStudent, self).__init__(ssm, t_dyn, t_obs, dof, fixed_dof)
-
-
-def rbf_student_mc_weights(x, kern, num_samples, num_batch):
-    # MC approximated BQ weights using RBF kernel and Student density
-    # MC computed by batches, because without batches we would run out of memory for large sample sizes
-
-    assert isinstance(kern, RBFStudent)
-    # kernel parameters and input dimensionality
-    par = kern.par
-    dim, num_pts = x.shape
-
-    # inverse kernel matrix
-    iK = kern.eval_inv_dot(kern.par, x, scaling=False)
-    mean, scale, dof = np.zeros((dim, )), np.eye(dim), kern.dof
-
-    # compute MC estimates by batches
-    num_samples_batch = num_samples // num_batch
-    q_batch = np.zeros((num_pts, num_batch, ))
-    Q_batch = np.zeros((num_pts, num_pts, num_batch))
-    R_batch = np.zeros((dim, num_pts, num_batch))
-    for ib in range(num_batch):
-
-        # multivariate t samples
-        x_samples = multivariate_t(mean, scale, dof, num_samples_batch).T
-
-        # evaluate kernel
-        k_samples = kern.eval(par, x_samples, x, scaling=False)
-        kk_samples = k_samples[:, na, :] * k_samples[..., na]
-        xk_samples = x_samples[..., na] * k_samples[na, ...]
-
-        # intermediate sums
-        q_batch[..., ib] = k_samples.sum(axis=0)
-        Q_batch[..., ib] = kk_samples.sum(axis=0)
-        R_batch[..., ib] = xk_samples.sum(axis=1)
-
-    # MC approximations == sum the sums divide by num_samples
-    c = 1/num_samples
-    q = c * q_batch.sum(axis=-1)
-    Q = c * Q_batch.sum(axis=-1)
-    R = c * R_batch.sum(axis=-1)
-
-    # BQ moment transform weights
-    wm = q.dot(iK)
-    wc = iK.dot(Q).dot(iK)
-    wcc = R.dot(iK)
-    return wm, wc, wcc, Q
-
-
-def eval_perf_scores(x, mf, Pf):
-    xD, steps, mc_sims, num_filt = mf.shape
-
-    # average RMSE over simulations
-    rmse = np.sqrt(((x[..., na] - mf) ** 2).sum(axis=0))
-    rmse_avg = rmse.mean(axis=1)
-
-    # average inclination indicator over simulations
-    lcr = np.empty((steps, mc_sims, num_filt))
-    for f in range(num_filt):
-        for k in range(steps):
-            mse = mse_matrix(x[:, k, :], mf[:, k, :, f])
-            for imc in range(mc_sims):
-                lcr[k, imc, f] = log_cred_ratio(x[:, k, imc], mf[:, k, imc, f], Pf[..., k, imc, f], mse)
-    lcr_avg = lcr.mean(axis=1)
-
-    return rmse_avg, lcr_avg
-
-
-def run_filters(filters, z):
-    num_filt = len(filters)
-    zD, steps, mc_sims = z.shape
-    xD = filters[0].ssm.xD
-
-    # init space for filtered mean and covariance
-    mf = np.zeros((xD, steps, mc_sims, num_filt))
-    Pf = np.zeros((xD, xD, steps, mc_sims, num_filt))
-
-    # run filters
-    for i, f in enumerate(filters):
-        print('Running {} ...'.format(f.__class__.__name__))
-        for imc in range(mc_sims):
-            mf[..., imc, i], Pf[..., imc, i] = f.forward_pass(z[..., imc])
-            f.reset()
-
-    # return filtered mean and covariance
-    return mf, Pf
-
-
-def synthetic_demo(steps=250, mc_sims=5000):
-    """
-    An experiment replicating the conditions of the synthetic example in _[1] used for testing non-additive
-    student's t sigma-point filters.
-
-    Parameters
-    ----------
-    steps
-    mc_sims
-
-    Returns
-    -------
-
-    """
-
-    # generate data
-    sys = SyntheticSys()
-    x, z = sys.simulate(steps, mc_sims)
-
-    # load data from mat-file
-    # from scipy.io import loadmat
-    # datadict = loadmat('synth_data', variable_names=('x', 'y'))
-    # x, z = datadict['x'][:, 1:, :], datadict['y'][:, 1:, :]
-
-    # init SSM for the filter
-    ssm = SyntheticSSM()
-
-    # kernel parameters for TPQ and GPQ filters
-    # TPQ Student
-    a, b = 10, 30
-    par_dyn_tp = np.array([[0.4, a, a]])
-    par_obs_tp = np.array([[0.4, b, b, b, b]])
-    # par_dyn_tp = np.array([[1.0, 1.7, 1.7]])
-    # par_obs_tp = np.array([[1.1, 3.0, 3.0, 3.0, 3.0]])
-    # GPQ Student
-    par_dyn_gpqs = np.array([[1.0, 5, 5]])
-    par_obs_gpqs = np.array([[0.9, 4, 4, 4, 4]])
-    # GPQ Kalman
-    par_dyn_gpqk = np.array([[1.0, 2.0, 2.0]])
-    par_obs_gpqk = np.array([[1.0, 2.0, 2.0, 2.0, 2.0]])
-    # parameters of the point-set
-    par_pt = {'kappa': None}
-
-    # init filters
-    filters = (
-        # ExtendedStudent(ssm),
-        FSQStudent(ssm, kappa=None),
-        # UnscentedKalman(ssm, kappa=-1),
-        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
-        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
-        # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
-        # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
-    )
-
-    # assign weights approximated by MC with lots of samples
-    # very dirty code
-    pts = filters[1].tf_dyn.model.points
-    kern = filters[1].tf_dyn.model.kernel
-    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
-    for f in filters:
-        if isinstance(f.tf_dyn, BQTransform):
-            f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
-            f.tf_dyn.Q = Q
-    pts = filters[1].tf_meas.model.points
-    kern = filters[1].tf_meas.model.kernel
-    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
-    for f in filters:
-        if isinstance(f.tf_meas, BQTransform):
-            f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
-            f.tf_meas.Q = Q
-
-    mf, Pf = run_filters(filters, z)
-
-    rmse_avg, lcr_avg = eval_perf_scores(x, mf, Pf)
-
-    # print out table
-    import pandas as pd
-    f_label = [f.__class__.__name__ for f in filters]
-    m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
-    data = np.array([rmse_avg.mean(axis=0), rmse_avg.max(axis=0), lcr_avg.mean(axis=0), lcr_avg.max(axis=0)]).T
-    table = pd.DataFrame(data, f_label, m_label)
-    print(table)
-
-    # print kernel parameters
-    parlab = ['alpha'] + ['ell_{}'.format(d+1) for d in range(4)]
-    partable = pd.DataFrame(np.vstack((np.hstack((par_dyn_tp.squeeze(), np.zeros((2,)))), par_obs_tp)),
-                            columns=parlab, index=['dyn', 'obs'])
-    print()
-    print(partable)
-
-
-def synthetic_plots(steps=250, mc_sims=20):
-
-    # generate data
-    sys = SyntheticSys()
-    x, z = sys.simulate(steps, mc_sims)
-
-    import matplotlib.pyplot as plt
-    for i in range(mc_sims):
-        plt.plot(x[0, :, i], x[1, :, i], 'b', alpha=0.15)
-    plt.show()
-
-
-def ungm_demo(steps=250, mc_sims=100):
-    sys = UNGMSys()
-    x, z = sys.simulate(steps, mc_sims)
-
-    # SSM noise covariances should follow the system
-    ssm = UNGM(q_cov=1, r_cov=0.01)
-
-    # kernel parameters for TPQ and GPQ filters
-    # TPQ Student
-    # par_dyn_tp = np.array([[1.8, 3.0]])
-    # par_obs_tp = np.array([[0.4, 1.0, 1.0]])
-    par_dyn_tp = np.array([[1.0, 1.0]])
-    par_obs_tp = np.array([[1.0, 1.0]])
-    # GPQ Student
-    par_dyn_gpqs = np.array([[1.0, 0.5]])
-    par_obs_gpqs = np.array([[1.0, 1, 10]])
-    # GPQ Kalman
-    par_dyn_gpqk = np.array([[1.0, 0.5]])
-    par_obs_gpqk = np.array([[1.0, 1, 10]])
-    # parameters of the point-set
-    par_pt = {'kappa': None}
-
-    # init filters
-    filters = (
-        # ExtendedStudent(ssm),
-        FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
-        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
-        UnscentedKalman(ssm, kappa=None),
-        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
-        # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
-        # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
-    )
-
-    # assign weights approximated by MC with lots of samples
-    # very dirty code
-    pts = filters[1].tf_dyn.model.points
-    kern = filters[1].tf_dyn.model.kernel
-    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
-    for f in filters:
-        if isinstance(f.tf_dyn, BQTransform):
-            f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
-            f.tf_dyn.Q = Q
-    pts = filters[1].tf_meas.model.points
-    kern = filters[1].tf_meas.model.kernel
-    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
-    for f in filters:
-        if isinstance(f.tf_meas, BQTransform):
-            f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
-            f.tf_meas.Q = Q
-
-    mf, Pf = run_filters(filters, z)
-
-    rmse_avg, lcr_avg = eval_perf_scores(x, mf, Pf)
-
-    # print out table
-    import pandas as pd
-    f_label = [f.__class__.__name__ for f in filters]
-    m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
-    data = np.array([rmse_avg.mean(axis=0), rmse_avg.max(axis=0), lcr_avg.mean(axis=0), lcr_avg.max(axis=0)]).T
-    table = pd.DataFrame(data, f_label, m_label)
-    print(table)
-
-    # print kernel parameters
-    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(1)]
-    partable = pd.DataFrame(np.vstack((par_dyn_tp, par_obs_tp)), columns=parlab, index=['dyn', 'obs'])
-    print()
-    print(partable)
-
-    # plots
-    time = np.arange(1, steps+1)
-
-    # filtered state and covariance
-    fig, ax = plt.subplots(3, 1, sharex=True)
-    for fi, f in enumerate(filters):
-        # true state
-        ax[fi].plot(time, x[0, :, 0], 'r--', alpha=0.5)
-
-        # measurements
-        ax[fi].plot(time, z[0, :, 0], 'k.')
-
-        xhat = mf[0, :, 0, fi]
-        std = np.sqrt(Pf[0, 0, :, 0, fi])
-        ax[fi].plot(time, xhat, label=f.__class__.__name__)
-        ax[fi].fill_between(time, xhat - 2 * std, xhat + 2 * std, alpha=0.15)
-        ax[fi].axis([None, None, -50, 50])
-        ax[fi].legend()
-    plt.show()
-
-    # compare posterior variances with outliers
-    plt.figure()
-    plt.plot(time, z[0, :, 0], 'k.')
-    for fi, f in enumerate(filters):
-        plt.plot(time, 2*np.sqrt(Pf[0, 0, :, 0, fi]), label=f.__class__.__name__)
-    plt.legend()
-    plt.show()
-
-
-def reentry_tracking_demo(mc_sims=100):
-
-    # generate some data (true trajectory)
-    sys = ReentryRadarSimpleSys()
-    x = sys.simulate_trajectory(method='rk4', dt=0.1, duration=30, mc_sims=mc_sims)
-
-    # pick only non-divergent trajectories
-    x = x[..., np.all(x >= 0, axis=(0, 1))]
-    mc = x.shape[2]
-
-    z = np.zeros((sys.zD,) + x.shape[1:])
-    for i in range(mc):
-        z[..., i] = sys.simulate_measurements(x[..., i]).squeeze()
-
-    # init SSM for the filters
-    ssm = ReentryRadarSimple(dt=0.1)
-
-    par_dyn_tp = np.array([[0.5, 10, 10, 10]])
-    par_obs_tp = np.array([[0.5, 15, 20, 20]])
-    par_dyn_gpqk = par_dyn_tp
-    par_obs_gpqk = par_obs_tp
-    par_pt = {'kappa': None}
-
-    # init filters
-    filters = (
-        # ExtendedStudent(ssm),
-        FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
-        UnscentedKalman(ssm, kappa=None),
-        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
-        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
-        # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
-        # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
-    )
-
-    # assign weights approximated by MC with lots of samples
-    # very dirty code
-    # pts = filters[1].tf_dyn.model.points
-    # kern = filters[1].tf_dyn.model.kernel
-    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
-    # for f in filters:
-    #     if isinstance(f.tf_dyn, BQTransform):
-    #         f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
-    #         f.tf_dyn.Q = Q
-    # pts = filters[1].tf_meas.model.points
-    # kern = filters[1].tf_meas.model.kernel
-    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
-    # for f in filters:
-    #     if isinstance(f.tf_meas, BQTransform):
-    #         f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
-    #         f.tf_meas.Q = Q
-
-    mf, Pf = run_filters(filters, z)
-
-    rmse_avg, lcr_avg = eval_perf_scores(x, mf, Pf)
-
-    # print out table
-    import pandas as pd
-    f_label = [f.__class__.__name__ for f in filters]
-    m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
-    data = np.array([rmse_avg.mean(axis=0), rmse_avg.max(axis=0), lcr_avg.mean(axis=0), lcr_avg.max(axis=0)]).T
-    table = pd.DataFrame(data, f_label, m_label)
-    print(table)
-
-    # print kernel parameters
-    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(sys.xD)]
-    partable = pd.DataFrame(np.vstack((par_dyn_tp, par_obs_tp)), columns=parlab, index=['dyn', 'obs'])
-    print()
-    print(partable)
-
-
-def coordinated_bot_demo(steps=100, mc_sims=100):
-
-    # sensor positions
-    x_min, x_max = -10000, 10000
-    y_min, y_max = -10000, 10000
-    S = np.array([[x_min, y_min],
-                  [x_min, y_max],
-                  [x_max, y_min],
-                  [x_max, y_max]])
-    tau = 1.0
-    # generate data
-    sys = CoordinatedTurnBOTSys(dt=tau, sensor_pos=S)
-    x, z = sys.simulate(steps, mc_sims)
-
-    # weed out trajectories venturing outside of the sensor rectangle
-    ix = np.all(np.abs(x[(0, 2), ...]) <= x_max, axis=(0, 1))
-    x, z = x[..., ix], z[..., ix]
-    print('{:.2f}% of trajectories weeded out.'.format(100 * np.count_nonzero(ix==False)/len(ix)))
-
-    # SSM for the filters
-    ssm = CoordinatedTurnBOT(dt=tau, sensor_pos=S)
-
-    par_dyn_tp = np.array([[1.0, 1, 1, 1, 1, 1]])
-    par_obs_tp = np.array([[1.0, 1, 100, 1, 100, 100]])
-    par_dyn_gpqk = par_dyn_tp
-    par_obs_gpqk = par_obs_tp
-    par_pt = {'kappa': None}
-
-    # init filters
-    filters = (
-        # ExtendedStudent(ssm),
-        FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
-        UnscentedKalman(ssm, kappa=None),
-        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
-        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
-        # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
-        # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
-    )
-
-    # assign weights approximated by MC with lots of samples
-    # very dirty code
-    # pts = filters[1].tf_dyn.model.points
-    # kern = filters[1].tf_dyn.model.kernel
-    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
-    # for f in filters:
-    #     if isinstance(f.tf_dyn, BQTransform):
-    #         f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
-    #         f.tf_dyn.Q = Q
-    # pts = filters[1].tf_meas.model.points
-    # kern = filters[1].tf_meas.model.kernel
-    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
-    # for f in filters:
-    #     if isinstance(f.tf_meas, BQTransform):
-    #         f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
-    #         f.tf_meas.Q = Q
-
-    mf, Pf = run_filters(filters, z)
-
-    # TODO: compare with results in "On Gaussian Optimal Smoothing of Non-Linear State Space Models"
-    pos_x, pos_mf, pos_Pf = x[[0, 2], ...], mf[[0, 2], ...], Pf[np.ix_([0, 2], [0, 2])]
-    vel_x, vel_mf, vel_Pf = x[[1, 3], ...], mf[[1, 3], ...], Pf[np.ix_([1, 3], [1, 3])]
-    ome_x, ome_mf, ome_Pf = x[4, na, ...], mf[4, na, ...], Pf[4, 4, na, na, ...]
-    pos_rmse, pos_lcr = eval_perf_scores(pos_x, pos_mf, pos_Pf)
-    vel_rmse, vel_lcr = eval_perf_scores(vel_x, vel_mf, vel_Pf)
-    ome_rmse, ome_lcr = eval_perf_scores(ome_x, ome_mf, ome_Pf)
-
-    # print out table
-    import pandas as pd
-    f_label = [f.__class__.__name__ for f in filters]
-    m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
-
-    pos_data = np.array([pos_rmse.mean(axis=0), pos_rmse.max(axis=0), pos_lcr.mean(axis=0), pos_lcr.max(axis=0)]).T
-    vel_data = np.array([vel_rmse.mean(axis=0), vel_rmse.max(axis=0), vel_lcr.mean(axis=0), vel_lcr.max(axis=0)]).T
-    ome_data = np.array([ome_rmse.mean(axis=0), ome_rmse.max(axis=0), ome_lcr.mean(axis=0), ome_lcr.max(axis=0)]).T
-
-    pos_table = pd.DataFrame(pos_data, f_label, m_label)
-    vel_table = pd.DataFrame(vel_data, f_label, m_label)
-    ome_table = pd.DataFrame(ome_data, f_label, m_label)
-    print(pos_table)
-    print(vel_table)
-    print(ome_table)
-
-    # print kernel parameters
-    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(sys.xD)]
-    partable = pd.DataFrame(np.vstack((par_dyn_tp, par_obs_tp)), columns=parlab, index=['dyn', 'obs'])
-    print()
-    print(partable)
-
-
 def coordinated_radar_demo(steps=100, mc_sims=100, plots=True):
     tau = 1.0
     # generate data
@@ -1480,9 +1482,9 @@ def coordinated_radar_demo(steps=100, mc_sims=100, plots=True):
     x, z = sys.simulate(steps, mc_sims)
 
     # weed out trajectories outside 10km radius
-    ix = np.all(np.linalg.norm(x[(0, 2), ...], axis=0, keepdims=True) <= 10000, axis=(0, 1))
-    x, z = x[..., ix], z[..., ix]
-    print('{:.2f}% of trajectories weeded out.'.format(100 * np.count_nonzero(ix==False) / len(ix)))
+    # ix = np.all(np.linalg.norm(x[(0, 2), ...], axis=0, keepdims=True) <= 10000, axis=(0, 1))
+    # x, z = x[..., ix], z[..., ix]
+    # print('{:.2f}% of trajectories weeded out.'.format(100 * np.count_nonzero(ix==False) / len(ix)))
 
     if plots:
         plt.figure()
@@ -1495,18 +1497,29 @@ def coordinated_radar_demo(steps=100, mc_sims=100, plots=True):
     # SSM for the filters
     ssm = CoordinatedTurnRadar(dt=tau)
 
-    par_dyn_tp = np.array([[1.0, 0.4, 0.4, 0.4, 0.4, 0.4]])
-    par_obs_tp = np.array([[1.0, 1, 100, 1, 100, 100]])
+    # print initial conditions
+    print('SSM x0_mean = {}'.format(ssm.get_pars('x0_mean')[0]))
+
+    a = 1.0
+    par_dyn_tp = np.array([[1.0, 1, a, 1, a, 1]])
+    par_obs_tp = np.array([[1.0, 1, 1e2, 1, 1e2, 1e2]])
     par_dyn_gpqk = par_dyn_tp
     par_obs_gpqk = par_obs_tp
     par_pt = {'kappa': None}
+
+    # print kernel parameters
+    import pandas as pd
+    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(sys.xD)]
+    partable = pd.DataFrame(np.vstack((par_dyn_tp, par_obs_tp)), columns=parlab, index=['dyn', 'obs'])
+    print()
+    print(partable)
 
     # init filters
     filters = (
         # ExtendedStudent(ssm),
         FSQStudent(ssm, kappa=None),
-        CubatureKalman(ssm),
-        UnscentedKalman(ssm, kappa=None),
+        # CubatureKalman(ssm),
+        # UnscentedKalman(ssm, kappa=None),
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
         # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
@@ -1551,7 +1564,6 @@ def coordinated_radar_demo(steps=100, mc_sims=100, plots=True):
     plt.show()
 
     # print out table
-    import pandas as pd
     f_label = [f.__class__.__name__ for f in filters]
     m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
 
@@ -1566,15 +1578,11 @@ def coordinated_radar_demo(steps=100, mc_sims=100, plots=True):
     print(vel_table)
     print(ome_table)
 
-    # print kernel parameters
-    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(sys.xD)]
-    partable = pd.DataFrame(np.vstack((par_dyn_tp, par_obs_tp)), columns=parlab, index=['dyn', 'obs'])
-    print()
-    print(partable)
 
 if __name__ == '__main__':
+    np.set_printoptions(precision=4)
     # synthetic_demo(mc_sims=50)
     # ungm_demo(mc_sims=100)
     # reentry_tracking_demo(mc_sims=50)
     # coordinated_bot_demo(steps=40, mc_sims=100)
-    coordinated_radar_demo(steps=70, mc_sims=400, plots=False)
+    coordinated_radar_demo(steps=100, mc_sims=100, plots=False)
