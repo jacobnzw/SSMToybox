@@ -463,17 +463,18 @@ class CoordinatedTurnBOTSys(StateSpaceModel):
                  [0, 0, self.rho_1 * (self.dt ** 3) / 3, self.rho_1 * (self.dt ** 2) / 2, 0],
                  [0, 0, self.rho_1 * (self.dt ** 2) / 2, self.rho_1 * self.dt, 0],
                  [0, 0, 0, 0, self.rho_2 * self.dt]])
+        r_cov = 10e-6 * np.eye(self.rD)
         kwargs = {
             'x0_mean': np.array([1000, 300, 1000, 0, -3.0 * np.pi / 180]),  # m, m/s, m m/s, rad/s
-            'x0_cov': 1e-5 * np.diag([100, 10, 100, 10, 0.01]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
+            'x0_cov': np.diag([100, 10, 100, 10, 10e-4]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
             'q_mean_0': np.zeros(self.qD),
             'q_cov_0': q_cov,
             'q_mean_1': np.zeros(self.qD),
-            'q_cov_1': 5 * q_cov,
+            'q_cov_1': 50 * q_cov,
             'r_mean_0': np.zeros(self.rD),
-            'r_cov_0': 10e-3 * np.eye(self.rD),  # 10e-3 rad == 10 mrad
+            'r_cov_0': r_cov,  # 10e-3 rad == 10 mrad
             'r_mean_1': np.zeros(self.rD),
-            'r_cov_1': 1 * np.eye(self.rD),  # 10e-3 rad == 10 mrad
+            'r_cov_1': 50 * r_cov,  # 10e-3 rad == 10 mrad
         }
         super(CoordinatedTurnBOTSys, self).__init__(**kwargs)
 
@@ -600,7 +601,7 @@ class CoordinatedTurnBOT(StudentStateSpaceModel):
         self.sensor_pos = sensor_pos  # np.vstack((np.eye(2), -np.eye(2)))
         kwargs = {
             'x0_mean': np.array([1000, 300, 1000, 0, -3.0 * np.pi / 180]),  # m, m/s, m m/s, rad/s
-            'x0_cov': 1e-5 * np.diag([100, 10, 100, 10, 0.01]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
+            'x0_cov': np.diag([100, 10, 100, 10, 10e-4]),  # m^2, (m/s)^2 m^2, (m/s)^2, (rad/s)^2
             'x0_dof': 4.0,
             'q_mean': np.zeros(self.qD),
             'q_cov': np.array(
@@ -611,7 +612,7 @@ class CoordinatedTurnBOT(StudentStateSpaceModel):
                  [0, 0, 0, 0, self.rho_2 * self.dt]]),
             'q_dof': 4.0,
             'r_mean': np.zeros(self.rD),
-            'r_cov': 10e-3 * np.eye(self.rD),  # 10e-3 rad == 10 mrad
+            'r_cov': 10e-6 * np.eye(self.rD),
             'r_dof': 4.0,
         }
         super(CoordinatedTurnBOT, self).__init__(**kwargs)
@@ -870,13 +871,13 @@ class CoordinatedTurnRadar(StudentStateSpaceModel):
         kwargs = {
             'x0_mean': np.array([1000, 300, 1000, 0, -3.0 * np.pi / 180]),  # m, m/s, m m/s, rad/s
             'x0_cov': np.diag([100, 10, 100, 10, 10e-4]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
-            'x0_dof': 4.0,
+            'x0_dof': 40.0,
             'q_mean': np.zeros(self.qD),
             'q_cov': q_cov,
-            'q_dof': 4.0,
+            'q_dof': 40.0,
             'r_mean': np.zeros(self.rD),
             'r_cov': r_cov,
-            'r_dof': 4.0,
+            'r_dof': 40.0,
         }
         super(CoordinatedTurnRadar, self).__init__(**kwargs)
 
@@ -1372,14 +1373,21 @@ def reentry_tracking_demo(mc_sims=100):
 def coordinated_bot_demo(steps=100, mc_sims=100):
 
     # sensor positions
-    S = np.array([[-2500, 5000],
-                  [0, -5000],
-                  [2500, 5000],
-                  [5000, -5000]])
-    tau = 0.1
+    x_min, x_max = -10000, 10000
+    y_min, y_max = -10000, 10000
+    S = np.array([[x_min, y_min],
+                  [x_min, y_max],
+                  [x_max, y_min],
+                  [x_max, y_max]])
+    tau = 1.0
     # generate data
     sys = CoordinatedTurnBOTSys(dt=tau, sensor_pos=S)
     x, z = sys.simulate(steps, mc_sims)
+
+    # weed out trajectories venturing outside of the sensor rectangle
+    ix = np.all(np.abs(x[(0, 2), ...]) <= x_max, axis=(0, 1))
+    x, z = x[..., ix], z[..., ix]
+    print('{:.2f}% of trajectories weeded out.'.format(100 * np.count_nonzero(ix)/len(ix)))
 
     # SSM for the filters
     ssm = CoordinatedTurnBOT(dt=tau, sensor_pos=S)
@@ -1541,4 +1549,5 @@ if __name__ == '__main__':
     # synthetic_demo(mc_sims=50)
     # ungm_demo(mc_sims=100)
     # reentry_tracking_demo(mc_sims=50)
-    coordinated_radar_demo(steps=100, mc_sims=200)
+    coordinated_bot_demo(steps=100, mc_sims=200)
+    # coordinated_radar_demo(steps=100, mc_sims=200)
