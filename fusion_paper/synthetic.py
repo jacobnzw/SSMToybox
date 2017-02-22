@@ -497,8 +497,8 @@ class CoordinatedTurnBOTSys(StateSpaceModel):
         om = x[4]
         a = np.sin(om * self.dt)
         b = np.cos(om * self.dt)
-        c = np.sin(om * self.dt) / om
-        d = (1 - np.cos(om * self.dt)) / om
+        c = np.sin(om * self.dt) / om if om != 0 else self.dt
+        d = (1 - np.cos(om * self.dt)) / om if om != 0 else 0
         mdyn = np.array([[1, c, 0, -d, 0],
                          [0, b, 0, -a, 0],
                          [0, d, 1, c, 0],
@@ -522,7 +522,14 @@ class CoordinatedTurnBOTSys(StateSpaceModel):
         """
         a = x[2] - self.sensor_pos[:, 1]
         b = x[0] - self.sensor_pos[:, 0]
-        return np.arctan(a / b) + r
+        h = np.arctan(a / b)
+        ig = h > 0.5*np.pi
+        il = h < -0.5*np.pi
+        if np.count_nonzero(il) > np.count_nonzero(ig):
+            h[ig] -= 2*np.pi
+        else:
+            h[il] += 2*np.pi
+        return h + r
 
     def par_fcn(self, time):
         pass
@@ -636,8 +643,8 @@ class CoordinatedTurnBOT(StudentStateSpaceModel):
         om = x[4]
         a = np.sin(om * self.dt)
         b = np.cos(om * self.dt)
-        c = np.sin(om * self.dt) / om
-        d = (1 - np.cos(om * self.dt)) / om
+        c = np.sin(om * self.dt) / om if om != 0 else self.dt
+        d = (1 - np.cos(om * self.dt)) / om if om != 0 else 0
         mdyn = np.array([[1, c, 0, -d, 0],
                          [0, b, 0, -a, 0],
                          [0, d, 1, c, 0],
@@ -661,7 +668,14 @@ class CoordinatedTurnBOT(StudentStateSpaceModel):
         """
         a = x[2] - self.sensor_pos[:, 1]
         b = x[0] - self.sensor_pos[:, 0]
-        return np.arctan(a / b) + r
+        h = np.arctan(a / b)
+        ig = h > 0.5*np.pi
+        il = h < -0.5*np.pi
+        if np.count_nonzero(il) > np.count_nonzero(ig):
+            h[ig] -= 2*np.pi
+        else:
+            h[il] += 2*np.pi
+        return h + r
 
     def par_fcn(self, time):
         pass
@@ -762,8 +776,8 @@ class CoordinatedTurnRadarSys(StateSpaceModel):
         om = x[4]
         a = np.sin(om * self.dt)
         b = np.cos(om * self.dt)
-        c = np.sin(om * self.dt) / om
-        d = (1 - np.cos(om * self.dt)) / om
+        c = np.sin(om * self.dt) / om if om != 0 else self.dt
+        d = (1 - np.cos(om * self.dt)) / om if om != 0 else 0
         mdyn = np.array([[1, c, 0, -d, 0],
                          [0, b, 0, -a, 0],
                          [0, d, 1, c, 0],
@@ -900,8 +914,8 @@ class CoordinatedTurnRadar(StudentStateSpaceModel):
         om = x[4]
         a = np.sin(om * self.dt)
         b = np.cos(om * self.dt)
-        c = np.sin(om * self.dt) / om
-        d = (1 - np.cos(om * self.dt)) / om
+        c = np.sin(om * self.dt) / om if om != 0 else self.dt
+        d = (1 - np.cos(om * self.dt)) / om if om != 0 else 0
         mdyn = np.array([[1, c, 0, -d, 0],
                          [0, b, 0, -a, 0],
                          [0, d, 1, c, 0],
@@ -1387,7 +1401,7 @@ def coordinated_bot_demo(steps=100, mc_sims=100):
     # weed out trajectories venturing outside of the sensor rectangle
     ix = np.all(np.abs(x[(0, 2), ...]) <= x_max, axis=(0, 1))
     x, z = x[..., ix], z[..., ix]
-    print('{:.2f}% of trajectories weeded out.'.format(100 * np.count_nonzero(ix)/len(ix)))
+    print('{:.2f}% of trajectories weeded out.'.format(100 * np.count_nonzero(ix==False)/len(ix)))
 
     # SSM for the filters
     ssm = CoordinatedTurnBOT(dt=tau, sensor_pos=S)
@@ -1401,7 +1415,7 @@ def coordinated_bot_demo(steps=100, mc_sims=100):
     # init filters
     filters = (
         # ExtendedStudent(ssm),
-        # FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
+        FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
         UnscentedKalman(ssm, kappa=None),
         # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
         # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
@@ -1459,16 +1473,29 @@ def coordinated_bot_demo(steps=100, mc_sims=100):
     print(partable)
 
 
-def coordinated_radar_demo(steps=100, mc_sims=100):
+def coordinated_radar_demo(steps=100, mc_sims=100, plots=True):
     tau = 1.0
     # generate data
     sys = CoordinatedTurnRadarSys(dt=tau)
     x, z = sys.simulate(steps, mc_sims)
 
+    # weed out trajectories outside 10km radius
+    ix = np.all(np.linalg.norm(x[(0, 2), ...], axis=0, keepdims=True) <= 10000, axis=(0, 1))
+    x, z = x[..., ix], z[..., ix]
+    print('{:.2f}% of trajectories weeded out.'.format(100 * np.count_nonzero(ix==False) / len(ix)))
+
+    if plots:
+        plt.figure()
+        plt.plot([0], [0], 'ko', label='radar')
+        for i in range(x.shape[2]):
+            plt.plot(x[0, :, i], x[2, :, i], 'b', alpha=0.1)
+        plt.legend()
+        plt.show()
+
     # SSM for the filters
     ssm = CoordinatedTurnRadar(dt=tau)
 
-    par_dyn_tp = np.array([[1.0, 1, 1, 1, 1, 1]])
+    par_dyn_tp = np.array([[1.0, 0.4, 0.4, 0.4, 0.4, 0.4]])
     par_obs_tp = np.array([[1.0, 1, 100, 1, 100, 100]])
     par_dyn_gpqk = par_dyn_tp
     par_obs_gpqk = par_obs_tp
@@ -1478,7 +1505,7 @@ def coordinated_radar_demo(steps=100, mc_sims=100):
     filters = (
         # ExtendedStudent(ssm),
         FSQStudent(ssm, kappa=None),
-        # CubatureKalman(ssm),
+        CubatureKalman(ssm),
         UnscentedKalman(ssm, kappa=None),
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
         # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
@@ -1549,5 +1576,5 @@ if __name__ == '__main__':
     # synthetic_demo(mc_sims=50)
     # ungm_demo(mc_sims=100)
     # reentry_tracking_demo(mc_sims=50)
-    coordinated_bot_demo(steps=100, mc_sims=200)
-    # coordinated_radar_demo(steps=100, mc_sims=200)
+    # coordinated_bot_demo(steps=40, mc_sims=100)
+    coordinated_radar_demo(steps=70, mc_sims=400, plots=False)
