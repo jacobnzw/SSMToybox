@@ -1,5 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as plt
+from fusion_paper.figprint import *
 from numpy import newaxis as na
 from transforms.taylor import Taylor1stOrder
 from transforms.quad import FullySymmetricStudent
@@ -503,12 +503,12 @@ class UNGM(StudentStateSpaceModel):
         return np.asarray([0.1 * r[0] * x[0], 0.05 * x[0] ** 2])
 
 
-def ungm_demo(steps=250, mc_sims=100):
+def ungm_demo(steps=250, mc_sims=50):
     sys = UNGMSys()
     x, z = sys.simulate(steps, mc_sims)
 
     # SSM noise covariances should follow the system
-    ssm = UNGM(q_cov=1, r_cov=0.01)
+    ssm = UNGM(q_cov=0.1, r_cov=0.01)
 
     # kernel parameters for TPQ and GPQ filters
     # TPQ Student
@@ -528,25 +528,26 @@ def ungm_demo(steps=250, mc_sims=100):
     # init filters
     filters = (
         # ExtendedStudent(ssm),
+        UnscentedKalman(ssm, kappa=None),
         FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
-        UnscentedKalman(ssm, kappa=None),
         # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
         # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
     )
+    itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze()
 
     # assign weights approximated by MC with lots of samples
     # very dirty code
-    pts = filters[1].tf_dyn.model.points
-    kern = filters[1].tf_dyn.model.kernel
+    pts = filters[itpq].tf_dyn.model.points
+    kern = filters[itpq].tf_dyn.model.kernel
     wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
     for f in filters:
         if isinstance(f.tf_dyn, BQTransform):
             f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
             f.tf_dyn.Q = Q
-    pts = filters[1].tf_meas.model.points
-    kern = filters[1].tf_meas.model.kernel
+    pts = filters[itpq].tf_meas.model.points
+    kern = filters[itpq].tf_meas.model.kernel
     wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
     for f in filters:
         if isinstance(f.tf_meas, BQTransform):
@@ -559,6 +560,7 @@ def ungm_demo(steps=250, mc_sims=100):
 
     # print out table
     import pandas as pd
+    pd.set_option('display.precision', 4)
     f_label = [f.__class__.__name__ for f in filters]
     m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
     data = np.array([rmse_avg.mean(axis=0), rmse_avg.max(axis=0), lcr_avg.mean(axis=0), lcr_avg.max(axis=0)]).T
@@ -572,7 +574,21 @@ def ungm_demo(steps=250, mc_sims=100):
     print(partable)
 
     # plots
+    fp = FigurePrint()
     time = np.arange(1, steps+1)
+
+    # RMSE and INC box plots
+    fig, ax = plt.subplots()
+    ax.boxplot(rmse_avg, labels=['UKF', 'SF', 'TPQSF'])
+    ax.set_ylabel('Average RMSE')
+    plt.tight_layout(pad=0.1)
+    fp.savefig('ungm_rmse_boxplot')
+
+    fig, ax = plt.subplots()
+    ax.boxplot(lcr_avg, labels=['UKF', 'SF', 'TPQSF'])
+    ax.set_ylabel('Average INC')
+    plt.tight_layout(pad=0.1)
+    fp.savefig('ungm_inc_boxplot')
 
     # filtered state and covariance
     fig, ax = plt.subplots(3, 1, sharex=True)
@@ -1582,7 +1598,7 @@ def coordinated_radar_demo(steps=100, mc_sims=100, plots=True):
 if __name__ == '__main__':
     np.set_printoptions(precision=4)
     # synthetic_demo(mc_sims=50)
-    # ungm_demo(mc_sims=100)
+    ungm_demo()
     # reentry_tracking_demo(mc_sims=50)
     # coordinated_bot_demo(steps=40, mc_sims=100)
-    coordinated_radar_demo(steps=100, mc_sims=100, plots=False)
+    # coordinated_radar_demo(steps=100, mc_sims=100, plots=False)
