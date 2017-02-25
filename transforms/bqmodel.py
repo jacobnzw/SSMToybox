@@ -278,7 +278,7 @@ class Model(object, metaclass=ABCMeta):
         reg = self.integral_variance(fcn_obs, par=np.exp(log_par))
         return nlml + reg
 
-    def optimize(self, log_par_0, fcn_obs, crit='NLML', method='BFGS', **kwargs):
+    def optimize(self, log_par_0, fcn_obs, x_obs, crit='NLML', method='BFGS', **kwargs):
         """
         Find optimal values of kernel parameters by minimizing chosen criterion given the point-set and the function
         observations.
@@ -289,6 +289,8 @@ class Model(object, metaclass=ABCMeta):
             Initial guess of the kernel log-parameters.
         fcn_obs : numpy.ndarray
             Observed function values at the point-set locations.
+        x_obs : numpy.ndarray
+            Function inputs.
         crit : string
             Objective function to use as a criterion for finding optimal setting of kernel parameters. Possible
             values are:
@@ -327,7 +329,7 @@ class Model(object, metaclass=ABCMeta):
             jac = False  # gradients not implemented for regularizers (solver uses approximations)
         else:
             raise ValueError('Unknown criterion {}.'.format(crit))
-        return minimize(obj_func, log_par_0, fcn_obs, method=method, jac=jac, **kwargs)
+        return minimize(obj_func, log_par_0, args=(fcn_obs, x_obs), method=method, jac=jac, **kwargs)
 
     def plot_model(self, test_data, fcn_obs, par=None, fcn_true=None, in_dim=0):
         """
@@ -819,14 +821,50 @@ class MultiOutputModel(Model):
         return w_m, w_c, w_cc
 
     def optimize(self, log_par_0, fcn_obs, x_obs=None, method='BFGS', **kwargs):
-        # optimize kernel par for each output independently
-        # must call optimize() `dim_out` times each time with different output
+        """
+        Find optimal values of kernel parameters by minimizing negative marginal log-likelihood.
+
+        Parameters
+        ----------
+        log_par_0 : numpy.ndarray
+            Initial guess of the kernel log-parameters.
+        fcn_obs : numpy.ndarray
+            Observed function values at the point-set locations.
+        x_obs : numpy.ndarray
+            Function inputs.
+        crit : string
+            Objective function to use as a criterion for finding optimal setting of kernel parameters. Possible
+            values are:
+              - 'nlml' : negative marginal log-likelihood,
+              - 'nlml+emv' : NLML with expected model variance as regularizer,
+              - 'nlml+ivar' : NLML with integral variance as regularizer.
+        method : string
+            Optimization method for `scipy.optimize.minimize`, default method='BFGS'.
+        **kwargs
+            Keyword arguments for the `scipy.optimize.minimize`.
+
+        Returns
+        -------
+        scipy.optimize.OptimizeResult
+            Results of the optimization in a dict-like structure returned by `scipy.optimize.minimize`.
+
+        Notes
+        -----
+        The criteria using expected model variance and integral variance as regularizers ('nlml+emv', 'nlml+ivar')
+        are somewhat experimental. I did not operate under any sound theoretical justification when implementing
+        those. Just curious to see what happens, thus might be removed in the future.
+
+        See Also
+        --------
+        scipy.optimize.minimize
+        """
 
         # use sigma-points if no function inputs provided
         obj_func = self.neg_log_marginal_likelihood
         results = list()
         for d in range(self.dim_out):
-            r = minimize(obj_func, log_par_0, args=(fcn_obs[:, d], x_obs), method=method, jac=True, **kwargs)
+            r = minimize(obj_func, log_par_0[d, :], args=(fcn_obs[d, :, None], x_obs),
+                         method=method, jac=True, **kwargs)
             results.append(r)
 
         # extract optimized parameters and arrange in 2D array
@@ -1038,8 +1076,8 @@ class GaussianProcessMO(MultiOutputModel):
 
         # TODO: check the gradient with check_grad method
         # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
-        dK_dTheta = self.kernel.der_par(par, self.points)  # (N, N, num_par)
-        iK = la.solve(K, np.eye(self.num_pts))
+        dK_dTheta = self.kernel.der_par(par, x_obs)  # (N, N, num_par)
+        iK = la.solve(K, np.eye(K.shape[0]))
         dnlml_dtheta = 0.5 * np.trace((iK - a_out_a).dot(dK_dTheta))  # (num_par, )
 
         return nlml, dnlml_dtheta

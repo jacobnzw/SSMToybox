@@ -6,7 +6,7 @@ import numpy.linalg as la
 from transforms.bayesquad import GPQ, GPQMO
 from models.pendulum import Pendulum
 from models.ungm import UNGM
-from models.tracking import ReentryRadar
+from models.tracking import ReentryRadar, CoordinatedTurnBOT
 
 np.set_printoptions(precision=4)
 
@@ -150,3 +150,51 @@ class GPQMOTest(TestCase):
         self.assertTrue(np.array_equal(mean_so, mean_mo))
         self.assertTrue(np.array_equal(cov_so, cov_mo))
         self.assertTrue(np.array_equal(ccov_so, ccov_mo))
+
+    def test_optimize_1D(self):
+        # test on simple 1D example, plot the fit
+        steps = 100
+        ssm = UNGM()
+        x, y = ssm.simulate(steps)
+
+        f = ssm.meas_eval
+        dim_in, dim_out = ssm.xD, ssm.xD
+
+        par0 = 1 + np.random.rand(dim_out, dim_in + 1)
+        tf = GPQMO(dim_in, dim_out, par0)
+
+        # use sampled system state trajectory to create training data
+        fy = np.zeros((dim_out, steps))
+        for k in range(steps):
+            fy[:, k] = f(x[:, k, 0], np.atleast_1d(k))
+
+        b = [np.log((0.1, 1.0001))] + dim_in * [(None, None)]
+        opt = {'xtol': 1e-2, 'maxiter': 100}
+        log_par, res_list = tf.model.optimize(np.log(par0), fy, x[..., 0], bounds=b, method='L-BFGS-B', options=opt)
+
+        print(np.exp(log_par))
+        self.assertTrue(False)
+
+    def test_optimize(self):
+        steps = 350
+        ssm = CoordinatedTurnBOT(dt=1.0)
+        x, y = ssm.simulate(steps)
+
+        f = ssm.dyn_eval
+        dim_in, dim_out = ssm.xD, ssm.xD
+
+        # par0 = np.hstack((np.ones((dim_out, 1)), 5*np.ones((dim_out, dim_in+1))))
+        par0 = 10*np.ones((dim_out, dim_in+1))
+        tf = GPQMO(dim_in, dim_out, par0)
+
+        # use sampled system state trajectory to create training data
+        fy = np.zeros((dim_out, steps))
+        for k in range(steps):
+            fy[:, k] = f(x[:, k, 0], None)
+
+        b = [np.log((0.1, 1.001))] + dim_in * [(None, None)]
+        opt = {'xtol': 1e-2, 'maxiter': 100}
+        log_par, res_list = tf.model.optimize(np.log(par0), fy, x[..., 0], bounds=b, method='L-BFGS-B', options=opt)
+
+        print(np.exp(log_par))
+        self.assertTrue(False)

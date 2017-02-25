@@ -48,16 +48,16 @@ class GPModelTest(TestCase):
         model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
         y = fcn(model.points)
         lhyp = np.log([1.0, 3.0])
-        f, df = model.neg_log_marginal_likelihood(lhyp, y.T)
+        f, df = model.neg_log_marginal_likelihood(lhyp, y.T, model.points)
 
     def test_hypers_optim(self):
-        model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'gh', point_par={'degree': 15})
+        model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'gh', point_par={'degree': 3})
         xtest = np.linspace(-7, 7, 100)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
         # plot before optimization
         # model.plot_model(xtest, y, fcn_true=f)
-        lhyp0 = np.log([[1.0, 0.1]])
+        lhyp0 = np.log([[1.0, 1.0]])
         b = ((np.log(0.9), np.log(1.1)), (None, None))
 
         def con_alpha(lhyp):
@@ -65,7 +65,7 @@ class GPModelTest(TestCase):
             return np.exp(lhyp[0]) ** 2 - 1 ** 2
 
         con = {'type': 'eq', 'fun': con_alpha}
-        res_ml2 = model.optimize(lhyp0, y.T, crit='nlml', method='SLSQP', constraints=con)
+        res_ml2 = model.optimize(lhyp0, y.T, model.points, method='SLSQP', constraints=con)
         # res_ml2_emv = model.optimize(lhyp0, y.T, crit='nlml+emv', method='SLSQP', constraints=con)
         # res_ml2_ivar = model.optimize(lhyp0, y.T, crit='nlml+ivar', method='SLSQP', constraints=con)
         hyp_ml2 = np.exp(res_ml2.x)
@@ -121,7 +121,7 @@ class GPModelTest(TestCase):
             return np.exp(lhyp[0]) ** 2 - 1 ** 2
 
         con = {'type': 'eq', 'fun': con_alpha}
-        res_ml2 = model.optimize(lhyp0, y.T, crit='nlml', method='L-BFGS-B', bounds=b)
+        res_ml2 = model.optimize(lhyp0, y.T, model.points, method='L-BFGS-B', bounds=b)
         # res_ml2_emv = model.optimize(lhyp0, y.T, crit='nlml+emv', method='L-BFGS-B', bounds=b)
         # res_ml2_ivar = model.optimize(lhyp0, y.T, crit='nlml+ivar', method='L-BFGS-B', bounds=b)
         hyp_ml2 = np.exp(res_ml2.x)
@@ -183,7 +183,7 @@ class TPModelTest(TestCase):
             return np.exp(lhyp[0]) ** 2 - 1 ** 2
 
         con = {'type': 'eq', 'fun': con_alpha}
-        res_ml2 = model.optimize(lhyp0, y.T, crit='nlml', method='SLSQP', constraints=con)
+        res_ml2 = model.optimize(lhyp0, y.T, model.points, crit='nlml', method='SLSQP', constraints=con)
         # res_ml2_emv = model.optimize(lhyp0, y.T, crit='nlml+emv', method='SLSQP', constraints=con)
         # res_ml2_ivar = model.optimize(lhyp0, y.T, crit='nlml+ivar', method='SLSQP', constraints=con)
         hyp_ml2 = np.exp(res_ml2.x)
