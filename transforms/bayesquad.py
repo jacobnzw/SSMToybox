@@ -12,7 +12,7 @@ from .mtform import MomentTransform
 class BQTransform(MomentTransform, metaclass=ABCMeta):
 
     # list of supported models for the integrand
-    _supported_models_ = ['gp', 'gp-mo', 'tp']  # mgp, gpder, ...
+    _supported_models_ = ['gp', 'gp-mo', 'tp', 'tp-mo']  # mgp, gpder, ...
 
     def __init__(self, dim_in, dim_out, kern_par, model, kernel, points, point_par, **kwargs):
         self.model = BQTransform._get_model(dim_in, dim_out, model, kernel, points, kern_par, point_par, **kwargs)
@@ -94,7 +94,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         """
 
         # import must be after SigmaPointTransform
-        from .bqmodel import GaussianProcess, StudentTProcess, GaussianProcessMO
+        from .bqmodel import GaussianProcess, StudentTProcess, GaussianProcessMO, StudentTProcessMO
         model = model.lower()
 
         # make sure kernel is supported
@@ -105,17 +105,18 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         # initialize the chosen model
         if model == 'gp':
             return GaussianProcess(dim_in, kern_par, kernel, points, point_par)
-        elif model == 'gp-mo':
-            return GaussianProcessMO(dim_in, dim_out, kern_par, kernel, points, point_par)
         elif model == 'tp':
             return StudentTProcess(dim_in, kern_par, kernel, points, point_par, **kwargs)
+        elif model == 'gp-mo':
+            return GaussianProcessMO(dim_in, dim_out, kern_par, kernel, points, point_par)
+        elif model == 'tp-mo':
+            return StudentTProcessMO(dim_in, dim_out, kern_par, kernel, points, point_par, **kwargs)
 
     def minimum_variance_points(self, x0, kern_par):
         # run optimizer to find minvar point sets using initial guess x0; requires implemented _integral_variance()
         pass
 
-    @abstractmethod
-    def _weights(self, kern_par):
+    def _weights(self, kern_par=None):
         """
         Bayesian quadrature weights.
 
@@ -130,7 +131,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
             Weights for the mean, covariance and cross-covariance quadrature approximations.
 
         """
-        pass
+        return self.model.bq_weights(kern_par)
 
     @abstractmethod
     def _integral_variance(self, points, kern_par):
@@ -229,44 +230,6 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
     def __init__(self, dim_in, kern_par, kernel='rbf', points='ut', point_par=None):
         super(GPQ, self).__init__(dim_in, 1, kern_par, 'gp', kernel, points, point_par)
 
-    def _weights(self, kern_par=None):
-        """
-        Weights of the Gaussian process quadrature.
-
-        Parameters
-        ----------
-        kern_par : array_like
-
-        Returns
-        -------
-        : tuple
-        Weights for computation of the transformed mean, covariance and cross-covariance in a tuple ``(wm, Wc, Wcc)``.
-
-        """
-        par = self.model.kernel.get_parameters(kern_par)
-        x = self.model.points
-
-        # inverse kernel matrix
-        iK = self.model.kernel.eval_inv_dot(par, x, scaling=False)
-
-        # Kernel expectations
-        q = self.model.kernel.exp_x_kx(par, x)
-        Q = self.model.kernel.exp_x_kxkx(par, par, x)
-        R = self.model.kernel.exp_x_xkx(par, x)
-
-        # DEBUG
-        self.q, self.Q, self.R, self.iK = q, Q, R, iK
-
-        # BQ weights in terms of kernel expectations
-        w_m = q.dot(iK)
-        w_c = iK.dot(Q).dot(iK)
-        w_cc = R.dot(iK)
-
-        # covariance weights should be symmetric
-        w_c = 0.5 * (w_c + w_c.T)
-
-        return w_m, w_c, w_cc
-
     def _fcn_eval(self, fcn, x, fcn_par):
         return np.apply_along_axis(fcn, 0, x, fcn_par)
 
@@ -285,7 +248,22 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
         : numpy.ndarray
 
         """
-        expected_model_var = self.model.exp_model_variance(fcn_evals, Q=self.Q, iK=self.iK)
+        expected_model_var = self.model.exp_model_variance(fcn_evals)
+        return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + expected_model_var
+
+    def _integral_variance(self, points, kern_par):
+        pass
+
+
+class TPQ(BQTransform):
+    def __init__(self, dim_in, kern_par, kernel='rbf', points='ut', point_par=None, nu=3.0):
+        super(TPQ, self).__init__(dim_in, 1, kern_par, 'tp', kernel, points, point_par, nu=nu)
+
+    def _fcn_eval(self, fcn, x, fcn_par):
+        return np.apply_along_axis(fcn, 0, x, fcn_par)
+
+    def _covariance(self, weights, fcn_evals, mean_out):
+        expected_model_var = self.model.exp_model_variance(fcn_evals)
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + expected_model_var
 
     def _integral_variance(self, points, kern_par):
@@ -328,67 +306,6 @@ class GPQMO(BQTransform):
         self.tmean = np.empty((dim_out, ))
         self.tcov = np.empty((dim_out, dim_out))
         self.tccov = np.empty((dim_out, dim_in))
-
-    def _weights(self, kern_par=None):
-        """
-        Weights of the multi-output Gaussian process quadrature.
-
-        Parameters
-        ----------
-        kern_par : numpy.ndarray of shape (dim_out, num_par)
-            Kernel parameters in a matrix, where e-th row contains parameters for e-th output.
-
-        Returns
-        -------
-        : tuple (w_m, w_c, w_cc)
-            GP quadrature weights for the mean (w_m), covariance (w_c) and cross-covariance (w_cc).
-            w_m : numpy.ndarray of shape (num_pts, dim_out)
-            w_c : numpy.ndarray of shape (num_pts, num_pts, dim_out, dim_out)
-            w_cc : numpy.ndarray of shape (dim_in, num_pts, dim_out)
-
-        """
-
-        # if kern_par=None return parameters stored in Kernel
-        par = self.model.kernel.get_parameters(kern_par)
-
-        # retrieve sigma-points from Model
-        x = self.model.points
-        d, e, n = self.model.dim_in, self.model.dim_out, self.model.num_pts
-
-        # Kernel expectations
-        q = np.zeros((n, e))
-        Q = np.zeros((n, n, e, e))
-        R = np.zeros((d, n, e))
-        iK = np.zeros((n, n, e))
-        w_c = np.zeros((n, n, e, e))
-        for i in range(e):
-            q[:, i] = self.model.kernel.exp_x_kx(par[i, :], x)
-            R[..., i] = self.model.kernel.exp_x_xkx(par[i, :], x)
-            iK[..., i] = self.model.kernel.eval_inv_dot(par[i, :], x, scaling=False)
-            for j in range(i+1):
-                Q[..., i, j] = self.model.kernel.exp_x_kxkx(par[i, :], par[j, :], x)
-                Q[..., j, i] = Q[..., i, j]
-                w_c[..., i, j] = iK[..., i].dot(Q[..., i, j]).dot(iK[..., j])
-                w_c[..., j, i] = w_c[..., i, j]
-
-        # DEBUG, la.cond(Q) is high
-        self.q, self.Q, self.R, self.iK = q, Q, R, iK
-
-        # weights
-        # w_m = q(\theta_e) * iK(\theta_e) for all e = 1, ..., dim_out
-        w_m = np.einsum('ne, nme -> me', q, iK)
-
-        # w_c = iK(\theta_e) * Q(\theta_e, \theta_f) * iK(\theta_f) for all e,f = 1, ..., dim_out
-        # NOTE: einsum gives slighly different results than dot, or I don't know how to use it
-        # w_c = np.einsum('nie, ijed, jmd -> nmed', iK, Q, iK)
-
-        # w_cc = R(\theta_e) * iK(\theta_e) for all e = 1, ..., dim_out
-        w_cc = np.einsum('die, ine -> dne', R, iK)
-
-        # covariance weights should be symmetric
-        w_c = 0.5 * (w_c + w_c.swapaxes(0, 1).swapaxes(2, 3))
-
-        return w_m, w_c, w_cc
 
     def _fcn_eval(self, fcn, x, fcn_par):
         return np.apply_along_axis(fcn, 0, x, fcn_par)
@@ -453,41 +370,78 @@ class GPQMO(BQTransform):
         pass
 
 
-class TPQ(BQTransform):
-    def __init__(self, dim_in, kern_par, kernel='rbf', points='ut', point_par=None, nu=3.0):
-        super(TPQ, self).__init__(dim_in, 1, kern_par, 'tp', kernel, points, point_par, nu=nu)
+class TPQMO(BQTransform):
 
-    def _weights(self, kern_par=None):
-        par = self.model.kernel.get_parameters(kern_par)
-        x = self.model.points
+    def __init__(self, dim_in, dim_out, kern_par, kernel='rbf', points='ut', point_par=None):
 
-        # inverse kernel matrix
-        iK = self.model.kernel.eval_inv_dot(par, x, scaling=False)
+        super(TPQMO, self).__init__(dim_in, dim_out, kern_par, 'tp-mo', kernel, points, point_par)
 
-        # Kernel expectations
-        q = self.model.kernel.exp_x_kx(par, x)
-        Q = self.model.kernel.exp_x_kxkx(par, par, x)
-        R = self.model.kernel.exp_x_xkx(par, x)
+        # output dimension (number of outputs)
+        self.e = dim_out
 
-        # DEBUG
-        self.q, self.Q, self.R, self.iK = q, Q, R, iK
-
-        # BQ weights in terms of kernel expectations
-        w_m = q.dot(iK)
-        w_c = iK.dot(Q).dot(iK)
-        w_cc = R.dot(iK)
-
-        # covariance weights should be symmetric
-        w_c = 0.5 * (w_c + w_c.T)
-
-        return w_m, w_c, w_cc
+        # TEMPORARY
+        self.tmean = np.empty((dim_out,))
+        self.tcov = np.empty((dim_out, dim_out))
+        self.tccov = np.empty((dim_out, dim_in))
 
     def _fcn_eval(self, fcn, x, fcn_par):
         return np.apply_along_axis(fcn, 0, x, fcn_par)
 
+    def _mean(self, weights, fcn_evals):
+        """
+        Transformed mean for the multi-output GPQ.
+
+        Parameters
+        ----------
+        weights : numpy.ndarray
+        fcn_evals : numpy.ndarray
+
+        Notes
+        -----
+        Problems with implementation. Can't get the results to match the results of single-output GPQ transform.
+        I strongly suspect this is caused by the inconsistent results from numpy.einsum and numpy.dot.
+
+        Returns
+        -------
+        : numpy.ndarray
+
+        """
+        # return np.einsum('ij, ji -> i', fcn_evals, weights)
+        for i in range(self.model.dim_out):
+            self.tmean[i] = fcn_evals[i, :].dot(weights[:, i])
+        return self.tmean
+
     def _covariance(self, weights, fcn_evals, mean_out):
-        expected_model_var = self.model.exp_model_variance(fcn_evals, Q=self.Q, iK=self.iK)
-        return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + expected_model_var
+        emv = self.model.exp_model_variance(fcn_evals)
+        # return np.einsum('ei, ijed, dj -> ed', fcn_evals, weights, fcn_evals) - np.outer(mean_out, mean_out.T) + emv
+        for i in range(self.e):
+            for j in range(i+1):
+                self.tcov[i, j] = fcn_evals[i, :].dot(weights[..., i, j]).dot(fcn_evals[j, :])
+                self.tcov[j, i] = self.tcov[i, j]
+        return self.tcov - np.outer(mean_out, mean_out.T) + emv
+
+    def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
+        """
+        Covariance of the input and output variables for multi-output GPQ model.
+
+        Parameters
+        ----------
+        weights : numpy.ndarray
+            Shape (D, N, E)
+        fcn_evals : numpy.ndarray
+            Shape (E, N)
+        chol_cov_in : numpy.ndarray
+            Shape (D, D)
+
+        Returns
+        -------
+        : numpy.ndarray
+            Shape (E, D)
+        """
+        # return np.einsum('en, ine, id  -> ed', fcn_evals, weights, chol_cov_in)
+        for i in range(self.e):
+            self.tccov[i, :] = fcn_evals[i, :].dot(weights[..., i].T).dot(chol_cov_in.T)
+        return self.tccov
 
     def _integral_variance(self, points, kern_par):
         pass

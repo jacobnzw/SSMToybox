@@ -44,8 +44,8 @@ class GPQuadTest(TestCase):
         dim = 2
         ker_par = np.array([[1, 3, 3]])
         tf = GPQ(dim, ker_par, points='sr')
-        emv0 = tf.model.exp_model_variance(tf.model.points, par=[1, 600, 6])
-        emv1 = tf.model.exp_model_variance(tf.model.points, par=[1.1, 600, 6])
+        emv0 = tf.model.exp_model_variance(tf.model.points)
+        emv1 = tf.model.exp_model_variance(tf.model.points)
         # expected model variance must be positive even for numerically unpleasant settings
         self.assertTrue(np.alltrue(np.array([emv0, emv1]) >= 0))
 

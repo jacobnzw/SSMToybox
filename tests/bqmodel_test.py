@@ -35,6 +35,7 @@ class GPModelTest(TestCase):
 
     def test_exp_model_variance(self):
         model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
+        model.bq_weights(self.ker_par_1d)
         y = fcn(model.points)
         self.assertTrue(model.exp_model_variance(y) >= 0)
 
@@ -65,25 +66,25 @@ class GPModelTest(TestCase):
 
         con = {'type': 'eq', 'fun': con_alpha}
         res_ml2 = model.optimize(lhyp0, y.T, crit='nlml', method='SLSQP', constraints=con)
-        res_ml2_emv = model.optimize(lhyp0, y.T, crit='nlml+emv', method='SLSQP', constraints=con)
-        res_ml2_ivar = model.optimize(lhyp0, y.T, crit='nlml+ivar', method='SLSQP', constraints=con)
+        # res_ml2_emv = model.optimize(lhyp0, y.T, crit='nlml+emv', method='SLSQP', constraints=con)
+        # res_ml2_ivar = model.optimize(lhyp0, y.T, crit='nlml+ivar', method='SLSQP', constraints=con)
         hyp_ml2 = np.exp(res_ml2.x)
-        hyp_ml2_emv = np.exp(res_ml2_emv.x)
-        hyp_ml2_ivar = np.exp(res_ml2_ivar.x)
+        # hyp_ml2_emv = np.exp(res_ml2_emv.x)
+        # hyp_ml2_ivar = np.exp(res_ml2_ivar.x)
 
         print(res_ml2)
-        print(res_ml2_emv)
-        print(res_ml2_ivar)
+        # print(res_ml2_emv)
+        # print(res_ml2_ivar)
 
         print('ML-II({:.4f}) @ alpha: {:.4f}, el: {:.4f}'.format(res_ml2.fun, hyp_ml2[0], hyp_ml2[1]))
-        print('ML-II-EMV({:.4f}) @ alpha: {:.4f}, el: {:.4f}'.format(res_ml2_emv.fun, hyp_ml2_emv[0], hyp_ml2_emv[1]))
-        print('ML-II-IVAR({:.4f}) @ alpha: {:.4f}, el: {:.4f}'.format(res_ml2_ivar.fun, hyp_ml2_ivar[0],
-                                                                      hyp_ml2_ivar[1]))
+        # print('ML-II-EMV({:.4f}) @ alpha: {:.4f}, el: {:.4f}'.format(res_ml2_emv.fun, hyp_ml2_emv[0], hyp_ml2_emv[1]))
+        # print('ML-II-IVAR({:.4f}) @ alpha: {:.4f}, el: {:.4f}'.format(res_ml2_ivar.fun, hyp_ml2_ivar[0],
+        #                                                               hyp_ml2_ivar[1]))
 
         # plot after optimization
         model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2)
-        model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2_emv)
-        model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2_ivar)
+        # model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2_emv)
+        # model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2_ivar)
 
         # TODO: test fitting of multioutput GPs, GPy supports this in GPRegression
         # plot NLML surface
@@ -121,20 +122,20 @@ class GPModelTest(TestCase):
 
         con = {'type': 'eq', 'fun': con_alpha}
         res_ml2 = model.optimize(lhyp0, y.T, crit='nlml', method='L-BFGS-B', bounds=b)
-        res_ml2_emv = model.optimize(lhyp0, y.T, crit='nlml+emv', method='L-BFGS-B', bounds=b)
-        res_ml2_ivar = model.optimize(lhyp0, y.T, crit='nlml+ivar', method='L-BFGS-B', bounds=b)
+        # res_ml2_emv = model.optimize(lhyp0, y.T, crit='nlml+emv', method='L-BFGS-B', bounds=b)
+        # res_ml2_ivar = model.optimize(lhyp0, y.T, crit='nlml+ivar', method='L-BFGS-B', bounds=b)
         hyp_ml2 = np.exp(res_ml2.x)
-        hyp_ml2_emv = np.exp(res_ml2_emv.x)
-        hyp_ml2_ivar = np.exp(res_ml2_ivar.x)
+        # hyp_ml2_emv = np.exp(res_ml2_emv.x)
+        # hyp_ml2_ivar = np.exp(res_ml2_ivar.x)
 
         print(res_ml2)
-        print(res_ml2_emv)
-        print(res_ml2_ivar)
+        # print(res_ml2_emv)
+        # print(res_ml2_ivar)
         np.set_printoptions(precision=4)
         print('ML-II({:.4f}) @ alpha: {:.4f}, el: {}'.format(res_ml2.fun, hyp_ml2[0], hyp_ml2[1:]))
-        print('ML-II-EMV({:.4f}) @ alpha: {:.4f}, el: {}'.format(res_ml2_emv.fun, hyp_ml2_emv[0], hyp_ml2_emv[1:]))
-        print('ML-II-IVAR({:.4f}) @ alpha: {:.4f}, el: {}'.format(res_ml2_ivar.fun, hyp_ml2_ivar[0],
-                                                                  hyp_ml2_ivar[1:]))
+        # print('ML-II-EMV({:.4f}) @ alpha: {:.4f}, el: {}'.format(res_ml2_emv.fun, hyp_ml2_emv[0], hyp_ml2_emv[1:]))
+        # print('ML-II-IVAR({:.4f}) @ alpha: {:.4f}, el: {}'.format(res_ml2_ivar.fun, hyp_ml2_ivar[0],
+        #                                                           hyp_ml2_ivar[1:]))
 
 
 class TPModelTest(TestCase):
@@ -158,6 +159,7 @@ class TPModelTest(TestCase):
 
     def test_exp_model_variance(self):
         model = StudentTProcess(1, self.ker_par_1d)
+        model.bq_weights(self.ker_par_1d)
         y = fcn(model.points)
         self.assertTrue(model.exp_model_variance(y) >= 0)
 
@@ -182,22 +184,22 @@ class TPModelTest(TestCase):
 
         con = {'type': 'eq', 'fun': con_alpha}
         res_ml2 = model.optimize(lhyp0, y.T, crit='nlml', method='SLSQP', constraints=con)
-        res_ml2_emv = model.optimize(lhyp0, y.T, crit='nlml+emv', method='SLSQP', constraints=con)
-        res_ml2_ivar = model.optimize(lhyp0, y.T, crit='nlml+ivar', method='SLSQP', constraints=con)
+        # res_ml2_emv = model.optimize(lhyp0, y.T, crit='nlml+emv', method='SLSQP', constraints=con)
+        # res_ml2_ivar = model.optimize(lhyp0, y.T, crit='nlml+ivar', method='SLSQP', constraints=con)
         hyp_ml2 = np.exp(res_ml2.x)
-        hyp_ml2_emv = np.exp(res_ml2_emv.x)
-        hyp_ml2_ivar = np.exp(res_ml2_ivar.x)
+        # hyp_ml2_emv = np.exp(res_ml2_emv.x)
+        # hyp_ml2_ivar = np.exp(res_ml2_ivar.x)
 
         print(res_ml2)
-        print(res_ml2_emv)
-        print(res_ml2_ivar)
+        # print(res_ml2_emv)
+        # print(res_ml2_ivar)
 
         print('ML-II({:.4f}) @ alpha: {:.4f}, el: {:.4f}'.format(res_ml2.fun, hyp_ml2[0], hyp_ml2[1]))
-        print('ML-II-EMV({:.4f}) @ alpha: {:.4f}, el: {:.4f}'.format(res_ml2_emv.fun, hyp_ml2_emv[0], hyp_ml2_emv[1]))
-        print('ML-II-IVAR({:.4f}) @ alpha: {:.4f}, el: {:.4f}'.format(res_ml2_ivar.fun, hyp_ml2_ivar[0],
-                                                                      hyp_ml2_ivar[1]))
+        # print('ML-II-EMV({:.4f}) @ alpha: {:.4f}, el: {:.4f}'.format(res_ml2_emv.fun, hyp_ml2_emv[0], hyp_ml2_emv[1]))
+        # print('ML-II-IVAR({:.4f}) @ alpha: {:.4f}, el: {:.4f}'.format(res_ml2_ivar.fun, hyp_ml2_ivar[0],
+        #                                                               hyp_ml2_ivar[1]))
 
         # plot after optimization
         model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2)
-        model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2_emv)
-        model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2_ivar)
+        # model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2_emv)
+        # model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2_ivar)
