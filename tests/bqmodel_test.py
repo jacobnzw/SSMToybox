@@ -1,6 +1,7 @@
 from unittest import TestCase
 
 import numpy as np
+import numpy.linalg as la
 import matplotlib.pyplot as plt
 from numpy import newaxis as na
 from transforms.bqmodel import GaussianProcess, StudentTProcess
@@ -49,6 +50,61 @@ class GPModelTest(TestCase):
         y = fcn(model.points)
         lhyp = np.log([1.0, 3.0])
         f, df = model.neg_log_marginal_likelihood(lhyp, y.T, model.points)
+
+    def _nlml(self, log_par, kernel, fcn_obs, x_obs):
+
+        # convert from log-par to par
+        par = np.exp(log_par)
+        num_data = x_obs.shape[1]
+
+        L = kernel.eval_chol(par, x_obs)  # (N, N)
+        K = L.dot(L.T)  # jitter included from eval_chol
+        a = la.solve(K, fcn_obs)  # (N, )
+        y_dot_a = fcn_obs.dot(a)
+
+        return np.sum(np.log(np.diag(L))) + 0.5 * (y_dot_a + num_data * np.log(2 * np.pi))
+
+    def _nlml_grad(self, log_par, kernel, fcn_obs, x_obs):
+        # FIXME: gradient error too high,
+        # convert from log-par to par
+        par = np.exp(log_par)
+
+        num_data = x_obs.shape[1]
+        L = kernel.eval_chol(par, x_obs)  # (N, N)
+        K = L.dot(L.T)  # jitter included from eval_chol
+        a = la.solve(K, fcn_obs)  # (N, ) # TODO: try cho_solve
+        a_out_a = np.outer(a, a.T)  # (N, N) sum over of outer products of columns of A
+
+        # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
+        dK_dTheta = kernel.der_par(par, x_obs)  # (N, N, num_par)  # TODO: kernel derivatives correct?
+        iK = la.solve(K, np.eye(num_data))  # TODO: try cho_solve
+        return 0.5 * np.trace((iK - a_out_a).dot(dK_dTheta))  # (num_par, )
+
+    def test_nlml_gradient(self):
+        model = GaussianProcess(5, self.ker_par_5d, 'rbf', 'ut', self.pt_par_ut)
+        y = fcn(model.points)
+        lhyp = np.log([1.0] + 5*[3.0])
+
+        from scipy.optimize import check_grad
+        err = check_grad(self._nlml, self._nlml_grad, lhyp, model.kernel, y.T[:, 0], model.points)
+        print(err)
+        self.assertTrue(False)
+
+        # difference for gradient
+        # h = 1e-8
+        #
+        # dim_par = 6
+        # log_par = np.random.rand(dim_par)
+        # hq_diag = np.diag(h * np.ones(dim_par))
+        #
+        # xqph, xqmh = log_par[:, na] + hq_diag, log_par[:, na] - hq_diag
+        # fph = np.zeros((1, dim_par))
+        # fmh = fph.copy()
+        # for i in range(dim_par):
+        #     fph[:, i], d = model.neg_log_marginal_likelihood(xqph[:, i])
+        #     fmh[:, i], d = model.neg_log_marginal_likelihood(xqmh[:, i])
+        # jac_fx = (2 * h) ** -1 * (fph - fmh)
+
 
     def test_hypers_optim(self):
         model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'gh', point_par={'degree': 3})
