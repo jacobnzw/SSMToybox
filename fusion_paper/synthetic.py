@@ -503,19 +503,19 @@ class UNGM(StudentStateSpaceModel):
         return np.asarray([0.1 * r[0] * x[0], 0.05 * x[0] ** 2])
 
 
-def ungm_demo(steps=250, mc_sims=50):
+def ungm_demo(steps=250, mc_sims=100):
     sys = UNGMSys()
     x, z = sys.simulate(steps, mc_sims)
 
     # SSM noise covariances should follow the system
-    ssm = UNGM(q_cov=0.1, r_cov=0.01)
+    ssm = UNGM(q_cov=10.0, r_cov=0.01)
 
     # kernel parameters for TPQ and GPQ filters
     # TPQ Student
     # par_dyn_tp = np.array([[1.8, 3.0]])
     # par_obs_tp = np.array([[0.4, 1.0, 1.0]])
-    par_dyn_tp = np.array([[1.0, 1.0]])
-    par_obs_tp = np.array([[1.0, 1.0]])
+    par_dyn_tp = np.array([[3.0, 1.0]])
+    par_obs_tp = np.array([[3.0, 3.0]])
     # GPQ Student
     par_dyn_gpqs = np.array([[1.0, 0.5]])
     par_obs_gpqs = np.array([[1.0, 1, 10]])
@@ -523,14 +523,16 @@ def ungm_demo(steps=250, mc_sims=50):
     par_dyn_gpqk = np.array([[1.0, 0.5]])
     par_obs_gpqk = np.array([[1.0, 1, 10]])
     # parameters of the point-set
-    par_pt = {'kappa': None}
+    kappa = 0.0
+    par_pt = {'kappa': kappa}
 
     # init filters
     filters = (
         # ExtendedStudent(ssm),
-        UnscentedKalman(ssm, kappa=None),
-        FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
+        UnscentedKalman(ssm, kappa=kappa),
+        FSQStudent(ssm, kappa=kappa),  # crashes, not necessarily a bug
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
+        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=8.0, point_hyp=par_pt),
         # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
         # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
