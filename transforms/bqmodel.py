@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 
 import matplotlib.pyplot as plt
 import numpy as np
-import numpy.linalg as la
+import scipy.linalg as la
 from scipy.optimize import minimize
 
 from .bqkernel import RBF, RQ, RBFStudent
@@ -208,7 +208,7 @@ class Model(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs):
+    def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
         """
         Negative logarithm of marginal likelihood of the model given the kernel parameters and the function
         observations.
@@ -226,6 +226,8 @@ class Model(object, metaclass=ABCMeta):
             Observed function values at the inputs supplied in `x_obs`.
         x_obs : numpy.ndarray
             Function inputs.
+        jitter : numpy.ndarray
+            Regularization term for kernel matrix inversion.
 
         Returns
         -------
@@ -329,7 +331,8 @@ class Model(object, metaclass=ABCMeta):
             jac = False  # gradients not implemented for regularizers (solver uses approximations)
         else:
             raise ValueError('Unknown criterion {}.'.format(crit))
-        return minimize(obj_func, log_par_0, args=(fcn_obs, x_obs), method=method, jac=jac, **kwargs)
+        jitter = 1e-8 * np.eye(x_obs.shape[1])
+        return minimize(obj_func, log_par_0, args=(fcn_obs, x_obs, jitter), method=method, jac=jac, **kwargs)
 
     def plot_model(self, test_data, fcn_obs, par=None, fcn_true=None, in_dim=0):
         """
@@ -557,7 +560,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         kbar = self.kernel.exp_xy_kxy(par)
         return kbar - q.T.dot(iK).dot(q)
 
-    def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs):
+    def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
         """
         Negative marginal log-likelihood of Gaussian process regression model.
 
@@ -582,22 +585,21 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
         # convert from log-par to par
         par = np.exp(log_par)
+        num_data = x_obs.shape[1]
 
-        L = self.kernel.eval_chol(par, x_obs)  # (N, N)
-        K = L.dot(L.T)  # jitter included from eval_chol
-        a = la.solve(K, fcn_obs)  # (N, E)
-        y_dot_a = np.einsum('ij, ji', fcn_obs.T, a)  # sum of diagonal of A.T.dot(A)
-        a_out_a = np.einsum('i...j, ...jn', a, a.T)  # (N, N) sum over of outer products of columns of A
+        K = self.kernel.eval(par, x_obs) + jitter  # (N, N)
+        L = la.cho_factor(K)  # jitter included from eval
+        a = la.cho_solve(L, fcn_obs)  # (N, )
+        y_dot_a = fcn_obs.T.dot(a)
+        a_out_a = np.outer(a, a.T)  # (N, N)
 
         # negative marginal log-likelihood
-        nlml = 0.5 * y_dot_a + np.sum(np.log(np.diag(L))) + 0.5 * self.num_pts * np.log(2 * np.pi)
-        # nlml = np.log(nlml)  # w/o this, unconstrained solver terminates w/ 'precision loss'
+        nlml = np.sum(np.log(np.diag(L[0]))) + 0.5 * (y_dot_a + num_data * np.log(2 * np.pi))
 
-        # TODO: check the gradient with check_grad method
         # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
-        dK_dTheta = self.kernel.der_par(par, self.points)  # (N, N, num_par)
-        iK = la.solve(K, np.eye(self.num_pts))
-        dnlml_dtheta = 0.5 * np.trace((iK - a_out_a).dot(dK_dTheta))  # (num_par, )
+        dK_dTheta = self.kernel.der_par(par, x_obs)  # (N, N, num_par)
+        iKdK = la.cho_solve(L, dK_dTheta)
+        dnlml_dtheta = 0.5 * np.trace((iKdK - a_out_a.dot(dK_dTheta)))  # (num_par, )
         return nlml, dnlml_dtheta
 
 
@@ -820,7 +822,7 @@ class MultiOutputModel(Model):
 
         return w_m, w_c, w_cc
 
-    def optimize(self, log_par_0, fcn_obs, x_obs=None, method='BFGS', **kwargs):
+    def optimize(self, log_par_0, fcn_obs, x_obs, method='BFGS', **kwargs):
         """
         Find optimal values of kernel parameters by minimizing negative marginal log-likelihood.
 
@@ -859,11 +861,11 @@ class MultiOutputModel(Model):
         scipy.optimize.minimize
         """
 
-        # use sigma-points if no function inputs provided
         obj_func = self.neg_log_marginal_likelihood
+        jitter = 1e-8 * np.eye(x_obs.shape[1])
         results = list()
         for d in range(self.dim_out):
-            r = minimize(obj_func, log_par_0[d, :], args=(fcn_obs[d, :, None], x_obs),
+            r = minimize(obj_func, log_par_0[d, :], args=(fcn_obs[d, :, None], x_obs, jitter),
                          method=method, jac=True, **kwargs)
             results.append(r)
 
@@ -944,7 +946,7 @@ class MultiOutputModel(Model):
         pass
 
     @abstractmethod
-    def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs):
+    def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
         """
         Negative logarithm of marginal likelihood of the model given the kernel parameters and the function
         observations.
@@ -962,6 +964,8 @@ class MultiOutputModel(Model):
             Observed function values at the inputs supplied in `x_obs`.
         x_obs : numpy.ndarray
             Function inputs.
+        jitter : numpy.ndarray
+            Regularization term for kernel matrix inversion.
 
         Returns
         -------
@@ -972,7 +976,7 @@ class MultiOutputModel(Model):
         pass
 
 
-class GaussianProcessMO(MultiOutputModel):
+class GaussianProcessMO(MultiOutputModel):  # TODO: Multiple inheritance could be used here
     """
     Multi-output Gaussian process regression model of the integrand in the Bayesian quadrature.
     """
@@ -1038,18 +1042,20 @@ class GaussianProcessMO(MultiOutputModel):
             ivar[i] = kbar - q.T.dot(iK).dot(q)
         return ivar
 
-    def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs):
+    def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
         """
-        Negative marginal log-likelihood of a multi-output GP regression model.
+        Negative marginal log-likelihood of Gaussian process regression model.
 
         Parameters
         ----------
         log_par : numpy.ndarray
-            Kernel log-parameters, shape (dim_out, num_par).
+            Kernel log-parameters, shape (num_par, ).
         fcn_obs : numpy.ndarray
             Function values, shape (num_pts, dim_out).
         x_obs : numpy.ndarray
             Function inputs, shape ().
+        jitter : numpy.ndarray
+            Regularization term for kernel matrix inversion.
 
         Notes
         -----
@@ -1063,22 +1069,21 @@ class GaussianProcessMO(MultiOutputModel):
 
         # convert from log-par to par
         par = np.exp(log_par)
+        num_data = x_obs.shape[1]
 
-        L = self.kernel.eval_chol(par, x_obs)  # (N, N)
-        K = L.dot(L.T)  # jitter included from eval_chol
-        a = la.solve(K, fcn_obs)  # (N, E)
-        y_dot_a = np.einsum('ij, ji', fcn_obs.T, a)  # sum of diagonal of A.T.dot(A)
-        a_out_a = np.einsum('i...j, ...jn', a, a.T)  # (N, N) sum over of outer products of columns of A
+        K = self.kernel.eval(par, x_obs) + jitter  # (N, N)
+        L = la.cho_factor(K)  # jitter included from eval
+        a = la.cho_solve(L, fcn_obs)  # (N, )
+        y_dot_a = fcn_obs.T.dot(a)
+        a_out_a = np.outer(a, a.T)  # (N, N)
 
         # negative marginal log-likelihood
-        nlml = 0.5 * y_dot_a + np.sum(np.log(np.diag(L))) + 0.5 * self.num_pts * np.log(2 * np.pi)
-        # nlml = np.log(nlml)  # w/o this, unconstrained solver terminates w/ 'precision loss'
+        nlml = np.sum(np.log(np.diag(L[0]))) + 0.5 * (y_dot_a + num_data * np.log(2 * np.pi))
 
-        # TODO: check the gradient with check_grad method
         # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
         dK_dTheta = self.kernel.der_par(par, x_obs)  # (N, N, num_par)
-        iK = la.solve(K, np.eye(K.shape[0]))
-        dnlml_dtheta = 0.5 * np.trace((iK - a_out_a).dot(dK_dTheta))  # (num_par, )
+        iKdK = la.cho_solve(L, dK_dTheta)
+        dnlml_dtheta = 0.5 * np.trace((iKdK - a_out_a.dot(dK_dTheta)))  # (num_par, )
 
         return nlml, dnlml_dtheta
 
