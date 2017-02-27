@@ -91,22 +91,7 @@ class GPModelTest(TestCase):
         from scipy.optimize import check_grad
         err = check_grad(self._nlml, self._nlml_grad, lhyp, model.kernel, y.T[:, 0], model.points)
         print(err)
-        self.assertTrue(False)
-
-        # difference for gradient
-        # h = 1e-8
-        #
-        # dim_par = 6
-        # log_par = np.random.rand(dim_par)
-        # hq_diag = np.diag(h * np.ones(dim_par))
-        #
-        # xqph, xqmh = log_par[:, na] + hq_diag, log_par[:, na] - hq_diag
-        # fph = np.zeros((1, dim_par))
-        # fmh = fph.copy()
-        # for i in range(dim_par):
-        #     fph[:, i], d = model.neg_log_marginal_likelihood(xqph[:, i])
-        #     fmh[:, i], d = model.neg_log_marginal_likelihood(xqmh[:, i])
-        # jac_fx = (2 * h) ** -1 * (fph - fmh)
+        self.assertTrue(err <= 1e-5, 'Gradient error: {:.4f}'.format(err))
 
     def test_hypers_optim(self):
         model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'gh', point_par={'degree': 15})
@@ -221,38 +206,76 @@ class TPModelTest(TestCase):
         y = fcn(model.points)
         self.assertTrue(model.integral_variance(y) >= 0)
 
+    @staticmethod
+    def _nlml(log_par, kernel, fcn_obs, x_obs, jitter, nu):
+        # convert from log-par to par
+        par = np.exp(log_par)
+        num_data = x_obs.shape[1]
+
+        K = kernel.eval(par, x_obs) + jitter  # (N, N)
+        L = la.cho_factor(K)  # jitter included from eval
+        a = la.cho_solve(L, fcn_obs)  # (N, )
+        y_dot_a = fcn_obs.T.dot(a)
+
+        # negative marginal log-likelihood
+        from scipy.special import gamma
+        half_logdet_K = np.sum(np.log(np.diag(L[0])))
+        const = 0.5 * num_data * np.log((nu - 2) * np.pi) + np.log(gamma(0.5 * nu + num_data) / gamma(0.5 * nu))
+
+        return 0.5 * (nu + num_data) * np.log(1 + y_dot_a) + half_logdet_K + const
+
+    @staticmethod
+    def _nlml_grad(log_par, kernel, fcn_obs, x_obs, jitter, nu):
+        # convert from log-par to par
+        par = np.exp(log_par)
+        num_data = x_obs.shape[1]
+
+        K = kernel.eval(par, x_obs) + jitter  # (N, N)
+        L = la.cho_factor(K)  # jitter included from eval
+        a = la.cho_solve(L, fcn_obs)  # (N, )
+        y_dot_a = fcn_obs.T.dot(a)
+        a_out_a = np.outer(a, a.T)  # (N, N)
+
+        # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
+        dK_dTheta = kernel.der_par(par, x_obs)  # (N, N, num_par)
+        iKdK = la.cho_solve(L, dK_dTheta)
+        scale = (nu + num_data) / (nu + y_dot_a - 2)
+
+        return 0.5 * np.trace((iKdK - scale * a_out_a.dot(dK_dTheta)))  # (num_par, )
+
+    def test_nlml_gradient(self):
+        model = StudentTProcess(5, self.ker_par_5d, 'rbf', 'ut', self.pt_par_ut)
+        y = fcn(model.points)
+        lhyp = np.log([1.0] + 5 * [3.0])
+        jitter = 1e-8 * np.eye(model.num_pts)
+        dof = 3
+
+        from scipy.optimize import check_grad
+        err = check_grad(self._nlml, self._nlml_grad, lhyp, model.kernel, y.T[:, 0], model.points, jitter, dof)
+        print(err)
+        self.assertTrue(err <= 1e-5, 'Gradient error: {:.4f}'.format(err))
+
     def test_hypers_optim(self):
-        model = StudentTProcess(1, self.ker_par_1d, points='gh', point_par={'degree': 15})
+        model = StudentTProcess(1, self.ker_par_1d, 'rbf', 'gh', point_par={'degree': 10})
         xtest = np.linspace(-7, 7, 100)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
         # plot before optimization
-        # model.plot_model(xtest, y, fcn_true=f)
+        model.plot_model(xtest, y, fcn_true=f)
         lhyp0 = np.log([[1.0, 0.5]])
-        b = ((np.log(0.1), np.log(2.1)), (None, None))
+        b = ((np.log(0.9), np.log(1.1)), (None, None))
 
         def con_alpha(lhyp):
             # constrain alpha**2 = 1
             return np.exp(lhyp[0]) ** 2 - 1 ** 2
 
         con = {'type': 'eq', 'fun': con_alpha}
-        res_ml2 = model.optimize(lhyp0, y.T, model.points, crit='nlml', method='SLSQP', constraints=con)
-        # res_ml2_emv = model.optimize(lhyp0, y.T, crit='nlml+emv', method='SLSQP', constraints=con)
-        # res_ml2_ivar = model.optimize(lhyp0, y.T, crit='nlml+ivar', method='SLSQP', constraints=con)
+        res_ml2 = model.optimize(lhyp0, y.T.squeeze(), model.points, method='BFGS', constraints=con)
         hyp_ml2 = np.exp(res_ml2.x)
-        # hyp_ml2_emv = np.exp(res_ml2_emv.x)
-        # hyp_ml2_ivar = np.exp(res_ml2_ivar.x)
 
         print(res_ml2)
-        # print(res_ml2_emv)
-        # print(res_ml2_ivar)
 
         print('ML-II({:.4f}) @ alpha: {:.4f}, el: {:.4f}'.format(res_ml2.fun, hyp_ml2[0], hyp_ml2[1]))
-        # print('ML-II-EMV({:.4f}) @ alpha: {:.4f}, el: {:.4f}'.format(res_ml2_emv.fun, hyp_ml2_emv[0], hyp_ml2_emv[1]))
-        # print('ML-II-IVAR({:.4f}) @ alpha: {:.4f}, el: {:.4f}'.format(res_ml2_ivar.fun, hyp_ml2_ivar[0],
-        #                                                               hyp_ml2_ivar[1]))
 
         # plot after optimization
         model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2)
-        # model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2_emv)
-        # model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2_ivar)
