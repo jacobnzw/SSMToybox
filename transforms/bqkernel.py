@@ -355,7 +355,7 @@ class RBF(Kernel):
         # derivative w.r.t. alpha (N,N)
         d_alpha = 2 * alpha ** -1 * K
         # derivatives w.r.t. el_1, ..., el_D (N,N,D)
-        d_el = (x[:, na, :] - x[:, :, na]) ** 2 * (el ** -3)[:, na, na] * K[na, :, :]
+        d_el = (x[:, na, :] - x[:, :, na]) ** 2 * (el ** -2)[:, na, na] * K[na, :, :]
         return np.concatenate((d_alpha[..., na], d_el.T), axis=2)
 
     @staticmethod
