@@ -1,10 +1,10 @@
 from unittest import TestCase
 
 import numpy as np
-import numpy.linalg as la
+import scipy.linalg as la
 import matplotlib.pyplot as plt
 from numpy import newaxis as na
-from transforms.bqmodel import GaussianProcess, StudentTProcess
+from transforms.bqmodel import GaussianProcess, StudentTProcess, GaussianProcessMO
 
 # fcn = lambda x: np.sin((x + 1) ** -1)
 fcn = lambda x: 0.5 * x + 25 * x / (1 + x ** 2)
@@ -51,34 +51,37 @@ class GPModelTest(TestCase):
         lhyp = np.log([1.0, 3.0])
         f, df = model.neg_log_marginal_likelihood(lhyp, y.T, model.points)
 
-    def _nlml(self, log_par, kernel, fcn_obs, x_obs):
+    @staticmethod
+    def _nlml(log_par, kernel, fcn_obs, x_obs):
 
         # convert from log-par to par
         par = np.exp(log_par)
         num_data = x_obs.shape[1]
 
-        L = kernel.eval_chol(par, x_obs)  # (N, N)
-        K = L.dot(L.T)  # jitter included from eval_chol
-        a = la.solve(K, fcn_obs)  # (N, )
+        K = kernel.eval(par, x_obs)  # (N, N)
+        L = la.cho_factor(K)  # jitter included from eval
+        a = la.cho_solve(L, fcn_obs)  # (N, )
         y_dot_a = fcn_obs.dot(a)
 
-        return np.sum(np.log(np.diag(L))) + 0.5 * (y_dot_a + num_data * np.log(2 * np.pi))
+        return np.sum(np.log(np.diag(L[0]))) + 0.5 * (y_dot_a + num_data * np.log(2 * np.pi))
 
-    def _nlml_grad(self, log_par, kernel, fcn_obs, x_obs):
-        # FIXME: gradient error too high,
+    @staticmethod
+    def _nlml_grad(log_par, kernel, fcn_obs, x_obs):
         # convert from log-par to par
         par = np.exp(log_par)
 
         num_data = x_obs.shape[1]
-        L = kernel.eval_chol(par, x_obs)  # (N, N)
-        K = L.dot(L.T)  # jitter included from eval_chol
-        a = la.solve(K, fcn_obs)  # (N, ) # TODO: try cho_solve
+        K = kernel.eval(par, x_obs)  # (N, N)
+        L = la.cho_factor(K)
+        a = la.cho_solve(L, fcn_obs)  # (N, )
         a_out_a = np.outer(a, a.T)  # (N, N) sum over of outer products of columns of A
 
         # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
-        dK_dTheta = kernel.der_par(par, x_obs)  # (N, N, num_par)  # TODO: kernel derivatives correct?
-        iK = la.solve(K, np.eye(num_data))  # TODO: try cho_solve
-        return 0.5 * np.trace((iK - a_out_a).dot(dK_dTheta))  # (num_par, )
+        dK_dTheta = kernel.der_par(par, x_obs)  # (N, N, num_par)
+        # iK = la.solve(K, np.eye(num_data))
+        # return 0.5 * np.trace((iK - a_out_a).dot(dK_dTheta))  # (num_par, )
+        iKdK = la.cho_solve(L, dK_dTheta)
+        return 0.5 * np.trace((iKdK - a_out_a.dot(dK_dTheta)))  # (num_par, )
 
     def test_nlml_gradient(self):
         model = GaussianProcess(5, self.ker_par_5d, 'rbf', 'ut', self.pt_par_ut)
@@ -105,15 +108,14 @@ class GPModelTest(TestCase):
         #     fmh[:, i], d = model.neg_log_marginal_likelihood(xqmh[:, i])
         # jac_fx = (2 * h) ** -1 * (fph - fmh)
 
-
     def test_hypers_optim(self):
-        model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'gh', point_par={'degree': 3})
+        model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'gh', point_par={'degree': 15})
         xtest = np.linspace(-7, 7, 100)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
         # plot before optimization
         # model.plot_model(xtest, y, fcn_true=f)
-        lhyp0 = np.log([[1.0, 1.0]])
+        lhyp0 = np.log([[1.0, 0.5]])
         b = ((np.log(0.9), np.log(1.1)), (None, None))
 
         def con_alpha(lhyp):
@@ -121,7 +123,7 @@ class GPModelTest(TestCase):
             return np.exp(lhyp[0]) ** 2 - 1 ** 2
 
         con = {'type': 'eq', 'fun': con_alpha}
-        res_ml2 = model.optimize(lhyp0, y.T, model.points, method='SLSQP', constraints=con)
+        res_ml2 = model.optimize(lhyp0, y.T.squeeze(), model.points, method='BFGS', constraints=con)
         # res_ml2_emv = model.optimize(lhyp0, y.T, crit='nlml+emv', method='SLSQP', constraints=con)
         # res_ml2_ivar = model.optimize(lhyp0, y.T, crit='nlml+ivar', method='SLSQP', constraints=con)
         hyp_ml2 = np.exp(res_ml2.x)
@@ -161,23 +163,18 @@ class GPModelTest(TestCase):
         # plt.show()
 
     def test_hypers_optim_multioutput(self):
-        dim = 5
         from models.tracking import ReentryRadar
         ssm = ReentryRadar()
-        func = ssm.meas_eval
-        model = GaussianProcess(dim, self.ker_par_5d, 'rbf', 'sr')  # , point_hyp={'degree': 10})
+        func = ssm.dyn_eval
+        dim_in, dim_out = ssm.xD, ssm.xD
+
+        model = GaussianProcessMO(dim_in, dim_out, self.ker_par_5d, 'rbf', 'sr')  # , point_hyp={'degree': 10})
         x = ssm.get_pars('x0_mean')[0][:, na] + model.points  # ssm.get_pars('x0_cov')[0].dot(model.points)
         y = np.apply_along_axis(func, 0, x, None)  # (d_out, n**2)
 
-        lhyp0 = np.log([1.0] + [1000] * dim)
-        b = ((np.log(1.0), np.log(1.0)),) + ((None, None),) * dim
+        lhyp0 = np.log(np.ones((dim_out, dim_in+1)))
 
-        def con_alpha(lhyp):
-            # constrain alpha**2 = 1
-            return np.exp(lhyp[0]) ** 2 - 1 ** 2
-
-        con = {'type': 'eq', 'fun': con_alpha}
-        res_ml2 = model.optimize(lhyp0, y.T, model.points, method='L-BFGS-B', bounds=b)
+        res_ml2 = model.optimize(lhyp0, y, model.points, method='BFGS')
         # res_ml2_emv = model.optimize(lhyp0, y.T, crit='nlml+emv', method='L-BFGS-B', bounds=b)
         # res_ml2_ivar = model.optimize(lhyp0, y.T, crit='nlml+ivar', method='L-BFGS-B', bounds=b)
         hyp_ml2 = np.exp(res_ml2.x)

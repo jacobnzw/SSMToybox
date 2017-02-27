@@ -194,7 +194,7 @@ class GPQMOTest(TestCase):
 
         b = [np.log((0.1, 1.001))] + dim_in * [(None, None)]
         opt = {'xtol': 1e-2, 'maxiter': 100}
-        log_par, res_list = tf.model.optimize(np.log(par0), fy, x[..., 0], bounds=b, method='L-BFGS-B', options=opt)
+        log_par, res_list = tf.model.optimize(np.log(par0), fy, x[..., 0], bounds=b, method='BFGS', options=opt)
 
         print(np.exp(log_par))
         self.assertTrue(False)

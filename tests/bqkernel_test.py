@@ -107,6 +107,15 @@ class RBFKernelTest(TestCase):
         self.assertTrue(np.allclose(Q, Q_mc), 'Q diff {:.4f}'.format(np.abs(Q - Q_mc).max()))
         self.assertTrue(np.allclose(R, R_mc), 'R diff {:.4f}'.format(np.abs(Q - Q_mc).max()))
 
+    def test_par_gradient(self):
+        dim = 2
+        x = np.hstack((np.zeros((dim, 1)), np.eye(dim), -np.eye(dim)))
+        y = x[0, :]
+
+        par = np.array([[1, 1, 3]], dtype=float)
+        kernel = RBF(dim, par)
+        dK_dpar = kernel.der_par(par.squeeze(), x)
+
 
 class RBFStudentKernelTest(TestCase):
 
