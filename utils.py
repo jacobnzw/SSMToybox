@@ -212,8 +212,7 @@ def bootstrap_var(data, samples=1000):
     # sample with replacement to create new datasets
     smp_data = np.random.choice(data, (samples, mc_sims))
     # calculate sample mean of each dataset and variance of the means
-    var = np.var(np.mean(smp_data, 1))
-    return 2 * np.sqrt(var)  # 2*STD
+    return np.var(np.mean(smp_data, 1))
 
 
 def print_table(data, row_labels=None, col_labels=None, latex=False):
