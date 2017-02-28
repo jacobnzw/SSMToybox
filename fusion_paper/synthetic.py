@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.io import loadmat, savemat
 from fusion_paper.figprint import *
 from numpy import newaxis as na
 from transforms.taylor import Taylor1stOrder
@@ -503,7 +504,7 @@ class UNGM(StudentStateSpaceModel):
         return np.asarray([0.1 * r[0] * x[0], 0.05 * x[0] ** 2])
 
 
-def ungm_demo(steps=250, mc_sims=100):
+def ungm_demo(steps=250, mc_sims=500):
     sys = UNGMSys()
     x, z = sys.simulate(steps, mc_sims)
 
@@ -517,8 +518,8 @@ def ungm_demo(steps=250, mc_sims=100):
     par_dyn_tp = np.array([[3.0, 1.0]])
     par_obs_tp = np.array([[3.0, 3.0]])
     # GPQ Student
-    par_dyn_gpqs = np.array([[1.0, 0.5]])
-    par_obs_gpqs = np.array([[1.0, 1, 10]])
+    par_dyn_gpqs = par_dyn_tp
+    par_obs_gpqs = par_obs_tp
     # GPQ Kalman
     par_dyn_gpqk = np.array([[1.0, 0.5]])
     par_obs_gpqk = np.array([[1.0, 1, 10]])
@@ -532,12 +533,14 @@ def ungm_demo(steps=250, mc_sims=100):
         UnscentedKalman(ssm, kappa=kappa),
         FSQStudent(ssm, kappa=kappa),  # crashes, not necessarily a bug
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
-        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=8.0, point_hyp=par_pt),
-        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=6.0, point_hyp=par_pt),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=8.0, point_hyp=par_pt),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=10.0, point_hyp=par_pt),
+        GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs, point_hyp=par_pt),
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
         # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
     )
-    itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze()
+    itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze()[0]
 
     # assign weights approximated by MC with lots of samples
     # very dirty code
@@ -556,66 +559,120 @@ def ungm_demo(steps=250, mc_sims=100):
             f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
             f.tf_meas.Q = Q
 
-    mf, Pf = run_filters(filters, z)
-
-    rmse_avg, lcr_avg = eval_perf_scores(x, mf, Pf)
-
-    # print out table
-    import pandas as pd
-    pd.set_option('display.precision', 4)
-    f_label = [f.__class__.__name__ for f in filters]
-    m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
-    data = np.array([rmse_avg.mean(axis=0), rmse_avg.max(axis=0), lcr_avg.mean(axis=0), lcr_avg.max(axis=0)]).T
-    table = pd.DataFrame(data, f_label, m_label)
-    print(table)
-
     # print kernel parameters
-    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(1)]
+    import pandas as pd
+    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(x.shape[0])]
     partable = pd.DataFrame(np.vstack((par_dyn_tp, par_obs_tp)), columns=parlab, index=['dyn', 'obs'])
     print()
     print(partable)
 
+    # run all filters
+    mf, Pf = run_filters(filters, z)
+
+    # compute average RMSE and INC from filtered trajectories
+    rmse_avg, lcr_avg = eval_perf_scores(x, mf, Pf)
+
+    # variance of average metrics
+    from utils import bootstrap_var
+    var_rmse_avg = np.zeros((len(filters),))
+    var_lcr_avg = np.zeros((len(filters),))
+    for fi in range(len(filters)):
+        var_rmse_avg[fi] = bootstrap_var(rmse_avg[:, fi], int(1e4))
+        var_lcr_avg[fi] = bootstrap_var(lcr_avg[:, fi], int(1e4))
+
+    # save trajectories, measurements and metrics to file for later processing (tables, plots)
+    data_dict = {
+        'x': x,
+        'z': z,
+        'mf': mf,
+        'Pf': Pf,
+        'rmse_avg': rmse_avg,
+        'lcr_avg': lcr_avg,
+        'var_rmse_avg': var_rmse_avg,
+        'var_lcr_avg': var_lcr_avg,
+        'steps': steps,
+        'mc_sims': mc_sims,
+        'par_dyn_tp': par_dyn_tp,
+        'par_obs_tp': par_obs_tp,
+    }
+    savemat('ungm_simdata_{:d}k_{:d}mc'.format(steps, mc_sims), data_dict)
+
+    f_label = [f.__class__.__name__ for f in filters]
+    m_label = ['MEAN_RMSE', 'STD(MEAN_RMSE)', 'MEAN_INC', 'STD(MEAN_INC)']
+    data = np.array([rmse_avg.mean(axis=0), np.sqrt(var_rmse_avg), lcr_avg.mean(axis=0), np.sqrt(var_lcr_avg)]).T
+    table = pd.DataFrame(data, f_label, m_label)
+    print(table)
+
+
+def ungm_plots_tables(datafile):
+
+    # extract true/filtered state trajectories, measurements and evaluated metrics from *.mat data file
+    d = loadmat(datafile)
+    x, z, mf, Pf = d['x'], d['z'], d['mf'], d['Pf']
+    rmse_avg, lcr_avg = d['rmse_avg'], d['lcr_avg']
+    var_rmse_avg, var_lcr_avg = d['var_rmse_avg'], d['var_lcr_avg']
+    steps, mc_sims = d['steps'], d['mc_sims']
+
+    # TABLES
+    import pandas as pd
+
+    # limit display of decimal places
+    pd.set_option('display.precision', 4)
+
+    # filter/metric labels
+    f_label = ['UKF', 'SF', 'TPQSF(dof=3)', 'TPQSF(dof=4)', 'TPQSF(dof=6)', 'TPQSF(dof=8)', 'TPQSF(dof=10)', 'GPQSF']
+    m_label = ['MEAN_RMSE', 'VAR(MEAN_RMSE)', 'MEAN_INC', 'VAR(MEAN_INC)']
+
+    # form data array, put in DataFrame and print
+    data = np.array([rmse_avg.mean(axis=0), var_rmse_avg, lcr_avg.mean(axis=0), var_lcr_avg]).T
+    table = pd.DataFrame(data, f_label, m_label)
+    print(table)
+
+    # save table to latex
+    with open('ungm_rmse_inc.tex') as f:
+        table.to_latex(f)
+
     # plots
     fp = FigurePrint()
-    time = np.arange(1, steps+1)
 
     # RMSE and INC box plots
     fig, ax = plt.subplots()
-    ax.boxplot(rmse_avg, labels=['UKF', 'SF', 'TPQSF'])
+    ax.boxplot(rmse_avg, labels=f_label)
     ax.set_ylabel('Average RMSE')
     plt.tight_layout(pad=0.1)
     fp.savefig('ungm_rmse_boxplot')
 
     fig, ax = plt.subplots()
-    ax.boxplot(lcr_avg, labels=['UKF', 'SF', 'TPQSF'])
+    ax.boxplot(lcr_avg, labels=f_label)
     ax.set_ylabel('Average INC')
     plt.tight_layout(pad=0.1)
     fp.savefig('ungm_inc_boxplot')
 
     # filtered state and covariance
-    fig, ax = plt.subplots(3, 1, sharex=True)
-    for fi, f in enumerate(filters):
-        # true state
-        ax[fi].plot(time, x[0, :, 0], 'r--', alpha=0.5)
-
-        # measurements
-        ax[fi].plot(time, z[0, :, 0], 'k.')
-
-        xhat = mf[0, :, 0, fi]
-        std = np.sqrt(Pf[0, 0, :, 0, fi])
-        ax[fi].plot(time, xhat, label=f.__class__.__name__)
-        ax[fi].fill_between(time, xhat - 2 * std, xhat + 2 * std, alpha=0.15)
-        ax[fi].axis([None, None, -50, 50])
-        ax[fi].legend()
-    plt.show()
-
-    # compare posterior variances with outliers
-    plt.figure()
-    plt.plot(time, z[0, :, 0], 'k.')
-    for fi, f in enumerate(filters):
-        plt.plot(time, 2*np.sqrt(Pf[0, 0, :, 0, fi]), label=f.__class__.__name__)
-    plt.legend()
-    plt.show()
+    # fig, ax = plt.subplots(3, 1, sharex=True)
+    # time = np.arange(1, steps + 1)
+    # for fi, f in enumerate(filters):
+    #     # true state
+    #     ax[fi].plot(time, x[0, :, 0], 'r--', alpha=0.5)
+    #
+    #     # measurements
+    #     ax[fi].plot(time, z[0, :, 0], 'k.')
+    #
+    #     xhat = mf[0, :, 0, fi]
+    #     std = np.sqrt(Pf[0, 0, :, 0, fi])
+    #     ax[fi].plot(time, xhat, label=f.__class__.__name__)
+    #     ax[fi].fill_between(time, xhat - 2 * std, xhat + 2 * std, alpha=0.15)
+    #     ax[fi].axis([None, None, -50, 50])
+    #     ax[fi].legend()
+    # plt.show()
+    #
+    # # compare posterior variances with outliers
+    # plt.figure()
+    # plt.plot(time, z[0, :, 0], 'k.')
+    # for fi, f in enumerate(filters):
+    #     plt.plot(time, 2 * np.sqrt(Pf[0, 0, :, 0, fi]), label=f.__class__.__name__)
+    # plt.legend()
+    # plt.show()
 
 
 class ReentryRadarSimpleSys(System):
