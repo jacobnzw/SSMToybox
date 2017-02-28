@@ -531,7 +531,8 @@ def ungm_demo(steps=250, mc_sims=500):
     filters = (
         # ExtendedStudent(ssm),
         UnscentedKalman(ssm, kappa=kappa),
-        FSQStudent(ssm, kappa=kappa),  # crashes, not necessarily a bug
+        FSQStudent(ssm, kappa=kappa),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=3.0, point_hyp=par_pt),
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=6.0, point_hyp=par_pt),
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=8.0, point_hyp=par_pt),
@@ -610,7 +611,7 @@ def ungm_plots_tables(datafile):
     d = loadmat(datafile)
     x, z, mf, Pf = d['x'], d['z'], d['mf'], d['Pf']
     rmse_avg, lcr_avg = d['rmse_avg'], d['lcr_avg']
-    var_rmse_avg, var_lcr_avg = d['var_rmse_avg'], d['var_lcr_avg']
+    var_rmse_avg, var_lcr_avg = d['var_rmse_avg'].squeeze(), d['var_lcr_avg'].squeeze()
     steps, mc_sims = d['steps'], d['mc_sims']
 
     # TABLES
@@ -620,7 +621,8 @@ def ungm_plots_tables(datafile):
     pd.set_option('display.precision', 4)
 
     # filter/metric labels
-    f_label = ['UKF', 'SF', 'TPQSF(dof=3)', 'TPQSF(dof=4)', 'TPQSF(dof=6)', 'TPQSF(dof=8)', 'TPQSF(dof=10)', 'GPQSF']
+    f_label = ['UKF', 'SF', r'TPQSF($\nu$=3)', r'TPQSF($\nu$=4)',
+               r'TPQSF($\nu$=6)', r'TPQSF($\nu$=8)', r'TPQSF($\nu$=10)', 'GPQSF']
     m_label = ['MEAN_RMSE', 'VAR(MEAN_RMSE)', 'MEAN_INC', 'VAR(MEAN_INC)']
 
     # form data array, put in DataFrame and print
@@ -629,7 +631,7 @@ def ungm_plots_tables(datafile):
     print(table)
 
     # save table to latex
-    with open('ungm_rmse_inc.tex') as f:
+    with open('ungm_rmse_inc.tex', 'w') as f:
         table.to_latex(f)
 
     # plots
@@ -637,14 +639,19 @@ def ungm_plots_tables(datafile):
 
     # RMSE and INC box plots
     fig, ax = plt.subplots()
-    ax.boxplot(rmse_avg, labels=f_label)
+    ax.boxplot(rmse_avg)
     ax.set_ylabel('Average RMSE')
+    ax.set_ylim(0, 80)
+    xtickNames = plt.setp(ax, xticklabels=f_label)
+    plt.setp(xtickNames, rotation=45, fontsize=8)
     plt.tight_layout(pad=0.1)
     fp.savefig('ungm_rmse_boxplot')
 
     fig, ax = plt.subplots()
-    ax.boxplot(lcr_avg, labels=f_label)
+    ax.boxplot(lcr_avg)
     ax.set_ylabel('Average INC')
+    xtickNames = plt.setp(ax, xticklabels=f_label)
+    plt.setp(xtickNames, rotation=45, fontsize=8)
     plt.tight_layout(pad=0.1)
     fp.savefig('ungm_inc_boxplot')
 
@@ -1657,7 +1664,8 @@ def coordinated_radar_demo(steps=100, mc_sims=100, plots=True):
 if __name__ == '__main__':
     np.set_printoptions(precision=4)
     # synthetic_demo(mc_sims=50)
-    ungm_demo()
+    # ungm_demo()
+    ungm_plots_tables('ungm_simdata_250k_500mc.mat')
     # reentry_tracking_demo(mc_sims=50)
     # coordinated_bot_demo(steps=40, mc_sims=100)
     # coordinated_radar_demo(steps=100, mc_sims=100, plots=False)
