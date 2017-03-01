@@ -415,7 +415,7 @@ class UNGMSys(StateSpaceModel):
     def __init__(self):
         pars = {
             'x0_mean': np.atleast_1d(0.0),
-            'x0_cov': np.atleast_2d(1.0),
+            'x0_cov': np.atleast_2d(5.0),
             'q_mean_0': np.zeros(self.qD),
             'q_mean_1': np.zeros(self.qD),
             'q_cov_0': 10 * np.eye(self.qD),
@@ -451,7 +451,7 @@ class UNGMSys(StateSpaceModel):
         m1, c1 = self.get_pars('q_mean_1', 'q_cov_1')
 
         # samples from 2-component Gaussian mixture
-        return bigauss_mixture(m0, c0, m1, c1, 0.95, size)
+        return bigauss_mixture(m0, c0, m1, c1, 0.8, size)
 
     def measurement_noise_sample(self, size=None):
         m0, c0 = self.get_pars('r_mean_0', 'r_cov_0')
@@ -478,13 +478,13 @@ class UNGM(StudentStateSpaceModel):
         kwargs = {
             'x0_mean': np.atleast_1d(x0_mean),
             'x0_cov': np.atleast_2d(x0_cov),
-            'x0_dof': 4.0,
+            'x0_dof': 3.0,
             'q_mean': np.atleast_1d(q_mean),
             'q_cov': np.atleast_2d(q_cov),
-            'q_dof': 4.0,
+            'q_dof': 3.0,
             'r_mean': np.atleast_1d(r_mean),
             'r_cov': np.atleast_2d(r_cov),
-            'r_dof': 4.0,
+            'r_dof': 3.0,
         }
         super(UNGM, self).__init__(**kwargs)
 
@@ -504,19 +504,19 @@ class UNGM(StudentStateSpaceModel):
         return np.asarray([0.1 * r[0] * x[0], 0.05 * x[0] ** 2])
 
 
-def ungm_demo(steps=250, mc_sims=500):
+def ungm_demo(steps=250, mc_sims=100):
     sys = UNGMSys()
     x, z = sys.simulate(steps, mc_sims)
 
     # SSM noise covariances should follow the system
-    ssm = UNGM(q_cov=10.0, r_cov=0.01)
+    ssm = UNGM(x0_mean=5.0, q_cov=10.0, r_cov=0.01)
 
     # kernel parameters for TPQ and GPQ filters
     # TPQ Student
     # par_dyn_tp = np.array([[1.8, 3.0]])
     # par_obs_tp = np.array([[0.4, 1.0, 1.0]])
-    par_dyn_tp = np.array([[3.0, 1.0]])
-    par_obs_tp = np.array([[3.0, 3.0]])
+    par_dyn_tp = np.array([[1.0, 1.0]])
+    par_obs_tp = np.array([[5.0, 1.0]])
     # GPQ Student
     par_dyn_gpqs = par_dyn_tp
     par_obs_gpqs = par_obs_tp
@@ -524,41 +524,44 @@ def ungm_demo(steps=250, mc_sims=500):
     par_dyn_gpqk = np.array([[1.0, 0.5]])
     par_obs_gpqk = np.array([[1.0, 1, 10]])
     # parameters of the point-set
-    kappa = 0.0
+    kappa = None
     par_pt = {'kappa': kappa}
 
     # init filters
     filters = (
         # ExtendedStudent(ssm),
         UnscentedKalman(ssm, kappa=kappa),
-        FSQStudent(ssm, kappa=kappa),
-        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=3.0, point_hyp=par_pt),
-        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
-        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=6.0, point_hyp=par_pt),
-        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=8.0, point_hyp=par_pt),
-        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=10.0, point_hyp=par_pt),
-        GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs, point_hyp=par_pt),
+        FSQStudent(ssm, kappa=kappa, dof=3.0),
+        FSQStudent(ssm, kappa=kappa, dof=4.0),
+        FSQStudent(ssm, kappa=kappa, dof=8.0),
+        FSQStudent(ssm, kappa=kappa, dof=100.0),
+        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=3.0, point_hyp=par_pt),
+        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
+        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=10.0, point_hyp=par_pt),
+        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=100.0, point_hyp=par_pt),
+        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=500.0, point_hyp=par_pt),
+        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs, dof=10.0, point_hyp=par_pt),
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
         # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
     )
-    itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze()[0]
-
-    # assign weights approximated by MC with lots of samples
-    # very dirty code
-    pts = filters[itpq].tf_dyn.model.points
-    kern = filters[itpq].tf_dyn.model.kernel
-    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
-    for f in filters:
-        if isinstance(f.tf_dyn, BQTransform):
-            f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
-            f.tf_dyn.Q = Q
-    pts = filters[itpq].tf_meas.model.points
-    kern = filters[itpq].tf_meas.model.kernel
-    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
-    for f in filters:
-        if isinstance(f.tf_meas, BQTransform):
-            f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
-            f.tf_meas.Q = Q
+    # itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze()[0]
+    #
+    # # assign weights approximated by MC with lots of samples
+    # # very dirty code
+    # pts = filters[itpq].tf_dyn.model.points
+    # kern = filters[itpq].tf_dyn.model.kernel
+    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    # for f in filters:
+    #     if isinstance(f.tf_dyn, BQTransform):
+    #         f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
+    #         f.tf_dyn.Q = Q
+    # pts = filters[itpq].tf_meas.model.points
+    # kern = filters[itpq].tf_meas.model.kernel
+    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    # for f in filters:
+    #     if isinstance(f.tf_meas, BQTransform):
+    #         f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
+    #         f.tf_meas.Q = Q
 
     # print kernel parameters
     import pandas as pd
@@ -1664,8 +1667,8 @@ def coordinated_radar_demo(steps=100, mc_sims=100, plots=True):
 if __name__ == '__main__':
     np.set_printoptions(precision=4)
     # synthetic_demo(mc_sims=50)
-    # ungm_demo()
-    ungm_plots_tables('ungm_simdata_250k_500mc.mat')
+    ungm_demo()
+    # ungm_plots_tables('ungm_simdata_250k_500mc.mat')
     # reentry_tracking_demo(mc_sims=50)
     # coordinated_bot_demo(steps=40, mc_sims=100)
     # coordinated_radar_demo(steps=100, mc_sims=100, plots=False)
