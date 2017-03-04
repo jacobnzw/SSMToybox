@@ -93,6 +93,69 @@ class GPModelTest(TestCase):
         print(err)
         self.assertTrue(err <= 1e-5, 'Gradient error: {:.4f}'.format(err))
 
+    @staticmethod
+    def _total_nlml(log_par, kernel, fcn_obs, x_obs):
+        # N - # points, E - # function outputs
+        # fcn_obs (N, E), hypers (num_hyp, )
+
+        # convert from log-par to par
+        par = np.exp(log_par)
+        num_data = x_obs.shape[1]
+        num_out = fcn_obs.shape[1]
+
+        K = kernel.eval(par, x_obs)  # (N, N)
+        L = la.cho_factor(K)  # jitter included from eval
+        a = la.cho_solve(L, fcn_obs)  # (N, E)
+        y_dot_a = np.einsum('ij, ji', fcn_obs.T, a)  # sum of diagonal of A.T.dot(A)
+
+        # negative marginal log-likelihood
+        return num_out * np.sum(np.log(np.diag(L[0]))) + 0.5 * (y_dot_a + num_out*num_data*np.log(2 * np.pi))
+
+    @staticmethod
+    def _total_nlml_grad(log_par, kernel, fcn_obs, x_obs):
+        # N - # points, E - # function outputs
+        # fcn_obs (N, E), hypers (num_hyp, )
+
+        # convert from log-par to par
+        par = np.exp(log_par)
+        num_data = x_obs.shape[1]
+        num_out = fcn_obs.shape[1]
+
+        K = kernel.eval(par, x_obs)  # (N, N)
+        L = la.cho_factor(K)  # jitter included from eval
+        a = la.cho_solve(L, fcn_obs)  # (N, E)
+        a_out_a = np.einsum('i...j, ...jn', a, a.T)  # (N, N) sum over of outer products of columns of A
+
+        # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
+        dK_dTheta = kernel.der_par(par, x_obs)  # (N, N, num_hyp)
+        iKdK = la.cho_solve(L, dK_dTheta)
+
+        # gradient of total NLML
+        return 0.5 * np.trace((num_out * iKdK - a_out_a.dot(dK_dTheta)))  # (num_par, )
+
+    def test_total_nlml_gradient(self):
+
+        # nonlinear vector function from some SSM
+        from models.tracking import CoordinatedTurnRadar
+        ssm = CoordinatedTurnRadar()
+
+        # generate inputs
+        num_x = 20
+        x = 10 + np.random.randn(ssm.xD, num_x)
+
+        # evaluate function at inputs
+        y = np.apply_along_axis(ssm.dyn_eval, 0, x, None)
+
+        # kernel and it's initial parameters
+        from transforms.bqkernel import RBF
+        lhyp = np.log([1.0] + 5 * [3.0])
+        kernel = RBF(ssm.xD, self.ker_par_5d)
+
+        from scipy.optimize import check_grad
+        err = check_grad(self._total_nlml, self._total_nlml_grad, lhyp, kernel, y.T, x)
+        print(err)
+        self.assertTrue(err <= 1e-5, 'Gradient error: {:.4f}'.format(err))
+
     def test_hypers_optim(self):
         model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'gh', point_par={'degree': 15})
         xtest = np.linspace(-7, 7, 100)[na, :]
@@ -108,26 +171,15 @@ class GPModelTest(TestCase):
             return np.exp(lhyp[0]) ** 2 - 1 ** 2
 
         con = {'type': 'eq', 'fun': con_alpha}
-        res_ml2 = model.optimize(lhyp0, y.T.squeeze(), model.points, method='BFGS', constraints=con)
-        # res_ml2_emv = model.optimize(lhyp0, y.T, crit='nlml+emv', method='SLSQP', constraints=con)
-        # res_ml2_ivar = model.optimize(lhyp0, y.T, crit='nlml+ivar', method='SLSQP', constraints=con)
+        res_ml2 = model.optimize(lhyp0, y.T, model.points, method='BFGS', constraints=con)
         hyp_ml2 = np.exp(res_ml2.x)
-        # hyp_ml2_emv = np.exp(res_ml2_emv.x)
-        # hyp_ml2_ivar = np.exp(res_ml2_ivar.x)
 
         print(res_ml2)
-        # print(res_ml2_emv)
-        # print(res_ml2_ivar)
 
         print('ML-II({:.4f}) @ alpha: {:.4f}, el: {:.4f}'.format(res_ml2.fun, hyp_ml2[0], hyp_ml2[1]))
-        # print('ML-II-EMV({:.4f}) @ alpha: {:.4f}, el: {:.4f}'.format(res_ml2_emv.fun, hyp_ml2_emv[0], hyp_ml2_emv[1]))
-        # print('ML-II-IVAR({:.4f}) @ alpha: {:.4f}, el: {:.4f}'.format(res_ml2_ivar.fun, hyp_ml2_ivar[0],
-        #                                                               hyp_ml2_ivar[1]))
 
         # plot after optimization
         model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2)
-        # model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2_emv)
-        # model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2_ivar)
 
         # TODO: test fitting of multioutput GPs, GPy supports this in GPRegression
         # plot NLML surface
@@ -148,32 +200,24 @@ class GPModelTest(TestCase):
         # plt.show()
 
     def test_hypers_optim_multioutput(self):
-        from models.tracking import ReentryRadar
-        ssm = ReentryRadar()
+        from models.tracking import CoordinatedTurnRadar
+        ssm = CoordinatedTurnRadar()
         func = ssm.dyn_eval
         dim_in, dim_out = ssm.xD, ssm.xD
 
-        model = GaussianProcessMO(dim_in, dim_out, self.ker_par_5d, 'rbf', 'sr')  # , point_hyp={'degree': 10})
+        model = GaussianProcess(dim_in, self.ker_par_5d, 'rbf', 'sr')  # , point_hyp={'degree': 10})
         x = ssm.get_pars('x0_mean')[0][:, na] + model.points  # ssm.get_pars('x0_cov')[0].dot(model.points)
         y = np.apply_along_axis(func, 0, x, None)  # (d_out, n**2)
 
-        lhyp0 = np.log(np.ones((dim_out, dim_in+1)))
+        # lhyp0 = np.log(np.ones((dim_out, dim_in+1)))
+        lhyp0 = np.log(np.ones((1, dim_in + 1)))
 
-        res_ml2 = model.optimize(lhyp0, y, model.points, method='BFGS')
-        # res_ml2_emv = model.optimize(lhyp0, y.T, crit='nlml+emv', method='L-BFGS-B', bounds=b)
-        # res_ml2_ivar = model.optimize(lhyp0, y.T, crit='nlml+ivar', method='L-BFGS-B', bounds=b)
+        res_ml2 = model.optimize(lhyp0, y.T, model.points, method='BFGS')
         hyp_ml2 = np.exp(res_ml2.x)
-        # hyp_ml2_emv = np.exp(res_ml2_emv.x)
-        # hyp_ml2_ivar = np.exp(res_ml2_ivar.x)
 
         print(res_ml2)
-        # print(res_ml2_emv)
-        # print(res_ml2_ivar)
         np.set_printoptions(precision=4)
         print('ML-II({:.4f}) @ alpha: {:.4f}, el: {}'.format(res_ml2.fun, hyp_ml2[0], hyp_ml2[1:]))
-        # print('ML-II-EMV({:.4f}) @ alpha: {:.4f}, el: {}'.format(res_ml2_emv.fun, hyp_ml2_emv[0], hyp_ml2_emv[1:]))
-        # print('ML-II-IVAR({:.4f}) @ alpha: {:.4f}, el: {}'.format(res_ml2_ivar.fun, hyp_ml2_ivar[0],
-        #                                                           hyp_ml2_ivar[1:]))
 
 
 class TPModelTest(TestCase):

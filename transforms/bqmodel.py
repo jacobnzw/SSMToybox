@@ -562,7 +562,18 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
     def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
         """
-        Negative marginal log-likelihood of Gaussian process regression model.
+        Negative marginal log-likelihood of single-output Gaussian process regression model.
+
+        The likelihood is given by
+
+        .. math::
+        \[
+        -\log p(Y \mid X, \theta) = -\sum_{e=1}^{\mathrm{dim_out}} \log p(y_e \mid X, \theta)
+        \]
+
+        where :math:`y_e` is e-th column of :math:`Y`. We have the same parameters :math:`\theta` for all outputs,
+        which is more limiting than the multi-output case. For single-output dimension the expression is equivalent to
+        negative marginal log-likelihood.
 
         Parameters
         ----------
@@ -572,6 +583,8 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
             Function values, shape (num_pts, dim_out).
         x_obs : numpy.ndarray
             Function inputs, shape ().
+        jitter : numpy.ndarray
+            Regularization term for kernel matrix inversion.
 
         Notes
         -----
@@ -585,21 +598,24 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
         # convert from log-par to par
         par = np.exp(log_par)
-        num_data = x_obs.shape[1]
+        num_data, num_out = fcn_obs.shape
 
         K = self.kernel.eval(par, x_obs) + jitter  # (N, N)
         L = la.cho_factor(K)  # jitter included from eval
-        a = la.cho_solve(L, fcn_obs)  # (N, )
-        y_dot_a = fcn_obs.T.dot(a)
-        a_out_a = np.outer(a, a.T)  # (N, N)
+        a = la.cho_solve(L, fcn_obs)  # (N, E)
+        y_dot_a = np.einsum('ij, ji', fcn_obs.T, a)  # sum of diagonal of A.T.dot(A)
+        a_out_a = np.einsum('i...j, ...jn', a, a.T)  # (N, N) sum over of outer products of columns of A
 
-        # negative marginal log-likelihood
-        nlml = np.sum(np.log(np.diag(L[0]))) + 0.5 * (y_dot_a + num_data * np.log(2 * np.pi))
+        # negative total NLML
+        nlml = num_out * np.sum(np.log(np.diag(L[0]))) + 0.5 * (y_dot_a + num_out * num_data * np.log(2 * np.pi))
 
         # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
-        dK_dTheta = self.kernel.der_par(par, x_obs)  # (N, N, num_par)
+        dK_dTheta = self.kernel.der_par(par, x_obs)  # (N, N, num_hyp)
         iKdK = la.cho_solve(L, dK_dTheta)
-        dnlml_dtheta = 0.5 * np.trace((iKdK - a_out_a.dot(dK_dTheta)))  # (num_par, )
+
+        # gradient of total NLML
+        dnlml_dtheta = 0.5 * np.trace((num_out * iKdK - a_out_a.dot(dK_dTheta)))  # (num_par, )
+
         return nlml, dnlml_dtheta
 
 
@@ -1048,7 +1064,21 @@ class GaussianProcessMO(MultiOutputModel):  # TODO: Multiple inheritance could b
 
     def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
         """
-        Negative marginal log-likelihood of Gaussian process regression model.
+        Negative marginal log-likelihood of multi-output Gaussian process regression model.
+
+        The likelihood is given by
+
+        .. math::
+        \[
+        -\log p(Y \mid X, \Theta) = -\sum_{e=1}^{\mathrm{dim_out}} \log p(y_e \mid X, \theta_e)
+        \]
+
+        where :math:`y_e` is e-th column of :math:`Y` and :math:`\theta_e` is e-th column of :math:`\Theta`. The
+        multi-output model uses one set of kenrel parameters for every output, thus having greater flexibility than the
+        single-output GP models.the same parameters :math:`\theta` for all outputs, which is more limiting than the
+        multi-output case. For single-output dimension the expression is equivalent to negative marginal log-likelihood.
+        This function implements only one term in the sum above, because the outputs are assumed independent given
+        the inputs and thus we can run the optimizer for each output independently.
 
         Parameters
         ----------
