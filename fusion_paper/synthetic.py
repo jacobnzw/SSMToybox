@@ -1612,6 +1612,11 @@ def coordinated_radar_demo(steps=100, mc_sims=100, plots=True):
     )
     itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze()
 
+    # x_obs, z_obs = sys.simulate(100)
+    # y_obs = np.apply_along_axis(ssm.dyn_eval, 0, x_obs[..., 0], None)
+    # res = filters[itpq].tf_dyn.model.optimize(np.log(par_dyn_tp), y_obs.T, x_obs[..., 0])
+    # par_ml2 = np.exp(res.x)
+
     # assign weights approximated by MC with lots of samples
     # very dirty code
     pts = filters[itpq].tf_dyn.model.points
@@ -1667,8 +1672,8 @@ def coordinated_radar_demo(steps=100, mc_sims=100, plots=True):
 if __name__ == '__main__':
     np.set_printoptions(precision=4)
     # synthetic_demo(mc_sims=50)
-    ungm_demo()
+    # ungm_demo()
     # ungm_plots_tables('ungm_simdata_250k_500mc.mat')
     # reentry_tracking_demo(mc_sims=50)
     # coordinated_bot_demo(steps=40, mc_sims=100)
-    # coordinated_radar_demo(steps=100, mc_sims=100, plots=False)
+    coordinated_radar_demo(steps=100, mc_sims=100, plots=False)
