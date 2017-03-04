@@ -254,38 +254,41 @@ class TPModelTest(TestCase):
     def _nlml(log_par, kernel, fcn_obs, x_obs, jitter, nu):
         # convert from log-par to par
         par = np.exp(log_par)
-        num_data = x_obs.shape[1]
+        num_data, num_out = fcn_obs.shape
 
         K = kernel.eval(par, x_obs) + jitter  # (N, N)
         L = la.cho_factor(K)  # jitter included from eval
-        a = la.cho_solve(L, fcn_obs)  # (N, )
-        y_dot_a = fcn_obs.T.dot(a)
+        a = la.cho_solve(L, fcn_obs)  # (N, E)
+        y_dot_a = np.einsum('ij, ij -> j', fcn_obs, a)  # sum of diagonal of A.T.dot(A)
 
         # negative marginal log-likelihood
         from scipy.special import gamma
         half_logdet_K = np.sum(np.log(np.diag(L[0])))
-        const = 0.5 * num_data * np.log((nu - 2) * np.pi) + np.log(gamma(0.5 * nu + num_data) / gamma(0.5 * nu))
+        const = (num_data/2)*np.log((nu-2)*np.pi) - np.log(gamma((nu+num_data)/2)) + np.log(gamma(nu/2))
+        log_sum = 0.5*(nu+num_data) * np.log(1 + y_dot_a / (nu - 2)).sum()
 
-        return 0.5 * (nu + num_data) * np.log(1 + y_dot_a) + half_logdet_K + const
+        return log_sum + num_out * (half_logdet_K + const)
 
     @staticmethod
     def _nlml_grad(log_par, kernel, fcn_obs, x_obs, jitter, nu):
         # convert from log-par to par
         par = np.exp(log_par)
-        num_data = x_obs.shape[1]
+        num_data, num_out = fcn_obs.shape
 
         K = kernel.eval(par, x_obs) + jitter  # (N, N)
         L = la.cho_factor(K)  # jitter included from eval
-        a = la.cho_solve(L, fcn_obs)  # (N, )
-        y_dot_a = fcn_obs.T.dot(a)
-        a_out_a = np.outer(a, a.T)  # (N, N)
+        a = la.cho_solve(L, fcn_obs)  # (N, E)
+        y_dot_a = np.einsum('ij, ij -> j', fcn_obs, a)  # sum of diagonal of A.T.dot(A)
 
         # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
         dK_dTheta = kernel.der_par(par, x_obs)  # (N, N, num_par)
+
+        # gradient
         iKdK = la.cho_solve(L, dK_dTheta)
         scale = (nu + num_data) / (nu + y_dot_a - 2)
+        a_out_a = np.einsum('j, i...j, ...jn', scale, a, a.T)  # (N, N) weighted sum of outer products of columns of A
 
-        return 0.5 * np.trace((iKdK - scale * a_out_a.dot(dK_dTheta)))  # (num_par, )
+        return 0.5 * np.trace((num_out * iKdK - a_out_a.dot(dK_dTheta)))  # (num_par, )
 
     def test_nlml_gradient(self):
         model = StudentTProcess(5, self.ker_par_5d, 'rbf', 'ut', self.pt_par_ut)
@@ -295,7 +298,7 @@ class TPModelTest(TestCase):
         dof = 3
 
         from scipy.optimize import check_grad
-        err = check_grad(self._nlml, self._nlml_grad, lhyp, model.kernel, y.T[:, 0], model.points, jitter, dof)
+        err = check_grad(self._nlml, self._nlml_grad, lhyp, model.kernel, y.T, model.points, jitter, dof)
         print(err)
         self.assertTrue(err <= 1e-5, 'Gradient error: {:.4f}'.format(err))
 
@@ -305,7 +308,7 @@ class TPModelTest(TestCase):
         y = fcn(model.points)
         f = fcn(xtest)
         # plot before optimization
-        model.plot_model(xtest, y, fcn_true=f)
+        # model.plot_model(xtest, y, fcn_true=f)
         lhyp0 = np.log([[1.0, 0.5]])
         b = ((np.log(0.9), np.log(1.1)), (None, None))
 
@@ -314,7 +317,7 @@ class TPModelTest(TestCase):
             return np.exp(lhyp[0]) ** 2 - 1 ** 2
 
         con = {'type': 'eq', 'fun': con_alpha}
-        res_ml2 = model.optimize(lhyp0, y.T.squeeze(), model.points, method='BFGS', constraints=con)
+        res_ml2 = model.optimize(lhyp0, y.T, model.points, method='BFGS', constraints=con)
         hyp_ml2 = np.exp(res_ml2.x)
 
         print(res_ml2)
@@ -323,3 +326,23 @@ class TPModelTest(TestCase):
 
         # plot after optimization
         model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2)
+
+    def test_hypers_optim_multioutput(self):
+        from models.tracking import CoordinatedTurnRadar
+        ssm = CoordinatedTurnRadar()
+        func = ssm.dyn_eval
+        dim_in, dim_out = ssm.xD, ssm.xD
+
+        model = StudentTProcess(dim_in, self.ker_par_5d, 'rbf', 'ut', nu=50.0)  # , point_hyp={'degree': 10})
+        x = ssm.get_pars('x0_mean')[0][:, na] + model.points  # ssm.get_pars('x0_cov')[0].dot(model.points)
+        y = np.apply_along_axis(func, 0, x, None)  # (d_out, n**2)
+
+        # lhyp0 = np.log(np.ones((dim_out, dim_in+1)))
+        lhyp0 = np.log(10 + np.ones((1, dim_in + 1)))
+
+        res_ml2 = model.optimize(lhyp0, y.T, model.points, method='BFGS')
+        hyp_ml2 = np.exp(res_ml2.x)
+
+        print(res_ml2)
+        np.set_printoptions(precision=4)
+        print('ML-II({:.4f}) @ alpha: {:.4f}, el: {}'.format(res_ml2.fun, hyp_ml2[0], hyp_ml2[1:]))

@@ -751,26 +751,29 @@ class StudentTProcess(Model):
 
         # convert from log-par to par
         par = np.exp(log_par)
-        num_data = x_obs.shape[1]
+        num_data, num_out = fcn_obs.shape
+        nu = self.nu
 
         K = self.kernel.eval(par, x_obs) + jitter  # (N, N)
         L = la.cho_factor(K)  # jitter included from eval
-        a = la.cho_solve(L, fcn_obs)  # (N, )
-        y_dot_a = fcn_obs.T.dot(a)
-        a_out_a = np.outer(a, a.T)  # (N, N)
+        a = la.cho_solve(L, fcn_obs)  # (N, E)
+        y_dot_a = np.einsum('ij, ij -> j', fcn_obs, a)  # sum of diagonal of A.T.dot(A)
 
         # negative marginal log-likelihood
         from scipy.special import gamma
         half_logdet_K = np.sum(np.log(np.diag(L[0])))
-        const = 0.5 * num_data * np.log((self.nu - 2) * np.pi) + np.log(
-            gamma(0.5 * self.nu + num_data) / gamma(0.5 * self.nu))
-        nlml = 0.5 * (self.nu + num_data) * np.log(1 + y_dot_a) + half_logdet_K + const
+        const = (num_data/2) * np.log((nu-2)*np.pi) - np.log(gamma((nu+num_data)/2)) + np.log(gamma(nu/2))
+        log_sum = 0.5*(self.nu + num_data) * np.log(1 + y_dot_a/(self.nu - 2)).sum()
+        nlml = log_sum + num_out*(half_logdet_K + const)
 
         # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
         dK_dTheta = self.kernel.der_par(par, x_obs)  # (N, N, num_par)
+
+        # gradient
         iKdK = la.cho_solve(L, dK_dTheta)
         scale = (self.nu + num_data) / (self.nu + y_dot_a - 2)
-        dnlml_dtheta = 0.5 * np.trace((iKdK - scale * a_out_a.dot(dK_dTheta)))  # (num_par, )
+        a_out_a = np.einsum('j, i...j, ...jn', scale, a, a.T)  # (N, N) weighted sum of outer products of columns of A
+        dnlml_dtheta = 0.5 * np.trace((num_out * iKdK - a_out_a.dot(dK_dTheta)))  # (num_par, )
 
         return nlml, dnlml_dtheta
 
