@@ -478,13 +478,13 @@ class UNGM(StudentStateSpaceModel):
         kwargs = {
             'x0_mean': np.atleast_1d(x0_mean),
             'x0_cov': np.atleast_2d(x0_cov),
-            'x0_dof': 3.0,
+            'x0_dof': 4.0,
             'q_mean': np.atleast_1d(q_mean),
             'q_cov': np.atleast_2d(q_cov),
-            'q_dof': 3.0,
+            'q_dof': 4.0,
             'r_mean': np.atleast_1d(r_mean),
             'r_cov': np.atleast_2d(r_cov),
-            'r_dof': 3.0,
+            'r_dof': 4.0,
         }
         super(UNGM, self).__init__(**kwargs)
 
@@ -509,14 +509,14 @@ def ungm_demo(steps=250, mc_sims=100):
     x, z = sys.simulate(steps, mc_sims)
 
     # SSM noise covariances should follow the system
-    ssm = UNGM(x0_mean=5.0, q_cov=10.0, r_cov=0.01)
+    ssm = UNGM(x0_mean=1.0, q_cov=10.0, r_cov=0.01)
 
     # kernel parameters for TPQ and GPQ filters
     # TPQ Student
     # par_dyn_tp = np.array([[1.8, 3.0]])
     # par_obs_tp = np.array([[0.4, 1.0, 1.0]])
-    par_dyn_tp = np.array([[1.0, 1.0]])
-    par_obs_tp = np.array([[5.0, 1.0]])
+    par_dyn_tp = np.array([[3.0, 1.0]])
+    par_obs_tp = np.array([[3.0, 3.0]])
     # GPQ Student
     par_dyn_gpqs = par_dyn_tp
     par_obs_gpqs = par_obs_tp
@@ -524,46 +524,46 @@ def ungm_demo(steps=250, mc_sims=100):
     par_dyn_gpqk = np.array([[1.0, 0.5]])
     par_obs_gpqk = np.array([[1.0, 1, 10]])
     # parameters of the point-set
-    kappa = None
+    kappa = 0.0
     par_pt = {'kappa': kappa}
 
     # init filters
     filters = (
         # ExtendedStudent(ssm),
-        # UnscentedKalman(ssm, kappa=kappa),
-        # FSQStudent(ssm, kappa=kappa, dof=3.0),
+        UnscentedKalman(ssm, kappa=kappa),
+        FSQStudent(ssm, kappa=kappa, dof=3.0),
         # FSQStudent(ssm, kappa=kappa, dof=4.0),
         # FSQStudent(ssm, kappa=kappa, dof=8.0),
         # FSQStudent(ssm, kappa=kappa, dof=100.0),
-        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=3.0, point_par=par_pt),
-        TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=4.0, point_par=par_pt),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=3.0, point_par=par_pt),
+        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=3.0, dof_tp=4.0, point_par=par_pt),
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=10.0, point_par=par_pt),
         # TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=100.0, point_par=par_pt),
-        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=500.0, point_par=par_pt),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=500.0, point_par=par_pt),
         # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs, dof=10.0, point_hyp=par_pt),
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
         # GPQKalman(ssm, par_dyn_tp, par_obs_tp, point_hyp=par_pt),
         # GPQMOKalman(ssm, par_dyn_tp, par_obs_tp, point_par=par_pt),
-        TPQMOStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=10.0, point_par=par_pt),
+        # TPQMOStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=10.0, point_par=par_pt),
     )
-    # itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
-    #
-    # # assign weights approximated by MC with lots of samples
-    # # very dirty code
-    # pts = filters[itpq].tf_dyn.model.points
-    # kern = filters[itpq].tf_dyn.model.kernel
-    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
-    # for f in filters:
-    #     if isinstance(f.tf_dyn, BQTransform):
-    #         f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
-    #         f.tf_dyn.Q = Q
-    # pts = filters[itpq].tf_meas.model.points
-    # kern = filters[itpq].tf_meas.model.kernel
-    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
-    # for f in filters:
-    #     if isinstance(f.tf_meas, BQTransform):
-    #         f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
-    #         f.tf_meas.Q = Q
+    itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
+
+    # assign weights approximated by MC with lots of samples
+    # very dirty code
+    pts = filters[itpq].tf_dyn.model.points
+    kern = filters[itpq].tf_dyn.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    for f in filters:
+        if isinstance(f.tf_dyn, BQTransform):
+            f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
+            f.tf_dyn.Q = Q
+    pts = filters[itpq].tf_meas.model.points
+    kern = filters[itpq].tf_meas.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    for f in filters:
+        if isinstance(f.tf_meas, BQTransform):
+            f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
+            f.tf_meas.Q = Q
 
     # print kernel parameters
     import pandas as pd
@@ -1355,7 +1355,7 @@ class CoordinatedTurnRadarSys(StateSpaceModel):
              [0, 0, 0, 0, self.rho_2 * self.dt]])
         r_cov = np.diag([100, 10e-6])
         kwargs = {
-            'x0_mean': np.array([1000, 300, 300, 0, -1.0 * np.pi / 180]),  # m, m/s, m m/s, rad/s
+            'x0_mean': np.array([1000, 300, 700, 0, -3.0 * np.pi / 180]),  # m, m/s, m m/s, rad/s
             'x0_cov': np.diag([100, 10, 100, 10, 10e-4]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
             'q_mean_0': np.zeros(self.qD),
             'q_cov_0': q_cov,
@@ -1494,15 +1494,15 @@ class CoordinatedTurnRadar(StudentStateSpaceModel):
              [0, 0, 0, 0, self.rho_2 * self.dt]])
         r_cov = np.diag([100, 10e-6])
         kwargs = {
-            'x0_mean': np.array([1000, 300, 300, 0, -1.0 * np.pi / 180]),  # m, m/s, m m/s, rad/s
+            'x0_mean': np.array([1000, 300, 700, 0, -3.0 * np.pi / 180]),  # m, m/s, m m/s, rad/s
             'x0_cov': np.diag([100, 10, 100, 10, 10e-4]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
-            'x0_dof': 4.0,
+            'x0_dof': 6.0,
             'q_mean': np.zeros(self.qD),
             'q_cov': q_cov,
-            'q_dof': 4.0,
+            'q_dof': 6.0,
             'r_mean': np.zeros(self.rD),
             'r_cov': r_cov,
-            'r_dof': 4.0,
+            'r_dof': 6.0,
         }
         super(CoordinatedTurnRadar, self).__init__(**kwargs)
 
@@ -1601,18 +1601,23 @@ def coordinated_radar_demo(steps=100, mc_sims=100, plots=True):
     print()
     print(partable)
 
+    # parameters of the point-set
+    kappa = None
+    par_pt = {'kappa': kappa}
+
     # init filters
     filters = (
         # ExtendedStudent(ssm),
-        FSQStudent(ssm, kappa=None),
+        FSQStudent(ssm, kappa=kappa, dof=6.0),
         # CubatureKalman(ssm),
-        # UnscentedKalman(ssm, kappa=None),
-        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_par=par_pt),
+        # UnscentedKalman(ssm, kappa=par_pt),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=6.0, dof_tp=4.0, point_par=par_pt),
+        # TPQMOStudent(ssm, par_dyn_tp)
         # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
         # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
     )
-    itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze()
+    itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
 
     # x_obs, z_obs = sys.simulate(100)
     # y_obs = np.apply_along_axis(ssm.dyn_eval, 0, x_obs[..., 0], None)
