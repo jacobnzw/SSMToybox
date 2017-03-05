@@ -1165,7 +1165,7 @@ class StudentTProcessMO(MultiOutputModel):
 
         """
 
-        fcn_obs = np.squeeze(fcn_obs)
+        # fcn_obs = np.squeeze(fcn_obs)
         emv = np.zeros((self.dim_out, ))
         # NOTE: einsum could be used here
         for d in range(self.dim_out):

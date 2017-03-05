@@ -372,9 +372,9 @@ class GPQMO(BQTransform):
 
 class TPQMO(BQTransform):
 
-    def __init__(self, dim_in, dim_out, kern_par, kernel='rbf', points='ut', point_par=None):
+    def __init__(self, dim_in, dim_out, kern_par, kernel='rbf', points='ut', point_par=None, nu=3.0):
 
-        super(TPQMO, self).__init__(dim_in, dim_out, kern_par, 'tp-mo', kernel, points, point_par)
+        super(TPQMO, self).__init__(dim_in, dim_out, kern_par, 'tp-mo', kernel, points, point_par, nu=nu)
 
         # output dimension (number of outputs)
         self.e = dim_out

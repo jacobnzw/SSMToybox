@@ -26,8 +26,7 @@ class TPQStudent(StudentInference):
     mixture representation which facilitates analytical tractability.
     """
 
-    def __init__(self, ssm, kern_par_dyn, kern_par_obs, kernel='rq', points='fs', point_hyp=None, dof=4.0,
-                 fixed_dof=True, dof_tp=4.0):
+    def __init__(self, ssm, kern_par_dyn, kern_par_obs, point_par=None, dof=4.0, fixed_dof=True, dof_tp=4.0):
         assert isinstance(ssm, StateSpaceModel)
         nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
         nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
@@ -36,22 +35,22 @@ class TPQStudent(StudentInference):
         q_dof, r_dof = ssm.get_pars('q_dof', 'r_dof')
 
         # add DOF of the noises to the sigma-point parameters
-        if point_hyp is None:
-            point_hyp = dict()
-        point_hyp_dyn = point_hyp
-        point_hyp_obs = point_hyp
-        point_hyp_dyn.update({'dof': q_dof})
-        point_hyp_obs.update({'dof': r_dof})
+        if point_par is None:
+            point_par = dict()
+        point_par_dyn = point_par
+        point_par_obs = point_par
+        point_par_dyn.update({'dof': q_dof})
+        point_par_obs.update({'dof': r_dof})
         # TODO: finish fixing DOFs, DOF for TPQ and DOF for the filtered state.
 
-        t_dyn = TPQ(nq, kern_par_dyn, kernel, points, point_hyp_dyn, nu=dof_tp)
-        t_obs = TPQ(nr, kern_par_obs, kernel, points, point_hyp_obs, nu=dof_tp)
+        t_dyn = TPQ(nq, kern_par_dyn, 'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
+        t_obs = TPQ(nr, kern_par_obs, 'rbf-student', 'fs', point_par_obs, nu=dof_tp)
         super(TPQStudent, self).__init__(ssm, t_dyn, t_obs, dof, fixed_dof)
 
 
 class TPQMOStudent(StudentInference):
 
-    def __init__(self, ssm, ker_par_dyn, ker_par_obs, kernel='rbf', points='ut', point_par=None):
+    def __init__(self, ssm, ker_par_dyn, ker_par_obs, point_par=None, dof=4.0, fixed_dof=True, dof_tp=4.0):
         """
         Nonlinear Kalman filter based on Student process quadrature with multiple independent outputs.
 
@@ -67,9 +66,21 @@ class TPQMOStudent(StudentInference):
         assert isinstance(ssm, StateSpaceModel)
         nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
         nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
-        t_dyn = TPQMO(nq, ssm.xD, ker_par_dyn, kernel, points, point_par)
-        t_obs = TPQMO(nr, ssm.zD, ker_par_obs, kernel, points, point_par)
-        super(TPQMOStudent, self).__init__(ssm, t_dyn, t_obs)
+
+        # degrees of freedom for SSM noises
+        q_dof, r_dof = ssm.get_pars('q_dof', 'r_dof')
+
+        # add DOF of the noises to the sigma-point parameters
+        if point_par is None:
+            point_par = dict()
+        point_par_dyn = point_par
+        point_par_obs = point_par
+        point_par_dyn.update({'dof': q_dof})
+        point_par_obs.update({'dof': r_dof})
+
+        t_dyn = TPQMO(nq, ssm.xD, ker_par_dyn, 'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
+        t_obs = TPQMO(nr, ssm.zD, ker_par_obs, 'rbf-student', 'fs', point_par_obs, nu=dof_tp)
+        super(TPQMOStudent, self).__init__(ssm, t_dyn, t_obs, dof, fixed_dof)
 
 
 def main():
