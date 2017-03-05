@@ -5,8 +5,8 @@ from numpy import newaxis as na
 from transforms.taylor import Taylor1stOrder
 from transforms.quad import FullySymmetricStudent
 from models.ssmodel import StateSpaceModel, StudentStateSpaceModel
-from inference.tpquad import TPQKalman, TPQStudent
-from inference.gpquad import GPQKalman, GPQ
+from inference.tpquad import TPQKalman, TPQStudent, TPQMOStudent
+from inference.gpquad import GPQKalman, GPQ, GPQMOKalman
 from inference.ssinfer import StudentInference
 from inference.unscented import UnscentedKalman
 from inference.cubature import CubatureKalman
@@ -344,7 +344,7 @@ def synthetic_demo(steps=250, mc_sims=5000):
         # ExtendedStudent(ssm),
         FSQStudent(ssm, kappa=None),
         # UnscentedKalman(ssm, kappa=-1),
-        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_par=par_pt),
         # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
         # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
@@ -530,21 +530,23 @@ def ungm_demo(steps=250, mc_sims=100):
     # init filters
     filters = (
         # ExtendedStudent(ssm),
-        UnscentedKalman(ssm, kappa=kappa),
-        FSQStudent(ssm, kappa=kappa, dof=3.0),
-        FSQStudent(ssm, kappa=kappa, dof=4.0),
-        FSQStudent(ssm, kappa=kappa, dof=8.0),
-        FSQStudent(ssm, kappa=kappa, dof=100.0),
-        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=3.0, point_hyp=par_pt),
-        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
-        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=10.0, point_hyp=par_pt),
-        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=100.0, point_hyp=par_pt),
-        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=500.0, point_hyp=par_pt),
+        # UnscentedKalman(ssm, kappa=kappa),
+        # FSQStudent(ssm, kappa=kappa, dof=3.0),
+        # FSQStudent(ssm, kappa=kappa, dof=4.0),
+        # FSQStudent(ssm, kappa=kappa, dof=8.0),
+        # FSQStudent(ssm, kappa=kappa, dof=100.0),
+        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=3.0, point_par=par_pt),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=4.0, point_par=par_pt),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=10.0, point_par=par_pt),
+        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=100.0, point_par=par_pt),
+        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=500.0, point_par=par_pt),
         # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs, dof=10.0, point_hyp=par_pt),
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
-        # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
+        # GPQKalman(ssm, par_dyn_tp, par_obs_tp, point_hyp=par_pt),
+        # GPQMOKalman(ssm, par_dyn_tp, par_obs_tp, point_par=par_pt),
+        TPQMOStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=10.0, point_par=par_pt),
     )
-    # itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze()[0]
+    # itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
     #
     # # assign weights approximated by MC with lots of samples
     # # very dirty code
@@ -585,21 +587,21 @@ def ungm_demo(steps=250, mc_sims=100):
         var_lcr_avg[fi] = bootstrap_var(lcr_avg[:, fi], int(1e4))
 
     # save trajectories, measurements and metrics to file for later processing (tables, plots)
-    data_dict = {
-        'x': x,
-        'z': z,
-        'mf': mf,
-        'Pf': Pf,
-        'rmse_avg': rmse_avg,
-        'lcr_avg': lcr_avg,
-        'var_rmse_avg': var_rmse_avg,
-        'var_lcr_avg': var_lcr_avg,
-        'steps': steps,
-        'mc_sims': mc_sims,
-        'par_dyn_tp': par_dyn_tp,
-        'par_obs_tp': par_obs_tp,
-    }
-    savemat('ungm_simdata_{:d}k_{:d}mc'.format(steps, mc_sims), data_dict)
+    # data_dict = {
+    #     'x': x,
+    #     'z': z,
+    #     'mf': mf,
+    #     'Pf': Pf,
+    #     'rmse_avg': rmse_avg,
+    #     'lcr_avg': lcr_avg,
+    #     'var_rmse_avg': var_rmse_avg,
+    #     'var_lcr_avg': var_lcr_avg,
+    #     'steps': steps,
+    #     'mc_sims': mc_sims,
+    #     'par_dyn_tp': par_dyn_tp,
+    #     'par_obs_tp': par_obs_tp,
+    # }
+    # savemat('ungm_simdata_{:d}k_{:d}mc'.format(steps, mc_sims), data_dict)
 
     f_label = [f.__class__.__name__ for f in filters]
     m_label = ['MEAN_RMSE', 'STD(MEAN_RMSE)', 'MEAN_INC', 'STD(MEAN_INC)']
@@ -1605,7 +1607,7 @@ def coordinated_radar_demo(steps=100, mc_sims=100, plots=True):
         FSQStudent(ssm, kappa=None),
         # CubatureKalman(ssm),
         # UnscentedKalman(ssm, kappa=None),
-        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_par=par_pt),
         # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
         # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
@@ -1672,8 +1674,8 @@ def coordinated_radar_demo(steps=100, mc_sims=100, plots=True):
 if __name__ == '__main__':
     np.set_printoptions(precision=4)
     # synthetic_demo(mc_sims=50)
-    # ungm_demo()
+    ungm_demo()
     # ungm_plots_tables('ungm_simdata_250k_500mc.mat')
     # reentry_tracking_demo(mc_sims=50)
     # coordinated_bot_demo(steps=40, mc_sims=100)
-    coordinated_radar_demo(steps=100, mc_sims=100, plots=False)
+    # coordinated_radar_demo(steps=100, mc_sims=100, plots=False)
