@@ -492,7 +492,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
         super(GaussianProcess, self).__init__(dim, kern_par, kernel, points, point_par)
 
-    def predict(self, test_data, fcn_obs, par=None):
+    def predict(self, test_data, fcn_obs, x_obs=None, par=None):
         """
         Gaussian process predictions.
 
@@ -502,6 +502,8 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
             Test data, shape (D, M)
         fcn_obs : numpy.ndarray
             Observations of the integrand at sigma-points.
+        x_obs : numpy.ndarray
+            Training inputs.
         par : numpy.ndarray
             Kernel parameters.
 
@@ -512,10 +514,13 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
         """
 
+        if x_obs is None:
+            x_obs = self.points
+
         par = self.kernel.get_parameters(par)
 
-        iK = self.kernel.eval_inv_dot(par, self.points)
-        kx = self.kernel.eval(par, test_data, self.points)
+        iK = self.kernel.eval_inv_dot(par, x_obs)
+        kx = self.kernel.eval(par, test_data, x_obs)
         kxx = self.kernel.eval(par, test_data, test_data, diag=True)
 
         # GP mean and predictive variance
@@ -648,7 +653,7 @@ class StudentTProcess(Model):
         nu = 3.0 if nu < 2 else nu  # nu > 2
         self.nu = nu
 
-    def predict(self, test_data, fcn_obs, par=None, nu=None):
+    def predict(self, test_data, fcn_obs, x_obs=None, par=None, nu=None):
         """
         Student t process predictions.
 
@@ -658,6 +663,8 @@ class StudentTProcess(Model):
             Test data, shape (D, M)
         fcn_obs : numpy.ndarray
             Observations of the integrand at sigma-points.
+        x_obs : numpy.ndarray
+            Training inputs.
         par : numpy.ndarray
             Kernel parameters.
         nu : float
@@ -673,9 +680,11 @@ class StudentTProcess(Model):
         par = self.kernel.get_parameters(par)
         if nu is None:
             nu = self.nu
+        if x_obs is None:
+            x_obs = self.points
 
-        iK = self.kernel.eval_inv_dot(par, self.points)
-        kx = self.kernel.eval(par, test_data, self.points)
+        iK = self.kernel.eval_inv_dot(par, x_obs)
+        kx = self.kernel.eval(par, test_data, x_obs)
         kxx = self.kernel.eval(par, test_data, test_data, diag=True)
         mean = np.squeeze(kx.dot(iK).dot(fcn_obs.T))
         var = np.squeeze(kxx - np.einsum('im,mn,mi->i', kx, iK, kx.T))
