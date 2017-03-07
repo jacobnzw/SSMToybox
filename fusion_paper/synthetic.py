@@ -182,7 +182,6 @@ def run_filters(filters, z):
 
 
 # TODO: Lotka-Volterra
-# TODO: Reentry Simple demo
 
 class SyntheticSys(StateSpaceModel):
     """
@@ -736,15 +735,16 @@ class ReentryRadarSimpleSys(System):
         dt :
             time interval between two consecutive measurements
         """
+        r_cov_0 = np.atleast_2d(0.03048 ** 2)
         kwargs = {
             'x0_mean': np.array([90, 6, 1.5]),  # km, km/s
             'x0_cov': np.diag([0.3048 ** 2, 1.2192 ** 2, 1e-4]),  # km^2, km^2/s^2
             'q_mean': np.zeros(self.qD),
             'q_cov': 0.1 * np.eye(self.qD),
             'r_mean_0': np.zeros(self.rD),
-            'r_cov_0': np.atleast_2d(0.03048 ** 2),
+            'r_cov_0': r_cov_0,
             'r_mean_1': np.zeros(self.rD),
-            'r_cov_1': np.atleast_2d(0.1),
+            'r_cov_1': 50*r_cov_0,
             'q_factor': np.eye(3),
         }
         super(ReentryRadarSimpleSys, self).__init__(**kwargs)
@@ -831,10 +831,10 @@ class ReentryRadarSimple(StudentStateSpaceModel):
             'x0_cov': np.diag([0.3048 ** 2, 1.2192 ** 2, 10]),  # km^2, km^2/s^2
             'q_mean': np.zeros(self.qD),
             'q_cov': 0.1 * np.eye(self.qD),
-            'q_dof': 4.0,
+            'q_dof': 100.0,
             'r_mean': np.zeros(self.rD),
             'r_cov': np.array([[0.03048 ** 2]]),
-            'r_dof': 4.0,
+            'r_dof': 6.0,
             'q_gain': np.eye(3),
         }
         super(ReentryRadarSimple, self).__init__(**kwargs)
@@ -876,39 +876,48 @@ def reentry_tracking_demo(mc_sims=100):
     # init SSM for the filters
     ssm = ReentryRadarSimple(dt=0.1)
 
-    par_dyn_tp = np.array([[0.5, 10, 10, 10]])
-    par_obs_tp = np.array([[0.5, 15, 20, 20]])
+    par_dyn_tp = np.array([[1, 3, 3, 3]], dtype=float)
+    par_obs_tp = np.array([[1, 2, 1000, 1000]], dtype=float)
     par_dyn_gpqk = par_dyn_tp
     par_obs_gpqk = par_obs_tp
+    # par_dyn_mo = np.array([[1, 3, 3, 3],
+    #                        [1, 3, 3, 3],
+    #                        [1, 3, 3, 3]], dtype=float)
+    # par_obs_mo = np.array([[1, 2, 1000, 1000]])
     par_pt = {'kappa': None}
 
     # init filters
     filters = (
         # ExtendedStudent(ssm),
-        FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
-        UnscentedKalman(ssm, kappa=None),
-        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_hyp=par_pt),
-        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
-        # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
-        # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_hyp=par_pt),
+        # FSQStudent(ssm, kappa=None),  # crashes, not necessarily a bug
+        # UnscentedKalman(ssm, kappa=None),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=6.0, dof_tp=4.0, point_par=par_pt),
+        # GPQStudent(ssm, par_dyn_tp, par_obs_tp),
+        # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_par=par_pt),
+        # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='ut', point_par=par_pt),
+        # TPQMOStudent(ssm, par_dyn_mo, par_obs_mo, dof=6.0, dof_tp=4.0, point_par=par_pt),
     )
+
+    # TODO: ML-II optimized parameters
+
+    itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
 
     # assign weights approximated by MC with lots of samples
     # very dirty code
-    # pts = filters[1].tf_dyn.model.points
-    # kern = filters[1].tf_dyn.model.kernel
-    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
-    # for f in filters:
-    #     if isinstance(f.tf_dyn, BQTransform):
-    #         f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
-    #         f.tf_dyn.Q = Q
-    # pts = filters[1].tf_meas.model.points
-    # kern = filters[1].tf_meas.model.kernel
-    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
-    # for f in filters:
-    #     if isinstance(f.tf_meas, BQTransform):
-    #         f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
-    #         f.tf_meas.Q = Q
+    pts = filters[itpq].tf_dyn.model.points
+    kern = filters[itpq].tf_dyn.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    for f in filters:
+        if isinstance(f.tf_dyn, BQTransform):
+            f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
+            f.tf_dyn.Q = Q
+    pts = filters[itpq].tf_meas.model.points
+    kern = filters[itpq].tf_meas.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    for f in filters:
+        if isinstance(f.tf_meas, BQTransform):
+            f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
+            f.tf_meas.Q = Q
 
     mf, Pf = run_filters(filters, z)
 
@@ -1682,8 +1691,8 @@ def coordinated_radar_demo(steps=100, mc_sims=100, plots=True):
 if __name__ == '__main__':
     np.set_printoptions(precision=4)
     # synthetic_demo(mc_sims=50)
-    ungm_demo()
+    # ungm_demo()
     # ungm_plots_tables('ungm_simdata_250k_500mc.mat')
-    # reentry_tracking_demo(mc_sims=50)
+    reentry_tracking_demo()
     # coordinated_bot_demo(steps=40, mc_sims=100)
     # coordinated_radar_demo(steps=100, mc_sims=100, plots=False)
