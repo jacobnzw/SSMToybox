@@ -181,6 +181,9 @@ def run_filters(filters, z):
     return mf, Pf
 
 
+# TODO: Lotka-Volterra
+# TODO: Reentry Simple demo
+
 class SyntheticSys(StateSpaceModel):
     """
     Synthetic system from Filip Tronarp.
