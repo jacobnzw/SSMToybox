@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.io import loadmat, savemat
-# from fusion_paper.figprint import *
+from fusion_paper.figprint import *
 from numpy import newaxis as na
 from transforms.taylor import Taylor1stOrder
 from transforms.quad import FullySymmetricStudent
@@ -1028,13 +1028,16 @@ class ConstantVelocityRadar(StudentStateSpaceModel):
         pass
 
 
-def constant_velocity_radar_demo(steps=100, mc_sims=100):
+def constant_velocity_radar_demo(steps=100, mc_sims=500):
+    print('Constant Velocity Radar Tracking with Glint Noise')
+    print('K = {:d}, MC = {:d}'.format(steps, mc_sims))
+
     sys = ConstantVelocityRadarSys()
     x, z = sys.simulate(steps, mc_sims)
 
     # import matplotlib.pyplot as plt
     # for i in range(mc_sims):
-    #     plt.plot(x[0, :, i], x[1, :, i], 'b', alpha=0.15)
+    #     plt.plot(x[0, :, i], x[2, :, i], 'b', alpha=0.15)
     # plt.show()
 
     # SSM noise covariances should follow the system
@@ -1048,13 +1051,20 @@ def constant_velocity_radar_demo(steps=100, mc_sims=100):
     kappa = 0.0
     par_pt = {'kappa': kappa}
 
+    # print kernel parameters
+    import pandas as pd
+    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(x.shape[0])]
+    partable = pd.DataFrame(np.vstack((par_dyn_tp, par_obs_tp)), columns=parlab, index=['dyn', 'obs'])
+    print()
+    print(partable)
+
     # init filters
     filters = (
         # ExtendedStudent(ssm),
         UnscentedKalman(ssm, kappa=kappa),
         FSQStudent(ssm, kappa=kappa, dof=6.0),
-        TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=6.0, dof_tp=4.0, point_par=par_pt),
-        GPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=10.0, point_hyp=par_pt),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=6.0, dof_tp=20.0, point_par=par_pt),
+        GPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=6.0, point_hyp=par_pt),
     )
     itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
 
@@ -1075,13 +1085,6 @@ def constant_velocity_radar_demo(steps=100, mc_sims=100):
             f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
             f.tf_meas.Q = Q
 
-    # print kernel parameters
-    import pandas as pd
-    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(x.shape[0])]
-    partable = pd.DataFrame(np.vstack((par_dyn_tp, par_obs_tp)), columns=parlab, index=['dyn', 'obs'])
-    print()
-    print(partable)
-
     # run all filters
     mf, Pf = run_filters(filters, z)
 
@@ -1090,19 +1093,114 @@ def constant_velocity_radar_demo(steps=100, mc_sims=100):
     vel_x, vel_mf, vel_Pf = x[[1, 3], ...], mf[[1, 3], ...], Pf[np.ix_([1, 3], [1, 3])]
     pos_rmse, pos_lcr = eval_perf_scores(pos_x, pos_mf, pos_Pf)
     vel_rmse, vel_lcr = eval_perf_scores(vel_x, vel_mf, vel_Pf)
+    rmse_avg, lcr_avg = eval_perf_scores(x, mf, Pf)
+
+    # variance of average metrics
+    from utils import bootstrap_var
+    var_rmse_avg = np.zeros((len(filters),))
+    var_lcr_avg = np.zeros((len(filters),))
+    for fi in range(len(filters)):
+        var_rmse_avg[fi] = bootstrap_var(rmse_avg[:, fi], int(1e4))
+        var_lcr_avg[fi] = bootstrap_var(lcr_avg[:, fi], int(1e4))
+
+    # save trajectories, measurements and metrics to file for later processing (tables, plots)
+    data_dict = {
+        'x': x,
+        'z': z,
+        'mf': mf,
+        'Pf': Pf,
+        'rmse_avg': rmse_avg,
+        'lcr_avg': lcr_avg,
+        'var_rmse_avg': var_rmse_avg,
+        'var_lcr_avg': var_lcr_avg,
+        'pos_rmse': pos_rmse,
+        'pos_lcr': pos_lcr,
+        'vel_rmse': vel_rmse,
+        'vel_lcr': vel_lcr,
+        'steps': steps,
+        'mc_sims': mc_sims,
+        'par_dyn_tp': par_dyn_tp,
+        'par_obs_tp': par_obs_tp,
+        'f_label': ['UKF', 'SF', r'TPQSF($\nu$=20)', 'GPQSF']
+    }
+    savemat('cv_radar_simdata_{:d}k_{:d}mc'.format(steps, mc_sims), data_dict)
 
     # print out table
-    import pandas as pd
+    # mean overall RMSE and INC with bootstrapped variances
     f_label = [f.__class__.__name__ for f in filters]
-    m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
+    m_label = ['MEAN_RMSE', 'STD(MEAN_RMSE)', 'MEAN_INC', 'STD(MEAN_INC)']
+    data = np.array([rmse_avg.mean(axis=0), np.sqrt(var_rmse_avg), lcr_avg.mean(axis=0), np.sqrt(var_lcr_avg)]).T
+    table = pd.DataFrame(data, f_label, m_label)
+    print(table)
 
+    # mean/max RMSE and INC
+    m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
     pos_data = np.array([pos_rmse.mean(axis=0), pos_rmse.max(axis=0), pos_lcr.mean(axis=0), pos_lcr.max(axis=0)]).T
     vel_data = np.array([vel_rmse.mean(axis=0), vel_rmse.max(axis=0), vel_lcr.mean(axis=0), vel_lcr.max(axis=0)]).T
-
     pos_table = pd.DataFrame(pos_data, f_label, m_label)
     vel_table = pd.DataFrame(vel_data, f_label, m_label)
     print(pos_table)
     print(vel_table)
+
+    # plot metrics
+    import matplotlib.pyplot as plt
+    time = np.arange(1, steps + 1)
+    fig, ax = plt.subplots(2, 1, sharex=True)
+    for fi, f in enumerate(filters):
+        ax[0].semilogy(time, pos_rmse[..., fi], label=f.__class__.__name__)
+        ax[1].semilogy(time, vel_rmse[..., fi], label=f.__class__.__name__)
+    plt.legend()
+    plt.show()
+
+
+def constant_velocity_radar_plots_tables(datafile):
+
+    # extract true/filtered state trajectories, measurements and evaluated metrics from *.mat data file
+    d = loadmat(datafile)
+    x, z, mf, Pf = d['x'], d['z'], d['mf'], d['Pf']
+    rmse_avg, lcr_avg = d['rmse_avg'], d['lcr_avg']
+    var_rmse_avg, var_lcr_avg = d['var_rmse_avg'].squeeze(), d['var_lcr_avg'].squeeze()
+    pos_rmse, pos_lcr = d['pos_rmse'], d['pos_lcr']
+    vel_rmse, vel_lcr = d['vel_rmse'], d['vel_lcr']
+    steps, mc_sims = d['steps'], d['mc_sims']
+
+    # TABLES
+    import pandas as pd
+
+    # limit display of decimal places
+    pd.set_option('display.precision', 4)
+
+    # filter/metric labels
+    f_label = d['f_label']
+    m_label = ['MEAN_RMSE', 'VAR(MEAN_RMSE)', 'MEAN_INC', 'VAR(MEAN_INC)']
+
+    # form data array, put in DataFrame and print
+    data = np.array([rmse_avg.mean(axis=0), var_rmse_avg, lcr_avg.mean(axis=0), var_lcr_avg]).T
+    table = pd.DataFrame(data, f_label, m_label)
+    print(table)
+
+    # save table to latex
+    with open('cv_radar_rmse_inc.tex', 'w') as f:
+        table.to_latex(f)
+
+    # plots
+    # import matplotlib.pyplot as plt
+    # from fusion_paper.figprint import FigurePrint
+    fp = FigurePrint()
+
+    # position and velocity RMSE plots
+    time = np.arange(1, steps+1)
+    fig, ax = plt.subplots(2, 1, sharex=True)
+
+    for fi, f in enumerate(f_label):
+        ax[0].semilogy(time, pos_rmse[..., fi], label=f)
+        ax[1].semilogy(time, vel_rmse[..., fi], label=f)
+    ax[0].set_ylabel('Position')
+    ax[1].set_ylabel('Velocity')
+    ax[1].set_xlabel('time step [k]')
+    plt.legend()
+    plt.tight_layout(pad=0)
+    fp.savefig('cv_radar_rmse_semilogy')
 
 
 class ConstantVelocityBOTSys(StateSpaceModel):
@@ -2328,6 +2426,7 @@ if __name__ == '__main__':
     # ungm_plots_tables('ungm_simdata_250k_500mc.mat')
     # reentry_tracking_demo()
     # constant_velocity_bot_demo()
-    constant_velocity_radar_demo()
+    # constant_velocity_radar_demo()
+    constant_velocity_radar_plots_tables('cv_radar_simdata_100k_500mc')
     # coordinated_bot_demo(steps=40, mc_sims=100)
     # coordinated_radar_demo(steps=100, mc_sims=100, plots=False)
