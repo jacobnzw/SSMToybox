@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.io import loadmat, savemat
-from fusion_paper.figprint import *
+# from fusion_paper.figprint import *
 from numpy import newaxis as na
 from transforms.taylor import Taylor1stOrder
 from transforms.quad import FullySymmetricStudent
@@ -181,7 +181,227 @@ def run_filters(filters, z):
     return mf, Pf
 
 
-# TODO: Lotka-Volterra
+class LotkaVolterraSys(StateSpaceModel):
+
+    xD = 2
+    zD = 2
+    qD = 2
+    rD = 2
+
+    q_additive = True
+    r_additive = False
+
+    def __init__(self, dt=0.01):
+
+        # discretization interval
+        self.dt = dt
+
+        # system parameters
+        self.a1, self.b1 = 3, 3
+        self.a2, self.b2 = -15, -15
+        self.s1, self.s2 = 0.01, 0.01
+        self.pl = 0.5
+
+        # system statistics
+        q_cov_0 = np.eye(self.qD)
+        r_cov_0 = 0.01*np.eye(self.rD)
+        pars = {
+            'x0_mean': np.array([1.5, 2]),
+            'x0_cov': 0.1*np.eye(self.xD),
+            'q_mean_0': np.zeros((self.qD, )),
+            'q_cov_0': q_cov_0,
+            'q_mean_1': np.zeros((self.rD,)),
+            'q_cov_1': 1000*q_cov_0,
+            'r_mean_0': np.zeros((self.rD, )),
+            'r_cov_0': r_cov_0,
+            'r_mean_1': np.zeros((self.rD,)),
+            'r_cov_1': 300*r_cov_0,
+        }
+        super(LotkaVolterraSys, self).__init__(**pars)
+
+    def dyn_fcn(self, x, q, pars):
+        a = np.array([self.b1 - (self.a1 / self.s1) * np.exp(self.s2 * x[1]) - self.s1 / 2,
+                      self.b2 - (self.a2 / self.s2) * np.exp(self.s1 * x[0]) - self.s2 / 2])
+        return x + a*self.dt + np.sqrt(self.dt)*q
+
+    def meas_fcn(self, x, r, pars):
+        return np.array([np.exp(self.s1*x[0])*(self.pl + 1/(1+np.exp(-0.1*r[0]))),
+                         np.exp(self.s2*x[1])*(self.pl + 1/(1+np.exp(-0.1*r[1])))])
+
+    def par_fcn(self, time):
+        pass
+
+    def dyn_fcn_dx(self, x, q, pars):
+        pass
+
+    def meas_fcn_dx(self, x, r, pars):
+        pass
+
+    def initial_condition_sample(self, size=None):
+        m, c = self.get_pars('x0_mean', 'x0_cov')
+        return np.random.multivariate_normal(m, c, size).T
+
+    def state_noise_sample(self, size=None):
+        m0, c0 = self.get_pars('q_mean_0', 'q_cov_0')
+        m1, c1 = self.get_pars('q_mean_1', 'q_cov_1')
+        return bigauss_mixture(m0, c0, m1, c1, 0.95, size)
+
+    def measurement_noise_sample(self, size=None):
+        m0, c0 = self.get_pars('r_mean_0', 'r_cov_0')
+        m1, c1 = self.get_pars('r_mean_1', 'r_cov_1')
+        return bigauss_mixture(m0, c0, m1, c1, 0.9, size)
+
+
+class LotkaVolterraSSM(StudentStateSpaceModel):
+    xD = 2
+    zD = 2
+    qD = 2
+    rD = 2
+
+    q_additive = True
+    r_additive = False
+
+    def __init__(self, dt=0.01):
+        # discretization interval
+        self.dt = dt
+
+        # system parameters
+        self.a1, self.b1 = 3, 3
+        self.a2, self.b2 = -15, -15
+        self.s1, self.s2 = 0.01, 0.01
+        self.pl = 0.5
+
+        # system statistics
+        q_cov_0 = np.eye(self.qD)
+        r_cov_0 = 0.01 * np.eye(self.rD)
+        pars = {
+            'x0_mean': np.array([1.5, 2]),
+            'x0_cov': 0.1 * np.eye(self.xD),
+            'x0_dof': 7.0,
+            'q_cov': q_cov_0,
+            'q_dof': 7.0,
+            'r_cov': r_cov_0,
+            'r_dof': 7.0,
+        }
+        super(LotkaVolterraSSM, self).__init__(**pars)
+
+    def dyn_fcn(self, x, q, pars):
+        a = np.array([self.b1 - (self.a1 / self.s1) * np.exp(self.s2 * x[1]) - self.s1 / 2,
+                      self.b2 - (self.a2 / self.s2) * np.exp(self.s1 * x[0]) - self.s2 / 2])
+        return x + a * self.dt + np.sqrt(self.dt) * q
+
+    def meas_fcn(self, x, r, pars):
+        return np.array([np.exp(self.s1 * x[0]) * (self.pl + 1 / (1 + np.exp(-0.1 * r[0]))),
+                         np.exp(self.s2 * x[1]) * (self.pl + 1 / (1 + np.exp(-0.1 * r[1])))])
+
+    def par_fcn(self, time):
+        pass
+
+    def dyn_fcn_dx(self, x, q, pars):
+        pass
+
+    def meas_fcn_dx(self, x, r, pars):
+        pass
+
+
+def lotka_volterra_demo(steps=150, mc_sims=10):
+    sys = LotkaVolterraSys()
+    x, z = sys.simulate(steps, mc_sims)
+
+    # plot trajectories
+    # FIXME: check system simulation, dynamics, stats, etc.; trajectories don't match MATLAB code
+    import matplotlib.pyplot as plt
+    for i in range(mc_sims):
+        plt.plot(x[0, :, i], x[1, :, i], 'b', alpha=0.15)
+    plt.show()
+
+    # SSM noise covariances should follow the system
+    ssm = LotkaVolterraSSM()
+
+    # kernel parameters for TPQ and GPQ filters
+    # TPQ Student
+    # par_dyn_tp = np.array([[1.8, 3.0]])
+    # par_obs_tp = np.array([[0.4, 1.0, 1.0]])
+    par_dyn_tp = np.array([[1.0, 1.0, 1.0]], dtype=float)
+    par_obs_tp = np.array([[1.0, 3.0, 3.0, 3.0, 3.0]], dtype=float)
+    # GPQ Student
+    par_dyn_gpqs = par_dyn_tp
+    par_obs_gpqs = par_obs_tp
+    # parameters of the point-set
+    kappa = 0.0
+    par_pt = {'kappa': kappa}
+
+    # init filters
+    filters = (
+        UnscentedKalman(ssm, kappa=kappa),
+        FSQStudent(ssm, kappa=kappa, dof=7.0),
+        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=7.0, dof_tp=4.0, point_par=par_pt),
+        # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs, dof=10.0, point_hyp=par_pt),
+        # TPQMOStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=10.0, point_par=par_pt),
+    )
+    # itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
+    #
+    # # assign weights approximated by MC with lots of samples
+    # # very dirty code
+    # pts = filters[itpq].tf_dyn.model.points
+    # kern = filters[itpq].tf_dyn.model.kernel
+    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    # for f in filters:
+    #     if isinstance(f.tf_dyn, BQTransform):
+    #         f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
+    #         f.tf_dyn.Q = Q
+    # pts = filters[itpq].tf_meas.model.points
+    # kern = filters[itpq].tf_meas.model.kernel
+    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    # for f in filters:
+    #     if isinstance(f.tf_meas, BQTransform):
+    #         f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
+    #         f.tf_meas.Q = Q
+
+    # print kernel parameters
+    import pandas as pd
+    # parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(x.shape[0])]
+    # partable = pd.DataFrame(np.vstack((par_dyn_tp, par_obs_tp)), columns=parlab, index=['dyn', 'obs'])
+    # print()
+    # print(partable)
+
+    # run all filters
+    mf, Pf = run_filters(filters, z)
+
+    # compute average RMSE and INC from filtered trajectories
+    rmse_avg, lcr_avg = eval_perf_scores(x, mf, Pf)
+
+    # variance of average metrics
+    from utils import bootstrap_var
+    var_rmse_avg = np.zeros((len(filters),))
+    var_lcr_avg = np.zeros((len(filters),))
+    for fi in range(len(filters)):
+        var_rmse_avg[fi] = bootstrap_var(rmse_avg[:, fi], int(1e4))
+        var_lcr_avg[fi] = bootstrap_var(lcr_avg[:, fi], int(1e4))
+
+    # save trajectories, measurements and metrics to file for later processing (tables, plots)
+    # data_dict = {
+    #     'x': x,
+    #     'z': z,
+    #     'mf': mf,
+    #     'Pf': Pf,
+    #     'rmse_avg': rmse_avg,
+    #     'lcr_avg': lcr_avg,
+    #     'var_rmse_avg': var_rmse_avg,
+    #     'var_lcr_avg': var_lcr_avg,
+    #     'steps': steps,
+    #     'mc_sims': mc_sims,
+    #     'par_dyn_tp': par_dyn_tp,
+    #     'par_obs_tp': par_obs_tp,
+    # }
+    # savemat('lotka_simdata_{:d}k_{:d}mc'.format(steps, mc_sims), data_dict)
+
+    f_label = [f.__class__.__name__ for f in filters]
+    m_label = ['MEAN_RMSE', 'STD(MEAN_RMSE)', 'MEAN_INC', 'STD(MEAN_INC)']
+    data = np.array([rmse_avg.mean(axis=0), np.sqrt(var_rmse_avg), lcr_avg.mean(axis=0), np.sqrt(var_lcr_avg)]).T
+    table = pd.DataFrame(data, f_label, m_label)
+    print(table)
+
 
 class SyntheticSys(StateSpaceModel):
     """
@@ -346,7 +566,7 @@ def synthetic_demo(steps=250, mc_sims=5000):
         # ExtendedStudent(ssm),
         FSQStudent(ssm, kappa=None),
         # UnscentedKalman(ssm, kappa=-1),
-        TPQStudent(ssm, par_dyn_tp, par_obs_tp, kernel='rbf-student', dof=4.0, dof_tp=4.0, point_par=par_pt),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=4.0, point_par=par_pt),
         # GPQStudent(ssm, par_dyn_gpqs, par_obs_gpqs),
         # TPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
         # GPQKalman(ssm, par_dyn_gpqk, par_obs_gpqk, points='fs', point_hyp=par_pt),
@@ -1691,8 +1911,9 @@ def coordinated_radar_demo(steps=100, mc_sims=100, plots=True):
 if __name__ == '__main__':
     np.set_printoptions(precision=4)
     # synthetic_demo(mc_sims=50)
+    lotka_volterra_demo()
     # ungm_demo()
     # ungm_plots_tables('ungm_simdata_250k_500mc.mat')
-    reentry_tracking_demo()
+    # reentry_tracking_demo()
     # coordinated_bot_demo(steps=40, mc_sims=100)
     # coordinated_radar_demo(steps=100, mc_sims=100, plots=False)
