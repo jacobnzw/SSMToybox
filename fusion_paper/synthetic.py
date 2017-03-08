@@ -909,6 +909,202 @@ def ungm_plots_tables(datafile):
     # plt.show()
 
 
+class ConstantVelocityRadarSys(StateSpaceModel):
+    """
+    See: Arasaratnam et al.: Discrete-Time Nonlinear Filtering Algorithms Using Gauss–Hermite Quadrature
+    """
+    xD = 4
+    zD = 2
+    qD = 2
+    rD = 2
+
+    q_additive = True
+    r_additive = True
+
+    def __init__(self, dt=0.5):
+        self.dt = dt
+        self.q_gain = np.array([[dt**2/2, 0],
+                                [dt, 0],
+                                [0, dt**2/2],
+                                [0, dt]])
+        pars = {
+            'x0_mean': np.array([10000, 300, 1000, -40]),  # m, m/s, m, m/s
+            'x0_cov': np.diag([100**2, 10**2, 100**2, 10**2]),
+            'q_mean': np.zeros((self.qD, )),
+            'q_cov': np.diag([50, 5]),  # m^2/s^4, m^2/s^4
+            'q_gain': self.q_gain,
+            'r_mean_0': np.zeros((self.rD, )),
+            'r_cov_0': np.diag([50, 0.4]),  # m^2, mrad^2
+            'r_mean_1': np.zeros((self.rD,)),
+            'r_cov_1': np.diag([5000, 16]),  # m^2, mrad^2
+        }
+        super(ConstantVelocityRadarSys, self).__init__(**pars)
+
+    def dyn_fcn(self, x, q, pars):
+        A = np.array([[1, self.dt, 0, 0],
+                      [0, 1, 0, 0],
+                      [0, 0, 1, self.dt],
+                      [0, 0, 0, 1]])
+        return A.dot(x) + self.q_gain.dot(q)
+
+    def meas_fcn(self, x, r, pars):
+        rang = np.sqrt(x[0]**2 + x[2]**2)
+        theta = np.arctan2(x[2], x[0])
+        return np.array([rang, theta]) + r
+
+    def par_fcn(self, time):
+        pass
+
+    def dyn_fcn_dx(self, x, q, pars):
+        pass
+
+    def meas_fcn_dx(self, x, r, pars):
+        pass
+
+    def initial_condition_sample(self, size=None):
+        m0, c0 = self.get_pars('x0_mean', 'x0_cov')
+        return np.random.multivariate_normal(m0, c0, size).T
+
+    def state_noise_sample(self, size=None):
+        m0, c0 = self.get_pars('q_mean', 'q_cov')
+        return np.random.multivariate_normal(m0, c0, size).T
+
+    def measurement_noise_sample(self, size=None):
+        m0, c0, m1, c1 = self.get_pars('r_mean_0', 'r_cov_0', 'r_mean_1', 'r_cov_1')
+        return bigauss_mixture(m0, c0, m1, c1, 0.85, size)
+
+
+class ConstantVelocityRadar(StudentStateSpaceModel):
+    """
+    See: Kotecha, Djuric, Gaussian Particle Filter
+    """
+    xD = 4
+    zD = 2
+    qD = 2
+    rD = 2
+
+    q_additive = True
+    r_additive = True
+
+    def __init__(self, dt=0.5):
+        self.dt = dt
+        self.q_gain = np.array([[dt ** 2 / 2, 0],
+                                [dt, 0],
+                                [0, dt ** 2 / 2],
+                                [0, dt]])
+        pars = {
+            'x0_mean': np.array([10175, 295, 980, -35]),  # m, m/s, m, m/s
+            'x0_cov': np.diag([100**2, 10**2, 100**2, 10**2]),
+            'x0_dof': 6.0,
+            'q_mean': np.zeros((self.qD, )),
+            'q_cov': np.diag([50, 5]),  # m^2/s^4, m^2/s^4
+            'q_dof': 6.0,
+            'q_gain': self.q_gain,
+            'r_mean': np.zeros((self.rD, )),
+            'r_cov': np.diag([50, 0.4]),  # m^2, mrad^2
+            'r_dof': 6.0,
+        }
+        super(ConstantVelocityRadar, self).__init__(**pars)
+
+    def dyn_fcn(self, x, q, pars):
+        A = np.array([[1, self.dt, 0, 0],
+                      [0, 1, 0, 0],
+                      [0, 0, 1, self.dt],
+                      [0, 0, 0, 1]])
+        return A.dot(x) + self.q_gain.dot(q)
+
+    def meas_fcn(self, x, r, pars):
+        rang = np.sqrt(x[0]**2 + x[2]**2)
+        theta = np.arctan2(x[2], x[0])
+        return np.array([rang, theta]) + r
+
+    def par_fcn(self, time):
+        pass
+
+    def dyn_fcn_dx(self, x, q, pars):
+        pass
+
+    def meas_fcn_dx(self, x, r, pars):
+        pass
+
+
+def constant_velocity_radar_demo(steps=100, mc_sims=100):
+    sys = ConstantVelocityRadarSys()
+    x, z = sys.simulate(steps, mc_sims)
+
+    # import matplotlib.pyplot as plt
+    # for i in range(mc_sims):
+    #     plt.plot(x[0, :, i], x[1, :, i], 'b', alpha=0.15)
+    # plt.show()
+
+    # SSM noise covariances should follow the system
+    ssm = ConstantVelocityRadar()
+
+    # kernel parameters for TPQ and GPQ filters
+    # TPQ Student
+    par_dyn_tp = np.array([[1, 3, 3, 3, 3]], dtype=float)
+    par_obs_tp = np.array([[1, 1, 1, 1, 1]], dtype=float)
+    # parameters of the point-set
+    kappa = 0.0
+    par_pt = {'kappa': kappa}
+
+    # init filters
+    filters = (
+        # ExtendedStudent(ssm),
+        UnscentedKalman(ssm, kappa=kappa),
+        FSQStudent(ssm, kappa=kappa, dof=6.0),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=6.0, dof_tp=4.0, point_par=par_pt),
+        GPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=10.0, point_hyp=par_pt),
+    )
+    itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
+
+    # assign weights approximated by MC with lots of samples
+    # very dirty code
+    pts = filters[itpq].tf_dyn.model.points
+    kern = filters[itpq].tf_dyn.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    for f in filters:
+        if isinstance(f.tf_dyn, BQTransform):
+            f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
+            f.tf_dyn.Q = Q
+    pts = filters[itpq].tf_meas.model.points
+    kern = filters[itpq].tf_meas.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    for f in filters:
+        if isinstance(f.tf_meas, BQTransform):
+            f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
+            f.tf_meas.Q = Q
+
+    # print kernel parameters
+    import pandas as pd
+    parlab = ['alpha'] + ['ell_{}'.format(d + 1) for d in range(x.shape[0])]
+    partable = pd.DataFrame(np.vstack((par_dyn_tp, par_obs_tp)), columns=parlab, index=['dyn', 'obs'])
+    print()
+    print(partable)
+
+    # run all filters
+    mf, Pf = run_filters(filters, z)
+
+    # evaluate scores
+    pos_x, pos_mf, pos_Pf = x[[0, 2], ...], mf[[0, 2], ...], Pf[np.ix_([0, 2], [0, 2])]
+    vel_x, vel_mf, vel_Pf = x[[1, 3], ...], mf[[1, 3], ...], Pf[np.ix_([1, 3], [1, 3])]
+    pos_rmse, pos_lcr = eval_perf_scores(pos_x, pos_mf, pos_Pf)
+    vel_rmse, vel_lcr = eval_perf_scores(vel_x, vel_mf, vel_Pf)
+
+    # print out table
+    import pandas as pd
+    f_label = [f.__class__.__name__ for f in filters]
+    m_label = ['MEAN_RMSE', 'MAX_RMSE', 'MEAN_INC', 'MAX_INC']
+
+    pos_data = np.array([pos_rmse.mean(axis=0), pos_rmse.max(axis=0), pos_lcr.mean(axis=0), pos_lcr.max(axis=0)]).T
+    vel_data = np.array([vel_rmse.mean(axis=0), vel_rmse.max(axis=0), vel_lcr.mean(axis=0), vel_lcr.max(axis=0)]).T
+
+    pos_table = pd.DataFrame(pos_data, f_label, m_label)
+    vel_table = pd.DataFrame(vel_data, f_label, m_label)
+    print(pos_table)
+    print(vel_table)
+
+
 class ConstantVelocityBOTSys(StateSpaceModel):
     """
     See: Kotecha, Djuric, Gaussian Particle Filter
@@ -2131,6 +2327,7 @@ if __name__ == '__main__':
     # ungm_demo()
     # ungm_plots_tables('ungm_simdata_250k_500mc.mat')
     # reentry_tracking_demo()
-    constant_velocity_bot_demo()
+    # constant_velocity_bot_demo()
+    constant_velocity_radar_demo()
     # coordinated_bot_demo(steps=40, mc_sims=100)
     # coordinated_radar_demo(steps=100, mc_sims=100, plots=False)
