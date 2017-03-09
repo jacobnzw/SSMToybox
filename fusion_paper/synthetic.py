@@ -934,9 +934,11 @@ class ConstantVelocityRadarSys(StateSpaceModel):
             'q_cov': np.diag([50, 5]),  # m^2/s^4, m^2/s^4
             'q_gain': self.q_gain,
             'r_mean_0': np.zeros((self.rD, )),
-            'r_cov_0': np.diag([50, 0.4]),  # m^2, mrad^2
+            # 'r_cov_0': np.diag([50, 0.4]),  # m^2, mrad^2
+            'r_cov_0': np.diag([50, 0.4e-6]),  # m^2, rad^2
             'r_mean_1': np.zeros((self.rD,)),
-            'r_cov_1': np.diag([5000, 16]),  # m^2, mrad^2
+            # 'r_cov_1': np.diag([5000, 16]),  # m^2, mrad^2
+            'r_cov_1': np.diag([5000, 1.6e-5]),  # m^2, rad^2
         }
         super(ConstantVelocityRadarSys, self).__init__(**pars)
 
@@ -995,14 +997,15 @@ class ConstantVelocityRadar(StudentStateSpaceModel):
         pars = {
             'x0_mean': np.array([10175, 295, 980, -35]),  # m, m/s, m, m/s
             'x0_cov': np.diag([100**2, 10**2, 100**2, 10**2]),
-            'x0_dof': 6.0,
+            'x0_dof': 1000.0,
             'q_mean': np.zeros((self.qD, )),
             'q_cov': np.diag([50, 5]),  # m^2/s^4, m^2/s^4
-            'q_dof': 6.0,
+            'q_dof': 1000.0,
             'q_gain': self.q_gain,
             'r_mean': np.zeros((self.rD, )),
-            'r_cov': np.diag([50, 0.4]),  # m^2, mrad^2
-            'r_dof': 6.0,
+            # 'r_cov': np.diag([50, 0.4]),  # m^2, mrad^2
+            'r_cov': np.diag([50, 0.4e-6]),  # m^2, rad^2
+            'r_dof': 4.0,
         }
         super(ConstantVelocityRadar, self).__init__(**pars)
 
@@ -1045,8 +1048,8 @@ def constant_velocity_radar_demo(steps=100, mc_sims=500):
 
     # kernel parameters for TPQ and GPQ filters
     # TPQ Student
-    par_dyn_tp = np.array([[1, 3, 3, 3, 3]], dtype=float)
-    par_obs_tp = np.array([[1, 1, 1, 1, 1]], dtype=float)
+    par_dyn_tp = np.array([[1, 5, 5, 5, 5]], dtype=float)
+    par_obs_tp = np.array([[1, 3, 3, 3, 3]], dtype=float)
     # parameters of the point-set
     kappa = 0.0
     par_pt = {'kappa': kappa}
@@ -1062,9 +1065,9 @@ def constant_velocity_radar_demo(steps=100, mc_sims=500):
     filters = (
         # ExtendedStudent(ssm),
         UnscentedKalman(ssm, kappa=kappa),
-        FSQStudent(ssm, kappa=kappa, dof=6.0),
-        TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=6.0, dof_tp=20.0, point_par=par_pt),
-        GPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=6.0, point_hyp=par_pt),
+        FSQStudent(ssm, kappa=kappa, dof=4.0),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=20.0, point_par=par_pt),
+        GPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, point_hyp=par_pt),
     )
     itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
 
@@ -1138,7 +1141,9 @@ def constant_velocity_radar_demo(steps=100, mc_sims=500):
     pos_data = np.array([pos_rmse.mean(axis=0), pos_rmse.max(axis=0), pos_lcr.mean(axis=0), pos_lcr.max(axis=0)]).T
     vel_data = np.array([vel_rmse.mean(axis=0), vel_rmse.max(axis=0), vel_lcr.mean(axis=0), vel_lcr.max(axis=0)]).T
     pos_table = pd.DataFrame(pos_data, f_label, m_label)
+    pos_table.index.name = 'Position'
     vel_table = pd.DataFrame(vel_data, f_label, m_label)
+    vel_table.index.name = 'Velocity'
     print(pos_table)
     print(vel_table)
 
@@ -1157,7 +1162,7 @@ def constant_velocity_radar_plots_tables(datafile):
 
     # extract true/filtered state trajectories, measurements and evaluated metrics from *.mat data file
     d = loadmat(datafile)
-    x, z, mf, Pf = d['x'], d['z'], d['mf'], d['Pf']
+    # x, z, mf, Pf = d['x'], d['z'], d['mf'], d['Pf']
     rmse_avg, lcr_avg = d['rmse_avg'], d['lcr_avg']
     var_rmse_avg, var_lcr_avg = d['var_rmse_avg'].squeeze(), d['var_lcr_avg'].squeeze()
     pos_rmse, pos_lcr = d['pos_rmse'], d['pos_lcr']
@@ -1201,6 +1206,25 @@ def constant_velocity_radar_plots_tables(datafile):
     plt.legend()
     plt.tight_layout(pad=0)
     fp.savefig('cv_radar_rmse_semilogy')
+
+    # RMSE and INC box plots
+    f_label = ['UKF', 'SF', 'TPQSF\n' + r'$(\nu_g=20)$', 'GPQSF']
+    fig, ax = plt.subplots()
+    ax.boxplot(rmse_avg)
+    ax.set_ylabel('Average RMSE')
+    # ax.set_ylim(0, 80)
+    xtickNames = plt.setp(ax, xticklabels=f_label)
+    # plt.setp(xtickNames, rotation=45, fontsize=8)
+    plt.tight_layout(pad=0.1)
+    fp.savefig('cv_radar_rmse_boxplot')
+
+    fig, ax = plt.subplots()
+    ax.boxplot(lcr_avg)
+    ax.set_ylabel('Average INC')
+    xtickNames = plt.setp(ax, xticklabels=f_label)
+    # plt.setp(xtickNames, rotation=45, fontsize=8)
+    plt.tight_layout(pad=0.1)
+    fp.savefig('cv_radar_inc_boxplot')
 
 
 class ConstantVelocityBOTSys(StateSpaceModel):
@@ -2426,7 +2450,7 @@ if __name__ == '__main__':
     # ungm_plots_tables('ungm_simdata_250k_500mc.mat')
     # reentry_tracking_demo()
     # constant_velocity_bot_demo()
-    # constant_velocity_radar_demo()
-    constant_velocity_radar_plots_tables('cv_radar_simdata_100k_500mc')
+    constant_velocity_radar_demo()
+    # constant_velocity_radar_plots_tables('cv_radar_simdata_100k_5000mc')
     # coordinated_bot_demo(steps=40, mc_sims=100)
     # coordinated_radar_demo(steps=100, mc_sims=100, plots=False)
