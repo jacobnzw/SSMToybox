@@ -1031,7 +1031,7 @@ class ConstantVelocityRadar(StudentStateSpaceModel):
         pass
 
 
-def constant_velocity_radar_demo(steps=100, mc_sims=500):
+def constant_velocity_radar_demo(steps=100, mc_sims=1000):
     print('Constant Velocity Radar Tracking with Glint Noise')
     print('K = {:d}, MC = {:d}'.format(steps, mc_sims))
 
@@ -1048,8 +1048,8 @@ def constant_velocity_radar_demo(steps=100, mc_sims=500):
 
     # kernel parameters for TPQ and GPQ filters
     # TPQ Student
-    par_dyn_tp = np.array([[1, 5, 5, 5, 5]], dtype=float)
-    par_obs_tp = np.array([[1, 3, 3, 3, 3]], dtype=float)
+    par_dyn_tp = np.array([[1, 100, 100, 100, 100]], dtype=float)
+    par_obs_tp = np.array([[0.05, 10, 100, 10, 100]], dtype=float)
     # parameters of the point-set
     kappa = 0.0
     par_pt = {'kappa': kappa}
@@ -1061,11 +1061,14 @@ def constant_velocity_radar_demo(steps=100, mc_sims=500):
     print()
     print(partable)
 
+    # TODO: less TPQSFs, max boxplot y-range = 2000, try to get convergent RMSE semilogy
     # init filters
     filters = (
         # ExtendedStudent(ssm),
         UnscentedKalman(ssm, kappa=kappa),
         FSQStudent(ssm, kappa=kappa, dof=4.0),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=4.0, point_par=par_pt),
+        TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=10.0, point_par=par_pt),
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=20.0, point_par=par_pt),
         GPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, point_hyp=par_pt),
     )
@@ -1176,7 +1179,9 @@ def constant_velocity_radar_plots_tables(datafile):
     pd.set_option('display.precision', 4)
 
     # filter/metric labels
-    f_label = d['f_label']
+    # f_label = d['f_label']
+    f_label = ['UKF', 'SF', 'TPQSF\n' + r'$(\nu_g=4)$', 'TPQSF\n' + r'$(\nu_g=10)$',
+               'TPQSF\n' + r'$(\nu_g=20)$', 'GPQSF']
     m_label = ['MEAN_RMSE', 'VAR(MEAN_RMSE)', 'MEAN_INC', 'VAR(MEAN_INC)']
 
     # form data array, put in DataFrame and print
@@ -1208,7 +1213,6 @@ def constant_velocity_radar_plots_tables(datafile):
     fp.savefig('cv_radar_rmse_semilogy')
 
     # RMSE and INC box plots
-    f_label = ['UKF', 'SF', 'TPQSF\n' + r'$(\nu_g=20)$', 'GPQSF']
     fig, ax = plt.subplots()
     ax.boxplot(rmse_avg)
     ax.set_ylabel('Average RMSE')
@@ -2450,7 +2454,7 @@ if __name__ == '__main__':
     # ungm_plots_tables('ungm_simdata_250k_500mc.mat')
     # reentry_tracking_demo()
     # constant_velocity_bot_demo()
-    constant_velocity_radar_demo()
-    # constant_velocity_radar_plots_tables('cv_radar_simdata_100k_5000mc')
+    # constant_velocity_radar_demo()
+    constant_velocity_radar_plots_tables('cv_radar_simdata_100k_1000mc')
     # coordinated_bot_demo(steps=40, mc_sims=100)
     # coordinated_radar_demo(steps=100, mc_sims=100, plots=False)
