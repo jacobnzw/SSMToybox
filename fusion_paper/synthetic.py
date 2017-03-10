@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.io import loadmat, savemat
-from fusion_paper.figprint import *
+# from fusion_paper.figprint import *
 from numpy import newaxis as na
 from transforms.taylor import Taylor1stOrder
 from transforms.quad import FullySymmetricStudent
@@ -1031,7 +1031,7 @@ class ConstantVelocityRadar(StudentStateSpaceModel):
         pass
 
 
-def constant_velocity_radar_demo(steps=100, mc_sims=1000):
+def constant_velocity_radar_demo(steps=100, mc_sims=100):
     print('Constant Velocity Radar Tracking with Glint Noise')
     print('K = {:d}, MC = {:d}'.format(steps, mc_sims))
 
@@ -1048,8 +1048,8 @@ def constant_velocity_radar_demo(steps=100, mc_sims=1000):
 
     # kernel parameters for TPQ and GPQ filters
     # TPQ Student
-    par_dyn_tp = np.array([[1, 100, 100, 100, 100]], dtype=float)
-    par_obs_tp = np.array([[0.05, 10, 100, 10, 100]], dtype=float)
+    par_dyn_tp = np.array([[0.05, 100, 100, 100, 100]], dtype=float)
+    par_obs_tp = np.array([[0.005, 10, 100, 10, 100]], dtype=float)
     # parameters of the point-set
     kappa = 0.0
     par_pt = {'kappa': kappa}
@@ -1065,12 +1065,12 @@ def constant_velocity_radar_demo(steps=100, mc_sims=1000):
     # init filters
     filters = (
         # ExtendedStudent(ssm),
-        UnscentedKalman(ssm, kappa=kappa),
+        # UnscentedKalman(ssm, kappa=kappa),
         FSQStudent(ssm, kappa=kappa, dof=4.0),
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=4.0, point_par=par_pt),
-        TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=10.0, point_par=par_pt),
-        TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=20.0, point_par=par_pt),
-        GPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, point_hyp=par_pt),
+        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=10.0, point_par=par_pt),
+        # TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=20.0, point_par=par_pt),
+        # GPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, point_hyp=par_pt),
     )
     itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
 
@@ -1078,14 +1078,14 @@ def constant_velocity_radar_demo(steps=100, mc_sims=1000):
     # very dirty code
     pts = filters[itpq].tf_dyn.model.points
     kern = filters[itpq].tf_dyn.model.kernel
-    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(2e6), 1000)
     for f in filters:
         if isinstance(f.tf_dyn, BQTransform):
             f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
             f.tf_dyn.Q = Q
     pts = filters[itpq].tf_meas.model.points
     kern = filters[itpq].tf_meas.model.kernel
-    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(2e6), 1000)
     for f in filters:
         if isinstance(f.tf_meas, BQTransform):
             f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
@@ -1182,10 +1182,10 @@ def constant_velocity_radar_plots_tables(datafile):
     # f_label = d['f_label']
     f_label = ['UKF', 'SF', 'TPQSF\n' + r'$(\nu_g=4)$', 'TPQSF\n' + r'$(\nu_g=10)$',
                'TPQSF\n' + r'$(\nu_g=20)$', 'GPQSF']
-    m_label = ['MEAN_RMSE', 'VAR(MEAN_RMSE)', 'MEAN_INC', 'VAR(MEAN_INC)']
+    m_label = ['MEAN_RMSE', 'STD(MEAN_RMSE)', 'MEAN_INC', 'STD(MEAN_INC)']
 
     # form data array, put in DataFrame and print
-    data = np.array([rmse_avg.mean(axis=0), var_rmse_avg, lcr_avg.mean(axis=0), var_lcr_avg]).T
+    data = np.array([rmse_avg.mean(axis=0), np.sqrt(var_rmse_avg), lcr_avg.mean(axis=0), np.sqrt(var_lcr_avg)]).T
     table = pd.DataFrame(data, f_label, m_label)
     print(table)
 
@@ -1214,9 +1214,9 @@ def constant_velocity_radar_plots_tables(datafile):
 
     # RMSE and INC box plots
     fig, ax = plt.subplots()
-    ax.boxplot(rmse_avg)
+    ax.boxplot(rmse_avg, showfliers=True)
     ax.set_ylabel('Average RMSE')
-    # ax.set_ylim(0, 80)
+    ax.set_ylim(0, 200)
     xtickNames = plt.setp(ax, xticklabels=f_label)
     # plt.setp(xtickNames, rotation=45, fontsize=8)
     plt.tight_layout(pad=0.1)
@@ -2454,7 +2454,7 @@ if __name__ == '__main__':
     # ungm_plots_tables('ungm_simdata_250k_500mc.mat')
     # reentry_tracking_demo()
     # constant_velocity_bot_demo()
-    # constant_velocity_radar_demo()
-    constant_velocity_radar_plots_tables('cv_radar_simdata_100k_1000mc')
+    constant_velocity_radar_demo()
+    # constant_velocity_radar_plots_tables('cv_radar_simdata_100k_500mc')
     # coordinated_bot_demo(steps=40, mc_sims=100)
     # coordinated_radar_demo(steps=100, mc_sims=100, plots=False)
