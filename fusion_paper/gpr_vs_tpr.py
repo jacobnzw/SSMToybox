@@ -15,16 +15,19 @@ tp = StudentTProcess(dim, par_kernel, nu=20.0)
 
 # some nonlinear function
 f = lambda x: np.sin(np.sin(x)*x**2)*np.exp(x)
+expit = lambda x: 5/(1+np.exp(-20*(x+1)))+0.01 + 5/(1+np.exp(20*(x-2)))+0.01
 
 # setup some test data
 num_test = 100
 x_test = np.linspace(-5, 5, num_test)[na, :]
 
 # draw from a GP
-K = gp.kernel.eval(np.array([[1.0, 0.7]]), x_test) + 1e-8*np.eye(num_test)
+K = gp.kernel.eval(np.array([[0.1, 0.7]]), x_test) + 1e-8*np.eye(num_test)
 gp_sample = np.random.multivariate_normal(np.zeros(num_test), K)
 # amplitude modulation of the gp sample
-gp_sample *= np.log10(np.linspace(10, 100, num_test))
+gp_sample *= expit(np.linspace(-5, 5, num_test))
+gp_sample += expit(np.linspace(-5, 5, num_test))
+
 
 i_train = [10, 20, 40, 52, 55, 80]
 x_train = x_test[:, i_train]
@@ -43,9 +46,11 @@ x_train = x_train.squeeze()
 y_train = y_train.squeeze()
 
 fp = FigurePrint()
+
+plt.plot(np.linspace(-5, 5, num_test), expit(np.linspace(-5, 5, num_test)))
 # plot training data, predictive mean and variance
 ymin, ymax, ypad = gp_sample.min(), gp_sample.max(), 0.25*gp_sample.ptp()
-fig, ax = plt.subplots(2, 1, sharex=True, figsize=fp.figsize())
+fig, ax = plt.subplots(2, 1, sharex=True)
 
 ax[0].fill_between(x_test, gp_mean - 2 * gp_std, gp_mean + 2 * gp_std, color='0.1', alpha=0.15)
 ax[0].plot(x_test, gp_mean, color='k', lw=2)
@@ -63,4 +68,5 @@ ax[1].set_ylabel('g(x)')
 ax[1].set_xlabel('x')
 
 plt.tight_layout(pad=0.0)
+plt.show()
 fp.savefig('gp_vs_tp')
