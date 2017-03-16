@@ -7,11 +7,11 @@ from utils import multivariate_t
 from transforms.bqkernel import RBF
 
 dim = 1
-par_kernel = np.array([[0.8, 1.9]])
+par_kernel = np.array([[0.8, 0.7]])
 
 # init models
 gp = GaussianProcess(dim, par_kernel)
-tp = StudentTProcess(dim, par_kernel, nu=20.0)
+tp = StudentTProcess(dim, par_kernel, nu=10.0)
 
 # some nonlinear function
 f = lambda x: np.sin(np.sin(x)*x**2)*np.exp(x)
@@ -47,7 +47,7 @@ y_train = y_train.squeeze()
 
 fp = FigurePrint()
 
-plt.plot(np.linspace(-5, 5, num_test), expit(np.linspace(-5, 5, num_test)))
+# plt.plot(np.linspace(-5, 5, num_test), expit(np.linspace(-5, 5, num_test)))
 # plot training data, predictive mean and variance
 ymin, ymax, ypad = gp_sample.min(), gp_sample.max(), 0.25*gp_sample.ptp()
 fig, ax = plt.subplots(2, 1, sharex=True)
