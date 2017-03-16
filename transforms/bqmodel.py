@@ -525,7 +525,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
         # GP mean and predictive variance
         mean = np.squeeze(kx.dot(iK).dot(fcn_obs.T))
-        var = np.squeeze(kxx - np.einsum('im,mn,mi->i', kx, iK, kx.T))
+        var = np.squeeze(kxx - np.einsum('im,mn,ni->i', kx, iK, kx.T))
         return mean, var
 
     def exp_model_variance(self, fcn_obs):
@@ -687,7 +687,7 @@ class StudentTProcess(Model):
         kx = self.kernel.eval(par, test_data, x_obs)
         kxx = self.kernel.eval(par, test_data, test_data, diag=True)
         mean = np.squeeze(kx.dot(iK).dot(fcn_obs.T))
-        var = np.squeeze(kxx - np.einsum('im,mn,mi->i', kx, iK, kx.T))
+        var = np.squeeze(kxx - np.einsum('im,mn,ni->i', kx, iK, kx.T))
         scale = (nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (nu - 2 + self.num_pts)
         return mean, scale * var
 
