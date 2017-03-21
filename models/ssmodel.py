@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 
 import numpy as np
 from numpy import newaxis as na
+from utils import multivariate_t
 
 # NOTE : The class should recognize input dimensions of dynamics and observation models separately
 # This is because observation models do not always use all the state dimensions, e.g. radar only uses position
@@ -352,13 +353,13 @@ class GaussianStateSpaceModel(StateSpaceModel):
 
         # use default value of statistics for Gaussian SSM if None provided
         kwargs = {
-            'x0_mean': x0_mean if not None else np.zeros(self.xD),
-            'x0_cov': x0_cov if not None else np.eye(self.xD),
-            'q_mean': q_mean if not None else np.zeros(self.qD),
-            'q_cov': q_cov if not None else np.eye(self.qD),
-            'r_mean': r_mean if not None else np.zeros(self.rD),
-            'r_cov': r_cov if not None else np.eye(self.rD),
-            'q_gain': q_gain if not None else np.eye(self.qD)
+            'x0_mean': x0_mean if x0_mean is not None else np.zeros(self.xD),
+            'x0_cov': x0_cov if x0_cov is not None else np.eye(self.xD),
+            'q_mean': q_mean if q_mean is not None else np.zeros(self.qD),
+            'q_cov': q_cov if q_cov is not None else np.eye(self.qD),
+            'r_mean': r_mean if r_mean is not None else np.zeros(self.rD),
+            'r_cov': r_cov if r_cov is not None else np.eye(self.rD),
+            'q_gain': q_gain if q_gain is not None else np.eye(self.qD)
         }
         super(GaussianStateSpaceModel, self).__init__(**kwargs)
 
@@ -489,14 +490,40 @@ class GaussianStateSpaceModel(StateSpaceModel):
         return np.random.multivariate_normal(x0_mean, x0_cov, size).T
 
 
-class StudentStateSpaceModel(GaussianStateSpaceModel):
+class StudentStateSpaceModel(StateSpaceModel):
 
-    def __init__(self, x0_mean=None, x0_cov=None, q_mean=None, q_cov=None, r_mean=None, r_cov=None, q_gain=None,
-                 q_dof=None, r_dof=None):
+    def __init__(self, x0_mean=None, x0_cov=None, x0_dof=None, q_mean=None, q_cov=None, q_dof=None, q_gain=None,
+                 r_mean=None, r_cov=None, r_dof=None):
+        """
+        State-space model where the noises are Student distributed.
+        Takes covariances instead of scale matrices.
 
-        super(StudentStateSpaceModel, self).__init__(x0_mean, x0_cov, q_mean, q_cov, r_mean, r_cov, q_gain)
-        self.set_pars('q_dof', q_dof)
-        self.set_pars('r_dof', r_dof)
+        Parameters
+        ----------
+        x0_mean
+        x0_cov
+        x0_dof
+        q_mean
+        q_cov
+        q_dof
+        q_gain
+        r_mean
+        r_cov
+        r_dof
+        """
+        kwargs = {
+            'x0_mean': x0_mean if x0_mean is not None else np.zeros(self.xD),
+            'x0_cov': x0_cov if x0_cov is not None else np.eye(self.xD),
+            'x0_dof': x0_dof if x0_dof is not None else 4.0,  # desired DOF
+            'q_mean': q_mean if q_mean is not None else np.zeros(self.qD),
+            'q_cov': q_cov if q_cov is not None else np.eye(self.qD),
+            'q_gain': q_gain if q_gain is not None else np.eye(self.qD),
+            'q_dof': q_dof if q_dof is not None else 4.0,
+            'r_mean': r_mean if r_mean is not None else np.zeros(self.rD),
+            'r_cov': r_cov if r_cov is not None else np.eye(self.rD),
+            'r_dof': r_dof if r_dof is not None else 4.0,
+        }
+        super(StudentStateSpaceModel, self).__init__(**kwargs)
 
     @abstractmethod
     def dyn_fcn(self, x, q, pars):
@@ -614,43 +641,12 @@ class StudentStateSpaceModel(GaussianStateSpaceModel):
 
     def state_noise_sample(self, size=None):
         q_mean, q_cov, q_dof = self.get_pars('q_mean', 'q_cov', 'q_dof')
-        return self._multivariate_t(q_mean, q_cov, q_dof, size)
+        return multivariate_t(q_mean, q_cov, q_dof, size).T
 
     def measurement_noise_sample(self, size=None):
         r_mean, r_cov, r_dof = self.get_pars('r_mean', 'r_cov', 'r_dof')
-        return self._multivariate_t(r_mean, r_cov, r_dof, size)
+        return multivariate_t(r_mean, r_cov, r_dof, size).T
 
     def initial_condition_sample(self, size=None):
         x0_mean, x0_cov, x0_dof = self.get_pars('x0_mean', 'x0_cov', 'x0_dof')
-        return self._multivariate_t(x0_mean, x0_cov, x0_dof, size)
-
-    @staticmethod
-    def _multivariate_t(mean, scale, nu, size=None):
-        """
-        Samples of a random variable :math:`X` following a multivariate t-distribution
-        :math:`X \sim \mathrm{St}(\mu, \Sigma, \nu)`.
-
-        Parameters
-        ----------
-        mean
-            Mean vector
-        scale
-            Scale matrix
-        nu : float
-            Degrees of freedom
-        size : int or tuple of ints
-
-
-        Notes
-        -----
-        If :math:`y \sim \mathrm{N}(0, \Sigma)` and :math:`u \sim \mathrm{Gamma}(k=\nu/2, \theta=2/\nu)`,
-        then :math:`x \sim \mathrm{St}(\mu, \Sigma, \nu)`, where :math:`x = \mu + \frac{y}{\sqrt{u}}`.
-
-        Returns
-        -------
-
-        """
-        v = np.random.gamma(nu / 2, 2 / nu, size)[:, na]
-        n = np.random.multivariate_normal(np.zeros_like(mean), scale, size)
-        return mean[na, :] + n / np.sqrt(v)
-
+        return multivariate_t(x0_mean, x0_cov, x0_dof, size).T

@@ -20,7 +20,7 @@ class MomentTransform(metaclass=ABCMeta):
         pass
 
 
-class SigmaPointTransform(MomentTransform, metaclass=ABCMeta):
+class SigmaPointTransform(MomentTransform):
     def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
         mean = mean[:, na]
         # form sigma-points from unit sigma-points

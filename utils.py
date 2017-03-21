@@ -1,6 +1,8 @@
 import numpy as np
+import scipy as sp
 from numpy import newaxis as na
 import pandas as pd
+import sys
 
 """
 Preliminary implementation of routines computing various performance metrics used in state estimation.
@@ -107,9 +109,13 @@ def log_cred_ratio(x, m, P, MSE):
     """
 
     dx = x - m
-    dx_icov_dx = dx.dot(np.linalg.inv(P)).dot(dx)
-    dx_imse_dx = dx.dot(np.linalg.inv(MSE)).dot(dx)
-    return 10 * (np.log10(dx_icov_dx) - np.log10(dx_imse_dx))
+    sqrtP = mat_sqrt(P)
+    sqrtMSE = mat_sqrt(MSE)
+    sqrtP_dx = sp.linalg.solve(sqrtP, dx)
+    sqrtMSE_dx = sp.linalg.solve(sqrtMSE, dx)
+    dx_icov_dx = sqrtP_dx.T.dot(sqrtP_dx)
+    dx_imse_dx = sqrtMSE_dx.T.dot(sqrtMSE_dx)
+    return 10 * (sp.log10(dx_icov_dx) - sp.log10(dx_imse_dx))
 
 
 def nll(x, m, P):
@@ -206,8 +212,7 @@ def bootstrap_var(data, samples=1000):
     # sample with replacement to create new datasets
     smp_data = np.random.choice(data, (samples, mc_sims))
     # calculate sample mean of each dataset and variance of the means
-    var = np.var(np.mean(smp_data, 1))
-    return 2 * np.sqrt(var)  # 2*STD
+    return np.var(np.mean(smp_data, 1))
 
 
 def print_table(data, row_labels=None, col_labels=None, latex=False):
@@ -215,3 +220,122 @@ def print_table(data, row_labels=None, col_labels=None, latex=False):
     print(pd)
     if latex:
         pd.to_latex()
+
+
+def bigauss_mixture(m0, c0, m1, c1, alpha, size):
+    """
+    Samples from a Gaussian mixture with two components.
+
+    Draw samples of a random variable :math:`X` following a Gaussian mixture density with two components,
+    given by :math:`X \sim \alpha \mathrm{N}(m_0, C_0) + (1 - \alpha)\mathrm{N}(m_1, C_1)`.
+
+    Parameters
+    ----------
+    m0 : numpy.ndarray
+        Mean of the first component.
+    c0 : numpy.ndarray
+        Covariance of the first component.
+    m1 : numpy.ndarray
+        Mean of the second component.
+    c1 : numpy.ndarray
+        Covariance of the second component.
+    alpha : float
+        Mixing proportions, alpha
+    size : int or tuple of ints
+        Number of samples to draw, gets passed into Numpy's random number generators.
+
+    Notes
+    -----
+    Very inefficient implementation, because it throws away a lot of the samples!
+
+    Returns
+    -------
+    : numpy.ndarray
+        Samples of a Gaussian mixture with two components.
+    """
+    mi = np.random.binomial(1, alpha, size).T  # 1 w.p. alpha, 0 w.p. 1-alpha
+    n0 = np.random.multivariate_normal(m0, c0, size).T
+    n1 = np.random.multivariate_normal(m1, c1, size).T
+    m1 = (mi[na, ...] == True)
+    m0 = np.logical_not(m1)
+    return m1 * n0 + m0 * n1
+
+
+def multivariate_t(mean, scale, nu, size):
+    """
+    Samples from a multivariate Student's t-distribution.
+
+    Samples of a random variable :math:`X` following a multivariate t-distribution
+    :math:`X \sim \mathrm{St}(\mu, \Sigma, \nu)`.
+
+    Parameters
+    ----------
+    mean
+        Mean vector
+    scale
+        Scale matrix
+    nu : float
+        Degrees of freedom
+    size : int or tuple of ints
+
+
+    Notes
+    -----
+    If :math:`y \sim \mathrm{N}(0, \Sigma)` and :math:`u \sim \mathrm{Gamma}(k=\nu/2, \theta=2/\nu)`,
+    then :math:`x \sim \mathrm{St}(\mu, \Sigma, \nu)`, where :math:`x = \mu + \frac{y}{\sqrt{u}}`.
+
+    Returns
+    -------
+
+    """
+    v = np.random.gamma(nu / 2, 2 / nu, size)[:, na]
+    n = np.random.multivariate_normal(np.zeros_like(mean), scale, size)
+    return mean[na, :] + n / np.sqrt(v)
+
+
+def maha(x, y, V=None):
+    """
+    Mahalanobis distance of all pairs of supplied data points.
+
+    Parameters
+    ----------
+    x : numpy.ndarray
+        Data points in (N, D) matrix.
+    y : numpy.ndarray
+        Data points in (N, D) matrix.
+    V : numpy.ndarray
+        Weight matrix (D, D), if `V=None`, `V=eye(D)` is used
+
+    Returns
+    -------
+    : numpy.ndarray
+        Pair-wise Mahalanobis distance of rows of x and y with given weight matrix V.
+    """
+    if V is None:
+        V = np.eye(x.shape[1])
+    x2V = np.sum(x.dot(V) * x, 1)
+    y2V = np.sum(y.dot(V) * y, 1)
+    return (x2V[:, na] + y2V[:, na].T) - 2 * x.dot(V).dot(y.T)
+
+
+def mat_sqrt(a):
+    """
+    Matrix square-root.
+
+    Parameters
+    ----------
+    a : numpy.ndarray
+
+
+    Returns
+    -------
+    : numpy.ndarray
+        Returns `cholesky(a)` for SPD matrices, and `u.dot(sqrt(s))`, where `u, s, v = svd(a)`.
+    """
+    try:
+        b = sp.linalg.cholesky(a, lower=True)
+    except np.linalg.linalg.LinAlgError:
+        print('Cholesky failed, using SVD.', file=sys.stderr)
+        u, s, v = sp.linalg.svd(a)
+        b = u.dot(np.diag(np.sqrt(s)))
+    return b
