@@ -192,9 +192,7 @@ class GPQMOTest(TestCase):
         for k in range(steps):
             fy[:, k] = f(x[:, k, 0], None)
 
-        b = [np.log((0.1, 1.001))] + dim_in * [(None, None)]
-        opt = {'xtol': 1e-2, 'maxiter': 100}
-        log_par, res_list = tf.model.optimize(np.log(par0), fy, x[..., 0], bounds=b, method='BFGS', options=opt)
+        opt = {'maxiter': 100}
+        log_par, res_list = tf.model.optimize(np.log(par0), fy, x[..., 0], method='BFGS', options=opt)
 
         print(np.exp(log_par))
-        self.assertTrue(False)

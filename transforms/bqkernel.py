@@ -350,6 +350,7 @@ class RBF(Kernel):
     def der_par(self, par_0, x):  # K as kwarg would save computation (would have to be evaluated w/ par_0)
         # par_0: array_like [alpha, el_1, ..., el_D]
         # x: (D, N)
+        par_0 = par_0.squeeze()
         alpha, el = par_0[0], par_0[1:]
         K = self.eval(par_0, x)
         # derivative w.r.t. alpha (N,N)

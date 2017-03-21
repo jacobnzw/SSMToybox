@@ -49,7 +49,7 @@ class GPModelTest(TestCase):
         model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
         y = fcn(model.points)
         lhyp = np.log([1.0, 3.0])
-        f, df = model.neg_log_marginal_likelihood(lhyp, y.T, model.points)
+        f, df = model.neg_log_marginal_likelihood(lhyp, y.T, model.points, 1e-8*np.eye(model.num_pts))
 
     @staticmethod
     def _nlml(log_par, kernel, fcn_obs, x_obs):
