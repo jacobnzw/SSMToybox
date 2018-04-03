@@ -2,10 +2,10 @@ from abc import ABCMeta, abstractmethod
 
 import matplotlib.pyplot as plt
 import numpy as np
-import numpy.linalg as la
+import scipy.linalg as la
 from scipy.optimize import minimize
 
-from .bqkernel import RBF, RQ
+from .bqkernel import RBF, RQ, RBFStudent
 from .quad import SphericalRadial, Unscented, GaussHermite, FullySymmetricStudent
 
 
@@ -50,7 +50,7 @@ class Model(object, metaclass=ABCMeta):
     """
 
     _supported_points_ = ['sr', 'ut', 'gh', 'fs']
-    _supported_kernels_ = ['rbf', 'rq']
+    _supported_kernels_ = ['rbf', 'rq', 'rbf-student']
 
     def __init__(self, dim, kern_par, kernel, points, point_par=None):
         """
@@ -74,6 +74,9 @@ class Model(object, metaclass=ABCMeta):
         self.kernel = Model.get_kernel(dim, kernel, kern_par)
         self.points = Model.get_points(dim, points, point_par)
 
+        # init variables for passing kernel expectations and kernel matrix inverse
+        self.q, self.Q, self.R, self.iK = None, None, None, None
+
         # save for printing
         self.str_pts = points
         self.str_pts_par = str(point_par)
@@ -92,6 +95,46 @@ class Model(object, metaclass=ABCMeta):
             String representation including short name of the point-set, the kernel and its parameter values.
         """
         return '{}\n{} {}'.format(self.kernel, self.str_pts, self.str_pts_par)
+
+    def bq_weights(self, par):
+        """
+        Weights of the Bayesian quadrature.
+
+        Weights for both GPQ and TPQ are the same, hence they're implemented in the general model class.
+
+        Parameters
+        ----------
+        par : array_like
+
+        Returns
+        -------
+        : tuple
+        Weights for computation of the transformed mean, covariance and cross-covariance in a tuple ``(wm, Wc, Wcc)``.
+
+        """
+        par = self.kernel.get_parameters(par)
+        x = self.points
+
+        # inverse kernel matrix
+        iK = self.kernel.eval_inv_dot(par, x, scaling=False)
+
+        # Kernel expectations
+        q = self.kernel.exp_x_kx(par, x)
+        Q = self.kernel.exp_x_kxkx(par, par, x)
+        R = self.kernel.exp_x_xkx(par, x)
+
+        # save for EMV and IVAR computation
+        self.q, self.Q, self.R, self.iK = q, Q, R, iK
+
+        # BQ weights in terms of kernel expectations
+        w_m = q.dot(iK)
+        w_c = iK.dot(Q).dot(iK)
+        w_cc = R.dot(iK)
+
+        # covariance weights should be symmetric
+        w_c = 0.5 * (w_c + w_c.T)
+
+        return w_m, w_c, w_cc
 
     @abstractmethod
     def predict(self, test_data, fcn_obs, par=None):
@@ -119,7 +162,7 @@ class Model(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def exp_model_variance(self, fcn_obs, par=None):
+    def exp_model_variance(self, fcn_obs):
         """
         Expected model variance given the function observations and the kernel parameters.
 
@@ -132,8 +175,6 @@ class Model(object, metaclass=ABCMeta):
         ----------
         fcn_obs : numpy.ndarray
             Observed function values at the point-set locations.
-        par : numpy.ndarray
-            Kernel parameters, default `par=None`.
 
         Returns
         -------
@@ -167,7 +208,7 @@ class Model(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def neg_log_marginal_likelihood(self, log_par, fcn_obs):
+    def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
         """
         Negative logarithm of marginal likelihood of the model given the kernel parameters and the function
         observations.
@@ -182,7 +223,11 @@ class Model(object, metaclass=ABCMeta):
         log_par : numpy.ndarray
             Logarithm of the kernel parameters.
         fcn_obs : numpy.ndarray
-            Observed function values at the point-set locations.
+            Observed function values at the inputs supplied in `x_obs`.
+        x_obs : numpy.ndarray
+            Function inputs.
+        jitter : numpy.ndarray
+            Regularization term for kernel matrix inversion.
 
         Returns
         -------
@@ -212,7 +257,7 @@ class Model(object, metaclass=ABCMeta):
         nlml, nlml_grad = self.neg_log_marginal_likelihood(log_par, fcn_obs)
         # NOTE: not entirely sure regularization is usefull, because the regularized ML-II seems to give very similar
         # results to ML-II; this regularizer tends to prefer longer lengthscales
-        reg = self.exp_model_variance(fcn_obs, par=np.exp(log_par))
+        reg = self.exp_model_variance(fcn_obs)
         return nlml + reg
 
     def likelihood_reg_ivar(self, log_par, fcn_obs):
@@ -235,7 +280,7 @@ class Model(object, metaclass=ABCMeta):
         reg = self.integral_variance(fcn_obs, par=np.exp(log_par))
         return nlml + reg
 
-    def optimize(self, log_par_0, fcn_obs, crit='NLML', method='BFGS', **kwargs):
+    def optimize(self, log_par_0, fcn_obs, x_obs, crit='NLML', method='BFGS', **kwargs):
         """
         Find optimal values of kernel parameters by minimizing chosen criterion given the point-set and the function
         observations.
@@ -246,6 +291,8 @@ class Model(object, metaclass=ABCMeta):
             Initial guess of the kernel log-parameters.
         fcn_obs : numpy.ndarray
             Observed function values at the point-set locations.
+        x_obs : numpy.ndarray
+            Function inputs.
         crit : string
             Objective function to use as a criterion for finding optimal setting of kernel parameters. Possible
             values are:
@@ -284,7 +331,8 @@ class Model(object, metaclass=ABCMeta):
             jac = False  # gradients not implemented for regularizers (solver uses approximations)
         else:
             raise ValueError('Unknown criterion {}.'.format(crit))
-        return minimize(obj_func, log_par_0, fcn_obs, method=method, jac=jac, **kwargs)
+        jitter = 1e-8 * np.eye(x_obs.shape[1])
+        return minimize(obj_func, log_par_0, args=(fcn_obs, x_obs, jitter), method=method, jac=jac, **kwargs)
 
     def plot_model(self, test_data, fcn_obs, par=None, fcn_true=None, in_dim=0):
         """
@@ -413,6 +461,8 @@ class Model(object, metaclass=ABCMeta):
         # initialize the chosen kernel
         if kernel == 'rbf':
             return RBF(dim, par)
+        elif kernel == 'rbf-student':
+            return RBFStudent(dim, par)
         elif kernel == 'rq':
             return RQ(dim, par)
 
@@ -442,7 +492,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
         super(GaussianProcess, self).__init__(dim, kern_par, kernel, points, point_par)
 
-    def predict(self, test_data, fcn_obs, par=None):
+    def predict(self, test_data, fcn_obs, x_obs=None, par=None):
         """
         Gaussian process predictions.
 
@@ -452,6 +502,8 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
             Test data, shape (D, M)
         fcn_obs : numpy.ndarray
             Observations of the integrand at sigma-points.
+        x_obs : numpy.ndarray
+            Training inputs.
         par : numpy.ndarray
             Kernel parameters.
 
@@ -462,24 +514,28 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
         """
 
+        if x_obs is None:
+            x_obs = self.points
+
         par = self.kernel.get_parameters(par)
 
-        iK = self.kernel.eval_inv_dot(par, self.points)
-        kx = self.kernel.eval(par, test_data, self.points)
+        iK = self.kernel.eval_inv_dot(par, x_obs)
+        kx = self.kernel.eval(par, test_data, x_obs)
         kxx = self.kernel.eval(par, test_data, test_data, diag=True)
 
         # GP mean and predictive variance
         mean = np.squeeze(kx.dot(iK).dot(fcn_obs.T))
-        var = np.squeeze(kxx - np.einsum('im,mn,mi->i', kx, iK, kx.T))
+        var = np.squeeze(kxx - np.einsum('im,mn,ni->i', kx, iK, kx.T))
         return mean, var
 
-    def exp_model_variance(self, fcn_obs=None, par=None):
+    def exp_model_variance(self, fcn_obs):
         """
 
         Parameters
         ----------
         fcn_obs : numpy.ndarray
-        par : numpy.ndarray
+        Q : numpy.ndarray
+        iK : numpy.ndarray
 
         Returns
         -------
@@ -487,10 +543,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
         """
 
-        par = self.kernel.get_parameters(par)
-        Q = self.kernel.exp_x_kxkx(par, par, self.points)
-        iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
-        return self.kernel.scale.squeeze() ** 2 * (1 - np.trace(Q.dot(iK)))
+        return self.kernel.scale.squeeze() ** 2 * (1 - np.trace(self.Q.dot(self.iK)))
 
     def integral_variance(self, fcn_obs, par=None):
         """
@@ -509,12 +562,23 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         par = self.kernel.get_parameters(par)
         q = self.kernel.exp_x_kx(par, self.points)
         iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
-        kbar = self.kernel.exp_x_kxx(par)
+        kbar = self.kernel.exp_xy_kxy(par)
         return kbar - q.T.dot(iK).dot(q)
 
-    def neg_log_marginal_likelihood(self, log_par, fcn_obs):
+    def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
         """
-        Negative marginal log-likelihood of Gaussian process regression model.
+        Negative marginal log-likelihood of single-output Gaussian process regression model.
+
+        The likelihood is given by
+
+        .. math::
+        \[
+        -\log p(Y \mid X, \theta) = -\sum_{e=1}^{\mathrm{dim_out}} \log p(y_e \mid X, \theta)
+        \]
+
+        where :math:`y_e` is e-th column of :math:`Y`. We have the same parameters :math:`\theta` for all outputs,
+        which is more limiting than the multi-output case. For single-output dimension the expression is equivalent to
+        negative marginal log-likelihood.
 
         Parameters
         ----------
@@ -522,6 +586,10 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
             Kernel log-parameters, shape (num_par, ).
         fcn_obs : numpy.ndarray
             Function values, shape (num_pts, dim_out).
+        x_obs : numpy.ndarray
+            Function inputs, shape ().
+        jitter : numpy.ndarray
+            Regularization term for kernel matrix inversion.
 
         Notes
         -----
@@ -535,116 +603,25 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
         # convert from log-par to par
         par = np.exp(log_par)
+        num_data, num_out = fcn_obs.shape
 
-        L = self.kernel.eval_chol(par, self.points)  # (N, N)
-        K = L.dot(L.T)  # jitter included from eval_chol
-        a = la.solve(K, fcn_obs)  # (N, E)
+        K = self.kernel.eval(par, x_obs) + jitter  # (N, N)
+        L = la.cho_factor(K)  # jitter included from eval
+        a = la.cho_solve(L, fcn_obs)  # (N, E)
         y_dot_a = np.einsum('ij, ji', fcn_obs.T, a)  # sum of diagonal of A.T.dot(A)
         a_out_a = np.einsum('i...j, ...jn', a, a.T)  # (N, N) sum over of outer products of columns of A
 
-        # negative marginal log-likelihood
-        nlml = 0.5 * y_dot_a + np.sum(np.log(np.diag(L))) + 0.5 * self.num_pts * np.log(2 * np.pi)
-        # nlml = np.log(nlml)  # w/o this, unconstrained solver terminates w/ 'precision loss'
+        # negative total NLML
+        nlml = num_out * np.sum(np.log(np.diag(L[0]))) + 0.5 * (y_dot_a + num_out * num_data * np.log(2 * np.pi))
 
-        # TODO: check the gradient with check_grad method
         # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
-        dK_dTheta = self.kernel.der_par(par, self.points)  # (N, N, num_par)
-        iK = la.solve(K, np.eye(self.num_pts))
-        dnlml_dtheta = 0.5 * np.trace((iK - a_out_a).dot(dK_dTheta))  # (num_par, )
+        dK_dTheta = self.kernel.der_par(par, x_obs)  # (N, N, num_hyp)
+        iKdK = la.cho_solve(L, dK_dTheta)
+
+        # gradient of total NLML
+        dnlml_dtheta = 0.5 * np.trace((num_out * iKdK - a_out_a.dot(dK_dTheta)))  # (num_par, )
+
         return nlml, dnlml_dtheta
-
-
-class GaussianProcessMO(Model):
-    """
-    Multi-output Gaussian process regression model of the integrand in the Bayesian quadrature.
-    """
-
-    def __init__(self, dim_in, dim_out, kern_par, kernel, points, point_par=None):
-        """
-        Multi-output Gaussian process regression model.
-
-        Parameters
-        ----------
-        dim_in : int
-            Number of input dimensions.
-        dim_out : int
-            Number of output dimensions.
-        kern_par : numpy.ndarray
-            Kernel parameters in matrix.
-        kernel : string
-            Acronym of the covariance function of the Gaussian process model.
-        points : string
-            Acronym for the sigma-point set to use in BQ.
-        point_par : dict
-            Parameters of the sigma-point set.
-        """
-
-        super(GaussianProcessMO, self).__init__(dim_in, kern_par, kernel, points, point_par)
-        self.dim_out = dim_out
-
-    def predict(self, test_data, fcn_obs, par=None):
-        """
-        Predictions of multi-output Gaussian process regression model.
-
-        Parameters
-        ----------
-        test_data : numpy.ndarray
-            Test data, shape (dim_in, num_test)
-        fcn_obs : numpy.ndarray
-            Observations of the integrand at sigma-points, shape (dim_out, num_pts)?
-        par : numpy.ndarray
-            Kernel parameters.
-
-        Returns
-        -------
-        : tuple
-            Predictive mean and variance in a tuple (mean, var).
-
-        """
-        pass
-
-    def exp_model_variance(self, fcn_obs, par=None):
-        par = self.kernel.get_parameters(par)
-
-        emv = np.zeros((self.dim_out,))
-        for i in range(self.dim_out):
-            iK = self.kernel.eval_inv_dot(par[i, :], self.points, scaling=False)
-            Q = self.kernel.exp_x_kxkx(par[i, :], par[i, :], self.points)
-            emv[i] = self.kernel.scale[i] ** 2 * (1 - np.trace(Q.dot(iK)))
-        return emv
-
-    def integral_variance(self, fcn_obs, par=None):
-        par = self.kernel.get_parameters(par)
-
-        ivar = np.zeros((self.dim_out,))
-        for i in range(self.dim_out):
-            q = self.kernel.exp_x_kx(par[i, :], self.points)
-            iK = self.kernel.eval_inv_dot(par[i, :], self.points, scaling=False)
-            kbar = self.kernel.exp_x_kxx(par[i, :])
-            ivar[i] = kbar - q.T.dot(iK).dot(q)
-        return ivar
-
-    def neg_log_marginal_likelihood(self, log_par, fcn_obs):
-        """
-        Negative marginal log-likelihood of a multi-output GP regression model.
-
-        Parameters
-        ----------
-        log_par : numpy.ndarray
-            Kernel log-parameters, shape (dim_out, num_par).
-        fcn_obs : numpy.ndarray
-            Function values, shape (num_pts, dim_out).
-
-        Notes
-        -----
-        Used as an objective function by the `Model.optimize()` to find an estimate of the kernel parameters.
-
-        Returns
-        -------
-        Negative log-likelihood and gradient for given parameter.
-
-        """
-        pass
 
 
 class StudentTProcess(Model):
@@ -676,7 +653,7 @@ class StudentTProcess(Model):
         nu = 3.0 if nu < 2 else nu  # nu > 2
         self.nu = nu
 
-    def predict(self, test_data, fcn_obs, par=None, nu=None):
+    def predict(self, test_data, fcn_obs, x_obs=None, par=None, nu=None):
         """
         Student t process predictions.
 
@@ -686,6 +663,8 @@ class StudentTProcess(Model):
             Test data, shape (D, M)
         fcn_obs : numpy.ndarray
             Observations of the integrand at sigma-points.
+        x_obs : numpy.ndarray
+            Training inputs.
         par : numpy.ndarray
             Kernel parameters.
         nu : float
@@ -701,35 +680,35 @@ class StudentTProcess(Model):
         par = self.kernel.get_parameters(par)
         if nu is None:
             nu = self.nu
+        if x_obs is None:
+            x_obs = self.points
 
-        iK = self.kernel.eval_inv_dot(par, self.points)
-        kx = self.kernel.eval(par, test_data, self.points)
+        iK = self.kernel.eval_inv_dot(par, x_obs)
+        kx = self.kernel.eval(par, test_data, x_obs)
         kxx = self.kernel.eval(par, test_data, test_data, diag=True)
         mean = np.squeeze(kx.dot(iK).dot(fcn_obs.T))
-        var = np.squeeze(kxx - np.einsum('im,mn,mi->i', kx, iK, kx.T))
+        var = np.squeeze(kxx - np.einsum('im,mn,ni->i', kx, iK, kx.T))
         scale = (nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (nu - 2 + self.num_pts)
         return mean, scale * var
 
-    def exp_model_variance(self, fcn_obs, par=None):
+    def exp_model_variance(self, fcn_obs):
         """
 
         Parameters
         ----------
         fcn_obs
         par
+        Q
+        iK
 
         Returns
         -------
 
         """
 
-        par = self.kernel.get_parameters(par)
-
-        Q = self.kernel.exp_x_kxkx(par, par, self.points)
-        iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
         fcn_obs = np.squeeze(fcn_obs)
-        scale = (self.nu - 2 + fcn_obs.dot(iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
-        return scale * self.kernel.scale.squeeze() ** 2 * (1 - np.trace(Q.dot(iK)))
+        scale = (self.nu - 2 + fcn_obs.dot(self.iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
+        return scale * self.kernel.scale.squeeze() ** 2 * (1 - np.trace(self.Q.dot(self.iK)))
 
     def integral_variance(self, fcn_obs, par=None):
         """
@@ -746,7 +725,7 @@ class StudentTProcess(Model):
 
         par = self.kernel.get_parameters(par)
 
-        kbar = self.kernel.exp_x_kxx(par)
+        kbar = self.kernel.exp_xy_kxy(par)
         q = self.kernel.exp_x_kx(par, self.points)
         iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
 
@@ -754,7 +733,7 @@ class StudentTProcess(Model):
         scale = (self.nu - 2 + fcn_obs.dot(iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
         return scale * (kbar - q.T.dot(iK).dot(q))
 
-    def neg_log_marginal_likelihood(self, log_par, fcn_obs):
+    def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
         """
         Negative marginal log-likelihood of Student t process regression model.
 
@@ -764,6 +743,10 @@ class StudentTProcess(Model):
             Kernel log-parameters, shape (num_par, ).
         fcn_obs : numpy.ndarray
             Function values, shape (num_pts, dim_out).
+        x_obs : numpy.ndarray
+            Function inputs, shape ().
+        jitter : numpy.ndarray
+            Regularization term for kernel matrix inversion.
 
         Notes
         -----
@@ -777,23 +760,479 @@ class StudentTProcess(Model):
 
         # convert from log-par to par
         par = np.exp(log_par)
+        num_data, num_out = fcn_obs.shape
+        nu = self.nu
 
-        L = self.kernel.eval_chol(par, self.points)  # (num_pts, num_pts)
-        K = L.dot(L.T)  # jitter included from eval_chol
-        a = la.solve(K, fcn_obs)  # (num_pts, dim_out)
-        y_dot_a = np.einsum('ij, ji', fcn_obs.T, a)  # sum of diagonal of A.T.dot(A)
-        a_out_a = np.einsum('i...j, ...jn', a, a.T)  # (num_pts, num_pts) sum over of outer products of columns of A
+        K = self.kernel.eval(par, x_obs) + jitter  # (N, N)
+        L = la.cho_factor(K)  # jitter included from eval
+        a = la.cho_solve(L, fcn_obs)  # (N, E)
+        y_dot_a = np.einsum('ij, ij -> j', fcn_obs, a)  # sum of diagonal of A.T.dot(A)
+
+        # negative marginal log-likelihood
+        from scipy.special import gamma
+        half_logdet_K = np.sum(np.log(np.diag(L[0])))
+        const = (num_data/2) * np.log((nu-2)*np.pi) - np.log(gamma((nu+num_data)/2)) + np.log(gamma(nu/2))
+        log_sum = 0.5*(self.nu + num_data) * np.log(1 + y_dot_a/(self.nu - 2)).sum()
+        nlml = log_sum + num_out*(half_logdet_K + const)
+
+        # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
+        dK_dTheta = self.kernel.der_par(par, x_obs)  # (N, N, num_par)
+
+        # gradient
+        iKdK = la.cho_solve(L, dK_dTheta)
+        scale = (self.nu + num_data) / (self.nu + y_dot_a - 2)
+        a_out_a = np.einsum('j, i...j, ...jn', scale, a, a.T)  # (N, N) weighted sum of outer products of columns of A
+        dnlml_dtheta = 0.5 * np.trace((num_out * iKdK - a_out_a.dot(dK_dTheta)))  # (num_par, )
+
+        return nlml, dnlml_dtheta
+
+
+class MultiOutputModel(Model):
+
+    def __init__(self, dim_in, dim_out, kern_par, kernel, points, point_par=None):
+        super(MultiOutputModel, self).__init__(dim_in, kern_par, kernel, points, point_par)
+        self.dim_out = dim_out
+
+    def bq_weights(self, par):
+        """
+        Weights of the Bayesian quadrature with multi-output process model.
+
+        Parameters
+        ----------
+        par : numpy.ndarray of shape (dim_out, num_par)
+            Kernel parameters in a matrix, where e-th row contains parameters for e-th output.
+
+        Returns
+        -------
+        : tuple (w_m, w_c, w_cc)
+            GP quadrature weights for the mean (w_m), covariance (w_c) and cross-covariance (w_cc).
+            w_m : numpy.ndarray of shape (num_pts, dim_out)
+            w_c : numpy.ndarray of shape (num_pts, num_pts, dim_out, dim_out)
+            w_cc : numpy.ndarray of shape (dim_in, num_pts, dim_out)
+
+        """
+
+        # if kern_par=None return parameters stored in Kernel
+        par = self.kernel.get_parameters(par)
+
+        # retrieve sigma-points from Model
+        x = self.points
+        d, e, n = self.dim_in, self.dim_out, self.num_pts
+
+        # Kernel expectations
+        q = np.zeros((n, e))
+        Q = np.zeros((n, n, e, e))
+        R = np.zeros((d, n, e))
+        iK = np.zeros((n, n, e))
+        w_c = np.zeros((n, n, e, e))
+        for i in range(e):
+            q[:, i] = self.kernel.exp_x_kx(par[i, :], x)
+            R[..., i] = self.kernel.exp_x_xkx(par[i, :], x)
+            iK[..., i] = self.kernel.eval_inv_dot(par[i, :], x, scaling=False)
+            for j in range(i + 1):
+                Q[..., i, j] = self.kernel.exp_x_kxkx(par[i, :], par[j, :], x)
+                Q[..., j, i] = Q[..., i, j]
+                w_c[..., i, j] = iK[..., i].dot(Q[..., i, j]).dot(iK[..., j])
+                w_c[..., j, i] = w_c[..., i, j]
+
+        # DEBUG, la.cond(Q) is high
+        self.q, self.Q, self.R, self.iK = q, Q, R, iK
+
+        # weights
+        # w_m = q(\theta_e) * iK(\theta_e) for all e = 1, ..., dim_out
+        w_m = np.einsum('ne, nme -> me', q, iK)
+
+        # w_c = iK(\theta_e) * Q(\theta_e, \theta_f) * iK(\theta_f) for all e,f = 1, ..., dim_out
+        # NOTE: einsum gives slighly different results than dot, or I don't know how to use it
+        # w_c = np.einsum('nie, ijed, jmd -> nmed', iK, Q, iK)
+
+        # w_cc = R(\theta_e) * iK(\theta_e) for all e = 1, ..., dim_out
+        w_cc = np.einsum('die, ine -> dne', R, iK)
+
+        # covariance weights should be symmetric
+        w_c = 0.5 * (w_c + w_c.swapaxes(0, 1).swapaxes(2, 3))
+
+        return w_m, w_c, w_cc
+
+    def optimize(self, log_par_0, fcn_obs, x_obs, method='BFGS', **kwargs):
+        """
+        Find optimal values of kernel parameters by minimizing negative marginal log-likelihood.
+
+        Parameters
+        ----------
+        log_par_0 : numpy.ndarray
+            Initial guess of the kernel log-parameters.
+        fcn_obs : numpy.ndarray
+            Observed function values at the point-set locations.
+        x_obs : numpy.ndarray
+            Function inputs.
+        crit : string
+            Objective function to use as a criterion for finding optimal setting of kernel parameters. Possible
+            values are:
+              - 'nlml' : negative marginal log-likelihood,
+              - 'nlml+emv' : NLML with expected model variance as regularizer,
+              - 'nlml+ivar' : NLML with integral variance as regularizer.
+        method : string
+            Optimization method for `scipy.optimize.minimize`, default method='BFGS'.
+        **kwargs
+            Keyword arguments for the `scipy.optimize.minimize`.
+
+        Returns
+        -------
+        scipy.optimize.OptimizeResult
+            Results of the optimization in a dict-like structure returned by `scipy.optimize.minimize`.
+
+        Notes
+        -----
+        The criteria using expected model variance and integral variance as regularizers ('nlml+emv', 'nlml+ivar')
+        are somewhat experimental. I did not operate under any sound theoretical justification when implementing
+        those. Just curious to see what happens, thus might be removed in the future.
+
+        See Also
+        --------
+        scipy.optimize.minimize
+        """
+
+        obj_func = self.neg_log_marginal_likelihood
+        jitter = 1e-8 * np.eye(x_obs.shape[1])
+        results = list()
+        for d in range(self.dim_out):
+            r = minimize(obj_func, log_par_0[d, :], args=(fcn_obs[d, :, None], x_obs, jitter),
+                         method=method, jac=True, **kwargs)
+            results.append(r)
+
+        # extract optimized parameters and arrange in 2D array
+        par = np.vstack([r.x for r in results])
+
+        return par, results
+
+    @abstractmethod
+    def predict(self, test_data, fcn_obs, par=None):
+        """
+        Model predictions based on test points and the kernel parameters.
+
+        Notes
+        -----
+        This is an abstract method. Implementation needs to be provided by the subclass.
+
+        Parameters
+        ----------
+        test_data : numpy.ndarray
+            Test points where to generate data.
+        fcn_obs : numpy.ndarray
+            Observed function values at the point-set locations.
+        par : numpy.ndarray
+            Kernel parameters, default `par=None`.
+
+        Returns
+        -------
+        (mean, var)
+            Model predictive mean and variance at the test point locations.
+        """
+        pass
+
+    @abstractmethod
+    def exp_model_variance(self, fcn_obs):
+        """
+        Expected model variance given the function observations and the kernel parameters.
+
+        Notes
+        -----
+        This is an abstract method. Implementation needs to be provided by the subclass and should be easily
+        accomplished using the kernel expectation method from the `Kernel` class.
+
+        Parameters
+        ----------
+        fcn_obs : numpy.ndarray
+            Observed function values at the point-set locations.
+
+        Returns
+        -------
+        float
+            Expected model variance.
+        """
+        pass
+
+    @abstractmethod
+    def integral_variance(self, fcn_obs, par=None):
+        """
+        Integral variance given the function value observations and the kernel parameters.
+
+        Notes
+        -----
+        This is an abstract method. Implementation needs to be provided by the subclass and should be easily
+        accomplished using the kernel expectation method from the `Kernel` class.
+
+        Parameters
+        ----------
+        fcn_obs : numpy.ndarray
+            Observed function values at the point-set locations.
+        par : numpy.ndarray
+            Kernel parameters, default `par=None`.
+
+        Returns
+        -------
+        float
+            Variance of the integral.
+        """
+        pass
+
+    @abstractmethod
+    def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
+        """
+        Negative logarithm of marginal likelihood of the model given the kernel parameters and the function
+        observations.
+
+        Notes
+        -----
+        Intends to be used as an objective function passed into the optimizer, thus it needs to subscribe to certain
+        implementation conventions.
+
+        Parameters
+        ----------
+        log_par : numpy.ndarray
+            Logarithm of the kernel parameters.
+        fcn_obs : numpy.ndarray
+            Observed function values at the inputs supplied in `x_obs`.
+        x_obs : numpy.ndarray
+            Function inputs.
+        jitter : numpy.ndarray
+            Regularization term for kernel matrix inversion.
+
+        Returns
+        -------
+        float
+            Negative log marginal likelihood.
+
+        """
+        pass
+
+
+class GaussianProcessMO(MultiOutputModel):  # TODO: Multiple inheritance could be used here
+    """
+    Multi-output Gaussian process regression model of the integrand in the Bayesian quadrature.
+    """
+
+    def __init__(self, dim_in, dim_out, kern_par, kernel, points, point_par=None):
+        """
+        Multi-output Gaussian process regression model.
+
+        Parameters
+        ----------
+        dim_in : int
+            Number of input dimensions.
+        dim_out : int
+            Number of output dimensions.
+        kern_par : numpy.ndarray
+            Kernel parameters in matrix.
+        kernel : string
+            Acronym of the covariance function of the Gaussian process model.
+        points : string
+            Acronym for the sigma-point set to use in BQ.
+        point_par : dict
+            Parameters of the sigma-point set.
+        """
+
+        super(GaussianProcessMO, self).__init__(dim_in, dim_out, kern_par, kernel, points, point_par)
+
+    def predict(self, test_data, fcn_obs, par=None):
+        """
+        Predictions of multi-output Gaussian process regression model.
+
+        Parameters
+        ----------
+        test_data : numpy.ndarray
+            Test data, shape (dim_in, num_test)
+        fcn_obs : numpy.ndarray
+            Observations of the integrand at sigma-points, shape (dim_out, num_pts)?
+        par : numpy.ndarray
+            Kernel parameters.
+
+        Returns
+        -------
+        : tuple
+            Predictive mean and variance in a tuple (mean, var).
+
+        """
+        pass
+
+    def exp_model_variance(self, fcn_obs):
+
+        emv = np.zeros((self.dim_out, ))
+        for i in range(self.dim_out):
+            emv[i] = self.kernel.scale[i] ** 2 * (1 - np.trace(self.Q[..., i, i].dot(self.iK[..., i])))
+        return emv
+
+    def integral_variance(self, fcn_obs, par=None):
+        par = self.kernel.get_parameters(par)
+
+        ivar = np.zeros((self.dim_out,))
+        for i in range(self.dim_out):
+            q = self.kernel.exp_x_kx(par[i, :], self.points)
+            iK = self.kernel.eval_inv_dot(par[i, :], self.points, scaling=False)
+            kbar = self.kernel.exp_xy_kxy(par[i, :])
+            ivar[i] = kbar - q.T.dot(iK).dot(q)
+        return ivar
+
+    def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
+        """
+        Negative marginal log-likelihood of multi-output Gaussian process regression model.
+
+        The likelihood is given by
+
+        .. math::
+        \[
+        -\log p(Y \mid X, \Theta) = -\sum_{e=1}^{\mathrm{dim_out}} \log p(y_e \mid X, \theta_e)
+        \]
+
+        where :math:`y_e` is e-th column of :math:`Y` and :math:`\theta_e` is e-th column of :math:`\Theta`. The
+        multi-output model uses one set of kenrel parameters for every output, thus having greater flexibility than the
+        single-output GP models.the same parameters :math:`\theta` for all outputs, which is more limiting than the
+        multi-output case. For single-output dimension the expression is equivalent to negative marginal log-likelihood.
+        This function implements only one term in the sum above, because the outputs are assumed independent given
+        the inputs and thus we can run the optimizer for each output independently.
+
+        Parameters
+        ----------
+        log_par : numpy.ndarray
+            Kernel log-parameters, shape (num_par, ).
+        fcn_obs : numpy.ndarray
+            Function values, shape (num_pts, dim_out).
+        x_obs : numpy.ndarray
+            Function inputs, shape ().
+        jitter : numpy.ndarray
+            Regularization term for kernel matrix inversion.
+
+        Notes
+        -----
+        Used as an objective function by the `Model.optimize()` to find an estimate of the kernel parameters.
+
+        Returns
+        -------
+        Negative log-likelihood and gradient for given parameter.
+
+        """
+
+        # convert from log-par to par
+        par = np.exp(log_par)
+        num_data = x_obs.shape[1]
+
+        K = self.kernel.eval(par, x_obs) + jitter  # (N, N)
+        L = la.cho_factor(K)  # jitter included from eval
+        a = la.cho_solve(L, fcn_obs)  # (N, )
+        y_dot_a = fcn_obs.T.dot(a)
+        a_out_a = np.outer(a, a.T)  # (N, N)
+
+        # negative marginal log-likelihood
+        nlml = np.sum(np.log(np.diag(L[0]))) + 0.5 * (y_dot_a + num_data * np.log(2 * np.pi))
+
+        # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
+        dK_dTheta = self.kernel.der_par(par, x_obs)  # (N, N, num_par)
+        iKdK = la.cho_solve(L, dK_dTheta)
+        dnlml_dtheta = 0.5 * np.trace((iKdK - a_out_a.dot(dK_dTheta)))  # (num_par, )
+
+        return nlml, dnlml_dtheta
+
+
+class StudentTProcessMO(MultiOutputModel):
+
+    def __init__(self, dim_in, dim_out, kern_par, kernel, points, point_par=None, nu=3.0):
+        """
+        Multi-output Student's t-process regression model.
+
+        Parameters
+        ----------
+        dim_in : int
+            Number of input dimensions.
+        dim_out : int
+            Number of output dimensions.
+        kern_par : numpy.ndarray
+            Kernel parameters in matrix.
+        kernel : string
+            Acronym of the covariance function of the Gaussian process model.
+        points : string
+            Acronym for the sigma-point set to use in BQ.
+        point_par : dict
+            Parameters of the sigma-point set.
+        """
+
+        super(StudentTProcessMO, self).__init__(dim_in, dim_out, kern_par, kernel, points, point_par)
+        self.nu = nu
+
+    def predict(self, test_data, fcn_obs, par=None):
+        pass
+
+    def exp_model_variance(self, fcn_obs):
+        """
+
+        Parameters
+        ----------
+        fcn_obs
+
+        Returns
+        -------
+
+        """
+
+        # fcn_obs = np.squeeze(fcn_obs)
+        emv = np.zeros((self.dim_out, ))
+        # NOTE: einsum could be used here
+        for d in range(self.dim_out):
+            scale = self.nu - 2 + fcn_obs[d, :].dot(self.iK[..., d]).dot(fcn_obs[d, :].T)
+            scale /= (self.nu - 2 + self.num_pts)
+            emv[d] = scale * (1 - np.trace(self.Q[..., d, d].dot(self.iK[..., d])))
+
+        return self.kernel.scale.squeeze() ** 2 * emv
+
+    def integral_variance(self, fcn_obs, par=None):
+        pass
+
+    def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
+        """
+        Negative marginal log-likelihood of Student t process regression model.
+
+        Parameters
+        ----------
+        log_par : numpy.ndarray
+            Kernel log-parameters, shape (num_par, ).
+        fcn_obs : numpy.ndarray
+            Function values, shape (num_pts, dim_out).
+        x_obs : numpy.ndarray
+            Function inputs, shape ().
+        jitter : numpy.ndarray
+            Regularization term for kernel matrix inversion.
+
+        Notes
+        -----
+        Used as an objective function by the `Model.optimize()` to find an estimate of the kernel parameters.
+
+        Returns
+        -------
+        Negative log-likelihood and gradient for given parameter.
+
+        """
+
+        # convert from log-par to par
+        par = np.exp(log_par)
+        num_data = x_obs.shape[1]
+
+        K = self.kernel.eval(par, x_obs) + jitter  # (N, N)
+        L = la.cho_factor(K)  # jitter included from eval
+        a = la.cho_solve(L, fcn_obs)  # (N, )
+        y_dot_a = fcn_obs.T.dot(a)
+        a_out_a = np.outer(a, a.T)  # (N, N)
 
         # negative marginal log-likelihood
         from scipy.special import gamma
         half_logdet_K = np.sum(np.log(np.diag(L)))
-        const = 0.5 * self.num_pts * np.log((self.nu - 2) * np.pi) + np.log(
-            gamma(0.5 * self.nu + self.num_pts) / gamma(0.5 * self.nu))
-        nlml = 0.5 * (self.nu + self.num_pts) * np.log(1 + y_dot_a) + half_logdet_K + const
+        const = 0.5 * num_data * np.log((self.nu - 2) * np.pi) + np.log(
+            gamma(0.5 * self.nu + num_data) / gamma(0.5 * self.nu))
+        nlml = 0.5 * (self.nu + num_data) * np.log(1 + y_dot_a) + half_logdet_K + const
 
         # negative marginal log-likelihood derivatives w.r.t. hyper-parameters
-        dK_dTheta = self.kernel.der_par(par, self.points)  # (num_pts, num_pts, num_par)
-        iK = la.solve(K, np.eye(self.num_pts))
-        scale = (self.nu + self.num_pts) / (self.nu + y_dot_a - 2)
-        dnlml_dtheta = 0.5 * np.trace((iK - scale * a_out_a).dot(dK_dTheta))  # (num_par, )
+        dK_dTheta = self.kernel.der_par(par, x_obs)  # (N, N, num_par)
+        iKdK = la.cho_solve(L, dK_dTheta)
+        scale = (self.nu + num_data) / (self.nu + y_dot_a - 2)
+        dnlml_dtheta = 0.5 * np.trace((iKdK - scale * a_out_a.dot(dK_dTheta)))  # (num_par, )
+
         return nlml, dnlml_dtheta

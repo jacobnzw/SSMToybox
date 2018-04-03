@@ -5,32 +5,7 @@ import numpy.linalg as la
 from numpy import newaxis as na
 from scipy.linalg import cho_factor, cho_solve
 
-
-# TODO: documentation
-
-def maha(x, y, V=None):
-    """
-    Mahalanobis distance of all pairs of supplied data points.
-
-    Parameters
-    ----------
-    x : numpy.ndarray
-        Data points in (N, D) matrix.
-    y : numpy.ndarray
-        Data points in (N, D) matrix.
-    V : numpy.ndarray
-        Weight matrix (D, D), if `V=None`, `V=eye(D)` is used
-
-    Returns
-    -------
-    : numpy.ndarray
-        Pair-wise Mahalanobis distance of rows of x and y with given weight matrix V.
-    """
-    if V is None:
-        V = np.eye(x.shape[1])
-    x2V = np.sum(x.dot(V) * x, 1)
-    y2V = np.sum(y.dot(V) * y, 1)
-    return (x2V[:, na] + y2V[:, na].T) - 2 * x.dot(V).dot(y.T)
+from utils import maha, multivariate_t
 
 
 class Kernel(object, metaclass=ABCMeta):
@@ -260,7 +235,7 @@ class RBF(Kernel):
             Input dimension
         par : numpy.ndarray
             Kernel parameters in a matrix of shape (dim_out, num_par), where i-th row contains parameters for i-th
-            output. Each row is :math: `[\alpha, \ell_1, \ldots, \ell_dim]`
+            output. Each row is :math: `[s, \ell_1, \ldots, \ell_dim]`
         jitter : float
             Jitter for stabilizing inversion of the kernel matrix. Default ``jitter=1e-8``.
 
@@ -375,12 +350,13 @@ class RBF(Kernel):
     def der_par(self, par_0, x):  # K as kwarg would save computation (would have to be evaluated w/ par_0)
         # par_0: array_like [alpha, el_1, ..., el_D]
         # x: (D, N)
+        par_0 = par_0.squeeze()
         alpha, el = par_0[0], par_0[1:]
         K = self.eval(par_0, x)
         # derivative w.r.t. alpha (N,N)
         d_alpha = 2 * alpha ** -1 * K
         # derivatives w.r.t. el_1, ..., el_D (N,N,D)
-        d_el = (x[:, na, :] - x[:, :, na]) ** 2 * (el ** -3)[:, na, na] * K[na, :, :]
+        d_el = (x[:, na, :] - x[:, :, na]) ** 2 * (el ** -2)[:, na, na] * K[na, :, :]
         return np.concatenate((d_alpha[..., na], d_el.T), axis=2)
 
     @staticmethod
@@ -402,6 +378,65 @@ class RBF(Kernel):
         return par[0], np.diag(par[1:] ** -1)
 
 
+class RBFStudent(RBF):
+    """
+    RBF kernel with Student's expectations approximated by Monte Carlo.
+    """
+
+    def __init__(self, dim, par, jitter=1e-8, dof=4.0, num_mc=1000):
+
+        # samples from standard Student's density
+        mean = np.zeros((dim, ))
+        cov = np.eye(dim)
+        self.num_mc = num_mc
+        self.dof = dof
+        self.x_samples = multivariate_t(mean, cov, dof, size=num_mc).T  # (D, MC)
+        super(RBFStudent, self).__init__(dim, par, jitter)
+
+    def exp_x_kx(self, par, x, scaling=False):
+        return (1/self.num_mc) * self.eval(par, self.x_samples, x, scaling=scaling).sum(axis=0)
+
+    def exp_x_xkx(self, par, x):
+        k = self.eval(par, self.x_samples, x, scaling=False)  # (MC, N)
+        return (1 / self.num_mc) * (self.x_samples[..., na] * k[na, ...]).sum(axis=1)
+
+    def exp_x_kxkx(self, par_0, par_1, x, scaling=False):
+        """
+        Correlation matrix of kernels with elements
+
+        .. math:
+        \[
+            \mathbb{E}[k(x, x_i), k(x, x_j)] = \int\! k(x, x_i), k(x, x_j) N(x \mid 0, I)\, \mathrm{d}x
+        \]
+
+        Parameters
+        ----------
+        x : numpy.ndarray
+            Data points, shape (D, N)
+        par_0 : numpy.ndarray
+        par_1 : numpy.ndarray
+            Kernel parameters, shape (D, )
+        scaling : bool
+            Kernel scaling parameter used when `scaling=True`.
+
+        Returns
+        -------
+        : numpy.ndarray
+            Correlation matrix of kernels computed for given pair of kernel parameters.
+        """
+
+        k0 = self.eval(par_0, self.x_samples, x, scaling=scaling)  # (MC, N)
+        k1 = self.eval(par_1, self.x_samples, x, scaling=scaling)
+        return (1/self.num_mc) * (k0[:, na, :] * k1[..., na]).sum(axis=0)
+
+    def exp_x_kxx(self, par):
+        k = self.eval(par, self.x_samples, self.x_samples, diag=True, scaling=True)
+        return (1/self.num_mc) * k.sum()
+
+    def exp_xy_kxy(self, par):
+        return (1/self.num_mc) * self.eval(par, self.x_samples, self.x_samples).sum()
+
+
 class RQ(Kernel):
 
     def __init__(self, dim, par, jitter=1e-8):
@@ -419,8 +454,7 @@ class RQ(Kernel):
             Input dimension
         par : numpy.ndarray
             Kernel parameters in a matrix of shape (dim_out, num_par), where i-th row contains parameters
-            for i-th
-            output. Each row is :math: `[\alpha, \ell_1, \ldots, \ell_dim]`
+            for i-th output. Each row is :math: `[s, \alpha, \ell_1, \ldots, \ell_dim]`
         jitter : float
             Jitter for stabilizing inversion of the kernel matrix. Default ``jitter=1e-8``.
 
