@@ -5,11 +5,9 @@ from scipy.linalg import cho_factor, cho_solve, block_diag
 from scipy.stats import multivariate_normal
 from numpy import newaxis as na
 from ssmod import StateSpaceModel, StudentStateSpaceModel
-from transforms.bayesquad import GPQ, GPQMO, TPQ, TPQMO
-from transforms.mtform import MomentTransform
-from transforms.quad import SphericalRadial, SphericalRadialTrunc, Unscented, UnscentedTrunc, GaussHermite, \
-    GaussHermiteTrunc
-from transforms.taylor import Taylor1stOrder, TaylorGPQD
+from bq.bqmtran import GPQ, GPQMO, TPQ, TPQMO
+from mtran import MomentTransform, Taylor1stOrder, TaylorGPQD, SphericalRadial, SphericalRadialTrunc, \
+    Unscented, UnscentedTrunc, GaussHermite, GaussHermiteTrunc
 
 
 class StateSpaceInference(metaclass=ABCMeta):

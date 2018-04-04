@@ -5,8 +5,8 @@ import numpy as np
 import scipy.linalg as la
 from scipy.optimize import minimize
 
-from .bqkernel import RBF, RQ, RBFStudent
-from .quad import SphericalRadial, Unscented, GaussHermite, FullySymmetricStudent
+from .bqkern import RBF, RQ, RBFStudent
+from mtran import SphericalRadial, Unscented, GaussHermite, FullySymmetricStudent
 
 
 # TODO: documentation

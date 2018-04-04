@@ -1,7 +1,7 @@
 from unittest import TestCase
 
 import numpy as np
-from transforms.quad import MonteCarlo, SphericalRadialTrunc, FullySymmetricStudent
+from mtran import MonteCarlo, SphericalRadialTrunc, FullySymmetricStudent
 from ssmod import UNGM
 
 

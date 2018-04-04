@@ -3,7 +3,7 @@ from unittest import TestCase
 import numpy as np
 import scipy.linalg as la
 from numpy import newaxis as na
-from transforms.bqmodel import GaussianProcess, StudentTProcess
+from bq.bqmod import GaussianProcess, StudentTProcess
 
 # fcn = lambda x: np.sin((x + 1) ** -1)
 fcn = lambda x: 0.5 * x + 25 * x / (1 + x ** 2)
@@ -146,7 +146,7 @@ class GPModelTest(TestCase):
         y = np.apply_along_axis(ssm.dyn_eval, 0, x, None)
 
         # kernel and it's initial parameters
-        from transforms.bqkernel import RBF
+        from bq.bqkern import RBF
         lhyp = np.log([1.0] + 5 * [3.0])
         kernel = RBF(ssm.xD, self.ker_par_5d)
 

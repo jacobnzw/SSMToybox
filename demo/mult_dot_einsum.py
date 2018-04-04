@@ -2,8 +2,8 @@ import numpy as np
 import numpy.linalg as la
 from scipy.linalg import cho_factor, cho_solve
 from ssmod import ReentryRadar
-from transforms.bayesquad import GPQ
-from transforms.quad import MonteCarlo
+from bq.bqmtran import GPQ
+from mtran import MonteCarlo
 from unittest import TestCase
 
 

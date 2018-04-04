@@ -4,7 +4,7 @@ import numpy as np
 from numpy import newaxis as na
 from numpy.linalg import cholesky
 
-from .mtform import MomentTransform
+from mtran import MomentTransform
 
 # TODO: docstrings
 
@@ -94,7 +94,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         """
 
         # import must be after SigmaPointTransform
-        from .bqmodel import GaussianProcess, StudentTProcess, GaussianProcessMO, StudentTProcessMO
+        from .bqmod import GaussianProcess, StudentTProcess, GaussianProcessMO, StudentTProcessMO
         model = model.lower()
 
         # make sure kernel is supported

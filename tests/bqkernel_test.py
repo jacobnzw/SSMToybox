@@ -4,7 +4,7 @@ import numpy as np
 import numpy.linalg as la
 from numpy import newaxis as na
 
-from transforms.bqkernel import RBF, RBFStudent
+from bq.bqkern import RBF, RBFStudent
 
 
 class RBFKernelTest(TestCase):
@@ -121,7 +121,7 @@ class RBFStudentKernelTest(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from transforms.quad import FullySymmetricStudent
+        from mtran import FullySymmetricStudent
         cls.points = FullySymmetricStudent.unit_sigma_points(2)
         cls.num_pts = cls.points.shape[1]
 
