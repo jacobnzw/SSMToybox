@@ -3,15 +3,6 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 from numpy import newaxis as na, linalg as la
 from numpy.linalg import cholesky
-
-
-# Causes import hell through circular dependencies: Model needs to import from quad to get to the points,
-# but all transforms in quad need MomentTransform to inherit from it. If the statement is moved after the definition of
-# MomentTransform and SigmaPointTransform classes then no circular dependencies occur.
-# from model import GaussianProcess, StudentTProcess
-
-
-# TODO: documentation
 from numpy.polynomial.hermite_e import hermegauss, hermeval
 from scipy.special import factorial
 from sklearn.utils.extmath import cartesian
@@ -41,7 +32,14 @@ class SigmaPointTransform(MomentTransform):
 
 
 class SigmaPointTruncTransform(SigmaPointTransform):
-    # sigma-point transform respecting effective input dimensionality
+    """
+    Sigma-point transform respecting effective input dimensionality.
+
+    Notes
+    -----
+    Created mainly for experimental purposes!
+    Computing input-output cross-covariance is problematic and needs further thinking.
+    """
 
     def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
         mean = mean[:, na]
@@ -65,7 +63,8 @@ class SigmaPointTruncTransform(SigmaPointTransform):
         dfx = fx - mean_f[:, na]
         cov_f = dfx_eff.dot(self.Wc).dot(dfx_eff.T)
         # input-output covariance
-        cov_fx = dfx_eff.dot(self.Wcc).dot((x - mean).T)
+        # cov_fx = dfx_eff.dot(self.Wcc).dot((x - mean).T)
+        cov_fx = None
         return mean_f, cov_f, cov_fx
 
 

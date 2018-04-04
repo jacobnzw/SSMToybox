@@ -1,6 +1,6 @@
 import numpy as np
 import scipy as sp
-from numpy import newaxis as na
+from numpy import newaxis as na, linalg as la
 import pandas as pd
 import sys
 
@@ -339,3 +339,27 @@ def mat_sqrt(a):
         u, s, v = sp.linalg.svd(a)
         b = u.dot(np.diag(np.sqrt(s)))
     return b
+
+
+def ellipse_points(pos, mat):
+    """
+    Points on an ellipse.
+
+
+    Parameters
+    ----------
+    pos : ndarray
+          1-D array specifying position of the center of the ellipse.
+    mat : ndarray
+          Symmetric positive-definite matrix.
+
+    Returns
+    -------
+    x : (D, 1) ndarray
+        Points on an ellipse defined my the input mean and covariance.
+
+    """
+    w, v = la.eig(mat)
+    theta = np.linspace(0, 2 * np.pi)
+    t = np.asarray((np.cos(theta), np.sin(theta)))
+    return pos[:, na] + np.dot(v, np.sqrt(w[:, na]) * t)

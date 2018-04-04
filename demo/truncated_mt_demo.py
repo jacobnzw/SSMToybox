@@ -1,16 +1,8 @@
 from mtran import MonteCarlo, Unscented, UnscentedTrunc
 import numpy as np
-import numpy.linalg as la
-from numpy import newaxis as na
 import matplotlib.pyplot as plt
-
-
-def ellipse_points(x0, P):
-    # x0 center, P SPD matrix
-    w, v = la.eig(P)
-    theta = np.linspace(0, 2 * np.pi)
-    t = np.asarray((np.cos(theta), np.sin(theta)))
-    return x0[:, na] + np.dot(v, np.sqrt(w[:, na]) * t)
+from mtran import MomentTransform
+from utils import ellipse_points
 
 
 def cartesian2polar(x, pars, dx=False):
@@ -22,18 +14,42 @@ def polar2cartesian(x, pars, dx=False):
 
 
 def mt_trunc_demo(mt_trunc, mt, dim=None, **kwargs):
-    # compare truncated MT and MT on polar2cartesian transform for increasing state dimensions
-    # truncated MT is aware of the effective dimension, so we expect it to be closer to the true covariance
+    """
+    Comparison of truncated MT and vanilla MT on polar2cartesian transform for increasing state dimensions. The
+    truncated MT is aware of the effective dimension, so we expect it to be closer to the true covariance
+
+    Observation: Output covariance of the Truncated UT stays closer to the MC baseline than the covariance
+    produced by the vanilla UT.
+
+    There's some merit to the idea, but the problem is with computing the input-output cross-covariance.
+
+
+    Parameters
+    ----------
+    mt_trunc
+    mt
+    dim
+    kwargs
+
+    Returns
+    -------
+
+    """
+
     assert issubclass(mt_trunc, MomentTransform) and issubclass(mt, MomentTransform)
+
     # state dimensions and effective dimension
     dim = [2, 3, 4, 5] if dim is None else dim
     d_eff = 2
+
     # observation model
     f = polar2cartesian
+
     # use MC transform with lots of samples to compute the true transformed moments
     mean_eff, cov_eff = np.array([1, np.pi / 2]), np.diag([0.05 ** 2, (np.pi / 10) ** 2])
     tmc = MonteCarlo(d_eff, n=1e4)
     M_mc, C_mc, cc_mc = tmc.apply(f, mean_eff, cov_eff, None)
+
     # transformed samples
     x = np.random.multivariate_normal(mean_eff, cov_eff, size=int(1e3)).T
     fx = np.apply_along_axis(f, 0, x, None)
@@ -45,21 +61,27 @@ def mt_trunc_demo(mt_trunc, mt, dim=None, **kwargs):
     for i, d in enumerate(dim):
         t = mt_trunc(d, d_eff, **kwargs)
         s = mt(d, **kwargs)
-        # input mean ana covariance
+
+        # input mean and covariance
         mean, cov = np.zeros(d), np.eye(d)
         mean[:d_eff], cov[:d_eff, :d_eff] = mean_eff, cov_eff
+
+        # transfored moments (w/o cross-covariance)
         M[:, i, 0], C[..., i, 0], cc = t.apply(f, mean, cov, None)
         M[:, i, 1], C[..., i, 1], cc = s.apply(f, mean, cov, None)
+
+        # points on the ellipse defined by the transformed mean and covariance for plotting
         X[..., i, 0] = ellipse_points(M[:, i, 0], C[..., i, 0])
         X[..., i, 1] = ellipse_points(M[:, i, 1], C[..., i, 1])
 
+    # PLOTS: transformed samples, MC mean and covariance ground truth
     plt.figure()
-    # transformed samples
     plt.plot(fx[0, :], fx[1, :], 'k.', alpha=0.15)
-    # MC mean and covariance ground truth
     plt.plot(M_mc[0], M_mc[1], 'ro', markersize=6, lw=2)
     plt.plot(X_mc[0, :], X_mc[1, :], 'r--', lw=2, label='MC')
+
     # SR and SR-T mean and covariance for various state dimensions
+    # TODO: it's more effective to plot SKL between the transformed and baseline covariances.
     for i, d in enumerate(dim):
         plt.plot(M[0, i, 0], M[1, i, 0], 'b+', markersize=10, lw=2)
         plt.plot(X[0, :, i, 0], X[1, :, i, 0], color='b', label='mt-trunc (d={})'.format(d))
