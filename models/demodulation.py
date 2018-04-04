@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from models.ssmodel import GaussianStateSpaceModel
-from inference.ssinfer import StateSpaceInference
+from ssinf import StateSpaceInference
 
 
 class FrequencyDemodulation(GaussianStateSpaceModel):

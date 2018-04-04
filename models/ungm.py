@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from inference.ssinfer import StateSpaceInference
+from ssinf import StateSpaceInference
 from models.ssmodel import GaussianStateSpaceModel
 
 
