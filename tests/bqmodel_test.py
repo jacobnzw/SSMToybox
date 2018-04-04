@@ -2,9 +2,8 @@ from unittest import TestCase
 
 import numpy as np
 import scipy.linalg as la
-import matplotlib.pyplot as plt
 from numpy import newaxis as na
-from transforms.bqmodel import GaussianProcess, StudentTProcess, GaussianProcessMO
+from transforms.bqmodel import GaussianProcess, StudentTProcess
 
 # fcn = lambda x: np.sin((x + 1) ** -1)
 fcn = lambda x: 0.5 * x + 25 * x / (1 + x ** 2)
@@ -136,7 +135,7 @@ class GPModelTest(TestCase):
     def test_total_nlml_gradient(self):
 
         # nonlinear vector function from some SSM
-        from models.tracking import CoordinatedTurnRadar
+        from ssmod import CoordinatedTurnRadar
         ssm = CoordinatedTurnRadar()
 
         # generate inputs
@@ -200,7 +199,7 @@ class GPModelTest(TestCase):
         # plt.show()
 
     def test_hypers_optim_multioutput(self):
-        from models.tracking import CoordinatedTurnRadar
+        from ssmod import CoordinatedTurnRadar
         ssm = CoordinatedTurnRadar()
         func = ssm.dyn_eval
         dim_in, dim_out = ssm.xD, ssm.xD
@@ -328,7 +327,7 @@ class TPModelTest(TestCase):
         model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2)
 
     def test_hypers_optim_multioutput(self):
-        from models.tracking import CoordinatedTurnRadar
+        from ssmod import CoordinatedTurnRadar
         ssm = CoordinatedTurnRadar()
         func = ssm.dyn_eval
         dim_in, dim_out = ssm.xD, ssm.xD

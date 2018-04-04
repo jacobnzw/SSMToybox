@@ -4,8 +4,7 @@ import numpy as np
 import numpy.linalg as la
 
 from ssinf import GPQMKalman
-from models.ungm import UNGM
-from models.pendulum import Pendulum
+from ssmod import Pendulum, UNGM
 
 
 class GPQMarginalizedTest(TestCase):

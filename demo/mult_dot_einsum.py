@@ -1,9 +1,8 @@
 import numpy as np
 import numpy.linalg as la
-from numpy import newaxis as na
 from scipy.linalg import cho_factor, cho_solve
-from models.tracking import ReentryRadar
-from transforms.bayesquad import GPQ, GPQMO
+from ssmod import ReentryRadar
+from transforms.bayesquad import GPQ
 from transforms.quad import MonteCarlo
 from unittest import TestCase
 

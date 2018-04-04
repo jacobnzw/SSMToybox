@@ -4,7 +4,7 @@ import numpy.linalg as la
 from scipy.linalg import cho_factor, cho_solve, block_diag
 from scipy.stats import multivariate_normal
 from numpy import newaxis as na
-from models.ssmodel import StateSpaceModel, GaussianStateSpaceModel, StudentStateSpaceModel
+from ssmod import StateSpaceModel, StudentStateSpaceModel
 from transforms.bayesquad import GPQ, GPQMO, TPQ, TPQMO
 from transforms.mtform import MomentTransform
 from transforms.quad import SphericalRadial, SphericalRadialTrunc, Unscented, UnscentedTrunc, GaussHermite, \
