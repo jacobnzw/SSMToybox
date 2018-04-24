@@ -16,12 +16,12 @@ import time
 import numpy as np
 import pandas as pd
 
-from .icinco_demo import rmse, nci, nll, bootstrap_var
-from inference import ExtendedKalman, ExtendedKalmanGPQD
-from ungm import UNGM
-from transforms import Unscented
+from demo.icinco_demo import evaluate_performance
+from ssinf import ExtendedKalman, ExtendedKalmanGPQD
+from ssmod import UNGM
+from mtran import Unscented
 
-steps, mc = 500, 100  # time steps, mc simulations
+steps, mc = 50, 10  # time steps, mc simulations
 # initialize SSM and generate some data
 ssm = UNGM()
 x, z = ssm.simulate(steps, mc)
@@ -51,8 +51,6 @@ algorithms = (
     # GPQKalman(ssm, usp_ut, usp_ut, hyp_rbf_ut, hyp_rbf_ut),
     # GPQ+D RBF kernel w/ UT sigma-points (derivative at the central point only)
     # GPQuadDerRBFKalman(ssm, usp_ut, usp_ut, hyp_rbf_ut, hyp_rbf_ut, which_der=der_mask),
-    # GPQ+D Hermite kernel w/ UT sigma-points (derivative at the central point only)
-    # GPQ+D affine kernel w/ UT sigma-points (could be crap)
 )
 num_alg = len(algorithms)
 
@@ -71,27 +69,16 @@ for a, alg in enumerate(algorithms):
 print('Done in {0:.4f} [sec]'.format(time.time() - t0))
 
 # evaluate perfomance
-rmseData_f, rmseData_s = rmse(x, mean_f), rmse(x, mean_s)  # averaged RMSE over time steps
-nciData_f, nciData_s = nci(x, mean_f, cov_f), nci(x, mean_s, cov_s)  # averaged NCI over time steps
-nllData_f, nllData_s = nll(x, mean_f, cov_f), nll(x, mean_s, cov_s)  # averaged NLL over time steps
-# average scores (over MC simulations)
-rmseMean_f, rmseMean_s = rmseData_f.mean(axis=1).T, rmseData_s.mean(axis=1).T
-nciMean_f, nciMean_s = nciData_f.mean(axis=1).T, nciData_s.mean(axis=1).T
-nllMean_f, nllMean_s = nllData_f.mean(axis=1).T, nllData_s.mean(axis=1).T
-# +/- 2 standard deviations of the scores (using bootstrapping)
-rmseStd_f, rmseStd_s = np.zeros((num_alg, 1)), np.zeros((num_alg, 1))
-nciStd_f, nciStd_s = rmseStd_f.copy(), rmseStd_f.copy()
-nllStd_f, nllStd_s = rmseStd_f.copy(), rmseStd_f.copy()
-for f in range(num_alg):
-    rmseStd_f[f, :] = bootstrap_var(rmseData_f[..., f], samples=1e4)
-    rmseStd_s[f, :] = bootstrap_var(rmseData_s[..., f], samples=1e4)
-    nciStd_f[f, :] = bootstrap_var(nciData_f[..., f], samples=1e4)
-    nciStd_s[f, :] = bootstrap_var(nciData_s[..., f], samples=1e4)
-    nllStd_f[f, :] = bootstrap_var(nllData_f[..., f], samples=1e4)
-    nllStd_s[f, :] = bootstrap_var(nllData_s[..., f], samples=1e4)
+scores = evaluate_performance(x, mean_f, cov_f, mean_s, cov_s)
+rmseMean_f, nciMean_f, nllMean_f, rmseMean_s, nciMean_s, nllMean_s = scores[:6]
+rmseStd_f, nciStd_f, nllStd_f, rmseStd_s, nciStd_s, nllStd_s = scores[6:]
+
+# rmseMean_f, rmseMean_s = rmseMean_f.squeeze(), rmseMean_s.squeeze()
+# nciMean_f, nciMean_s = nciMean_f.squeeze(), nciMean_s.squeeze()
+# nllMean_f, nllMean_s = nllMean_f.squeeze(), nllMean_s.squeeze()
 
 # put data into Pandas DataFrame for fancy printing and latex export
-row_labels = None  # ['EKF', 'GPQD-RBF', 'GPQD-AFFINE', 'UKF', 'GPQD-UT-RBF']
+row_labels = ['EKF', 'EKF-GPQD']  # ['EKF', 'GPQD-RBF', 'GPQD-AFFINE', 'UKF', 'GPQD-UT-RBF']
 col_labels = ['RMSE', '2STD', 'NCI', '2STD', 'NLL', '2STD']
 pd.set_option('precision', 4)
 table_f = pd.DataFrame(np.hstack((rmseMean_f, rmseStd_f, nciMean_f, nciStd_f, nllMean_f, nllStd_f)),

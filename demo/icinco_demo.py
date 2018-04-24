@@ -51,7 +51,7 @@ def evaluate_performance(x, mean_f, cov_f, mean_s, cov_s, bootstrap_variance=Tru
     if bootstrap_variance:
         print('Bootstrapping variance ...')
         num_bs_samples = 10000
-        rmseStd_f, rmseStd_s = np.zeros(num_alg), np.zeros(num_alg)
+        rmseStd_f, rmseStd_s = np.zeros((num_alg, 1)), np.zeros((num_alg, 1))
         nciStd_f, nciStd_s = rmseStd_f.copy(), rmseStd_f.copy()
         nllStd_f, nllStd_s = rmseStd_f.copy(), rmseStd_f.copy()
         for f in range(num_alg):
