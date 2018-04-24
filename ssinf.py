@@ -87,7 +87,7 @@ class StateSpaceInference(metaclass=ABCMeta):
             self.sm_mean[..., k] = self.x_mean_sm
             self.sm_cov[..., k] = self.x_cov_sm
         self.set_flag('smoothed', True)
-        return self.sm_mean, self.sm_cov
+        return self.sm_mean[:, 1:, ...], self.sm_cov[:, :, 1:, ...]
 
     def reset(self):
         self.x_mean_pr, self.x_cov_pr = None, None
