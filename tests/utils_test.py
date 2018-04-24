@@ -14,7 +14,7 @@ class TestMetrics(unittest.TestCase):
         self.mse = np.random.randn(dim, dim)
 
     def test_nll(self):
-        nll(self.x, self.m, self.cov)
+        neg_log_likelihood(self.x, self.m, self.cov)
 
     def test_log_cred_ratio(self):
         log_cred_ratio(self.x, self.m, self.cov, self.mse)

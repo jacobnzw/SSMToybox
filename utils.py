@@ -118,7 +118,7 @@ def log_cred_ratio(x, m, P, MSE):
     return 10 * (sp.log10(dx_icov_dx) - sp.log10(dx_imse_dx))
 
 
-def nll(x, m, P):
+def neg_log_likelihood(x, m, P):
     """
     Negative log-likelihood of the state estimate given the true state.
 
@@ -143,7 +143,7 @@ def nll(x, m, P):
     return 0.5 * (sign*logdet + dx_iP_dx + d * np.log(2 * np.pi))
 
 
-def kl(mean_0, cov_0, mean_1, cov_1):
+def kl_divergence(mean_0, cov_0, mean_1, cov_1):
     """
     KL-divergence
 
@@ -170,7 +170,7 @@ def kl(mean_0, cov_0, mean_1, cov_1):
     return np.asscalar(kl)
 
 
-def skl(mean_0, cov_0, mean_1, cov_1):
+def symmetrized_kl_divergence(mean_0, cov_0, mean_1, cov_1):
     """
     Symmetrized KL-divergence :math:`0.5[KL(q(x)||p(x)) + KL(p(x)||q(x))]`
 
@@ -186,7 +186,7 @@ def skl(mean_0, cov_0, mean_1, cov_1):
     :float
         Symmetrized KL-divergence
     """
-    return 0.5 * (kl(mean_0, cov_0, mean_1, cov_1) + kl(mean_1, cov_1, mean_0, cov_0))
+    return 0.5 * (kl_divergence(mean_0, cov_0, mean_1, cov_1) + kl_divergence(mean_1, cov_1, mean_0, cov_0))
 
 
 def bootstrap_var(data, samples=1000):
