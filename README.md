@@ -1,19 +1,23 @@
-# SSM Toybox
-Python 3 implementation of the nonlinear sigma-point filters based on Gaussian process quadrature. Included are also the well-known classical nonlinear Kalman filters such as:
+# Content
 
-* Extended Kalman Filter
-* Unscented Kalman Filter
-* Cubature Kalman Filter
-* Gauss-Hermite Kalman Filter
+This branch of repo contains source code to reproduce the results published in an article
 
-## Structure
+>J. Prüher and S. Särkkä, "On the use of gradient information in Gaussian process quadratures," *2016 IEEE 26th International Workshop on Machine Learning for Signal Processing (MLSP)*, Vietri sul Mare, 2016, pp. 1-6. [doi: 10.1109/MLSP.2016.7738903](https://doi.org/10.1109/MLSP.2016.7738903)
 
-`StateSpaceInference`
+All the code needed to reproduce the results is contained in the `./paper_code` directory.
 
-`StateSpaceModel`
+## Requirements
 
-`MomentTransform`
+The following libraries are required to run the script
 
+- NumPy
+- SciPy
+- GPy
+- Matplotlib
 
-## Why toybox?
-Because 'toolbox' sounds too serious and, at least to me, implies certain standard of quality, which this code is lacking at this moment.
+## Reproducing the results
+Switching to `./paper_code` directory and running the main script
+
+`python mlsp2016_demo.py`
+
+will launch all the experiments and save the resulting tables and figures in the same directory.
