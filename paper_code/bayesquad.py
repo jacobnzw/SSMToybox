@@ -10,8 +10,7 @@ from numpy.polynomial.hermite_e import hermeval
 from scipy.linalg import cho_factor, cho_solve, solve
 from scipy.optimize import minimize
 from scipy.stats import multivariate_normal
-
-from transform import BayesianQuadratureTransform
+from numpy.linalg import cholesky
 
 
 def maha(x, y, V=None):
@@ -27,6 +26,63 @@ def maha(x, y, V=None):
     x2V = np.sum(x.dot(V) * x, 1)
     y2V = np.sum(y.dot(V) * y, 1)
     return (x2V[:, na] + y2V[:, na].T) - 2 * x.dot(V).dot(y.T)
+
+
+class MomentTransform(object):
+    def apply(self, f, mean, cov, pars):
+        raise NotImplementedError
+
+
+class BayesianQuadratureTransform(MomentTransform):
+    # it's possible I'll need to make some more specialized parent classes
+    def __init__(self, dim, unit_sp=None, hypers=None):
+        # use default sigma-points if not provided
+        self.unit_sp = unit_sp if unit_sp is not None else self.default_sigma_points(dim)  # (d, n)
+        # get number of sigmas (n) and dimension of sigmas (d)
+        self.d, self.n = self.unit_sp.shape
+        assert self.d == dim  # check unit sigmas have proper dimension
+        # use default kernel hyper-parameters if not provided
+        self.hypers = hypers if hypers is not None else self.default_hypers(dim)
+        # BQ weights given the unit sigma-points, kernel hyper-parameters and the kernel
+        self.wm, self.Wc, self.Wcc = self._weights(self.unit_sp, self.hypers)
+
+    def apply(self, f, mean, cov, pars):
+        # method defined in terms of abstract private functions for computing mean, covariance and cross-covariance
+        mean = mean[:, na]
+        chol_cov = cholesky(cov)
+        x = mean + chol_cov.dot(self.unit_sp)
+        fx = self._fcn_eval(f, x, pars)
+        mean_f = self._mean(self.wm, fx)
+        cov_f = self._covariance(self.Wc, fx, mean_f)
+        cov_fx = self._cross_covariance(self.Wcc, fx, chol_cov)
+        return mean_f, cov_f, cov_fx
+
+    def default_sigma_points(self, dim):
+        # set default sigma-points
+        raise NotImplementedError
+
+    def default_hypers(self, dim):
+        # define default hypers
+        raise NotImplementedError
+
+    def _weights(self, sigma_points, hypers):
+        # implementation will differ based on kernel
+        # it's possible it will call functions which implement weights for particular kernel
+        raise NotImplementedError
+
+    # TODO: specify requirements for shape of input/output for all of these fcns
+    def _fcn_eval(self, fcn, x, fcn_pars):
+        # derived class decides whether to return derivatives also
+        raise NotImplementedError
+
+    def _mean(self, weights, fcn_evals):
+        return fcn_evals.dot(weights)
+
+    def _covariance(self, weights, fcn_evals, mean_out):
+        return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + self.model_var
+
+    def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
+        return fcn_evals.dot(weights.T).dot(chol_cov_in.T)
 
 
 class GPQuad(BayesianQuadratureTransform):

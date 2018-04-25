@@ -1,4 +1,3 @@
-from __future__ import division
 import numpy as np
 import numpy.linalg as la
 import pandas as pd
@@ -7,13 +6,11 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib.lines import Line2D
 from numpy import newaxis as na
-from transforms.taylor import Taylor1stOrder, TaylorGPQD
-from transforms.quad import MonteCarlo, Unscented, GaussHermite, SphericalRadial
-from transforms.bayesquad import GPQuad, GPQuadDerRBF
-from models.ungm import UNGM
+from mtran import Taylor1stOrder, TaylorGPQD, MonteCarlo, Unscented, GaussHermite, SphericalRadial
+from paper_code.bayesquad import GPQuad, GPQuadDerRBF
+from ssmod import UNGM
 from scipy.stats import norm
 from scipy.linalg import cho_factor, cho_solve
-from numba import jit
 
 
 def sos(x, pars, dx=False):
@@ -174,7 +171,7 @@ def taylor_gpqd_demo(f):
                     [0, 10]])
     for ti, t in enumerate(transforms):
         mean_f, cov_f, cc = t.apply(f, mean, cov, None)
-        print "{}: mean: {}, cov: {}".format(t.__class__.__name__, mean_f, cov_f)
+        print("{}: mean: {}, cov: {}").format(t.__class__.__name__, mean_f, cov_f)
 
 
 def gpq_int_var_demo():
@@ -224,7 +221,7 @@ def gpq_kl_demo():
         'doa': {'sig_var': 1.0, 'lengthscale': 2.0 * np.ones(d), 'noise_var': 1e-8},  # al=2, np.array([2, 2])
         'rdr': {'sig_var': 1.0, 'lengthscale': 5.0 * np.ones(d), 'noise_var': 1e-8},
     }
-    # baseline: Monte Carlo transform w/ 10,000 samples
+    # baseline: Monte Carlo transform w/ 20,000 samples
     mc_baseline = MonteCarlo(d, n=2e4)
     # tested functions
     # rss has singularity at 0, therefore no derivative at 0
@@ -232,12 +229,16 @@ def gpq_kl_demo():
     # rss, toa and sos can be tested for all d > 0; physically d=2,3 make sense
     # radar and doa only for d = 2
     test_functions = (
-        sos,
+        # sos,
         toa,
         rss,
         doa,
         rdr,
     )
+
+    # fix seed
+    np.random.seed(3)
+
     # moments of the input Gaussian density
     mean = np.zeros(d)
     cov_samples = 100
@@ -245,6 +246,7 @@ def gpq_kl_demo():
     kl_data = np.zeros((3, len(test_functions), cov_samples))
     re_data_mean = np.zeros((3, len(test_functions), cov_samples))
     re_data_cov = np.zeros((3, len(test_functions), cov_samples))
+    print('Calculating symmetrized KL-divergences using {:d} covariance samples...'.format(cov_samples))
     for i in range(cov_samples):
         # random PD matrix
         a = np.random.randn(d, d)
@@ -271,10 +273,12 @@ def gpq_kl_demo():
                 kl_data[idt, idf, i] = kl_div_sym(mean_mc, cov_mc + jitter, mean_t, cov_t + jitter)
                 re_data_mean[idt, idf, i] = rel_error(mean_mc, mean_t)
                 re_data_cov[idt, idf, i] = rel_error(cov_mc, cov_t)
+
     # average over MC samples
     kl_data = kl_data.mean(axis=2)
     re_data_mean = re_data_mean.mean(axis=2)
     re_data_cov = re_data_cov.mean(axis=2)
+
     # put into pandas dataframe for nice printing and latex output
     row_labels = [t.__class__.__name__ for t in transforms]
     col_labels = [f.__name__ for f in test_functions]
@@ -442,7 +446,7 @@ def gp_fit_demo(f, pars, xrng=(-1, 1, 50), save_figs=False, alpha=1.0, el=1.0):
     # use tex to render text in the figure
     mpl.rc('text', usetex=True)
     # use lmodern font package which is also used in the paper
-    mpl.rc('text.latex', preamble=['\usepackage{lmodern}'])
+    mpl.rc('text.latex', preamble=[r'\usepackage{lmodern}'])
     # sans serif font for figure, size 10pt
     mpl.rc('font', family='sans-serif', size=10)
     plt.style.use('seaborn-paper')
@@ -561,25 +565,43 @@ def gp_fit_demo(f, pars, xrng=(-1, 1, 50), save_figs=False, alpha=1.0, el=1.0):
         #     plt.show()
 
 
-sos_table, ivar_table, ivar = gpq_sos_demo()
-# save_table(sos_table, 'sum_of_squares.tex')
-pd.set_option('display.float_format', '{:.2e}'.format)
-save_table(ivar_table, 'sos_gpq_int_var.tex')
+if __name__ == '__main__':
 
-# gp_fit_demo(UNGM().dyn_eval, [1], xrng=(-3, 3, 50), alpha=10.0, el=0.7)
-gp_fit_demo(sos, None, xrng=(-3, 3, 50), alpha=1.0, el=10.0, save_figs=True)
-# gpq_int_var_demo()
+    # # TABLE 1: SUM OF SQUARES: transformed mean and variance, SR vs. GPQ vs. GPQ+D
+    print('Table 1: Comparison of transformed mean and variance for increasing dimension D '
+          'computed by the SR, GPQ and GPQ+D moment transforms.')
+    sos_table, ivar_table, ivar = gpq_sos_demo()
+    pd.set_option('display.float_format', '{:.2e}'.format)
+    save_table(sos_table, 'sum_of_squares.tex')
+    print('Saved in {}'.format('sum_of_squares.tex'))
+    print()
 
-# fig = plot_func(rss, 2, n=100)
+    # # TABLE 2: Comparison of variance of the mean integral for GPQ and GPQ+D
+    print('Table 2: Comparison of variance of the mean integral for GPQ and GPQ+D.')
+    save_table(ivar_table, 'sos_gpq_int_var.tex')
+    print('Saved in {}'.format('sos_gpq_int_var.tex'))
+    print()
 
-# kl_tab, re_mean_tab, re_cov_tab = gpq_kl_demo()
-# pd.set_option('display.float_format', '{:.2e}'.format)
-# print "\nSymmetrized KL-divergence"
-# print kl_tab
-# print "\nRelative error in the mean"
-# print re_mean_tab
-# print "\nRelative error in the covariance"
-# print re_cov_tab
-# fo = open('kl_div_table.tex', 'w')
-# table.T.to_latex(fo)
-# fo.close()
+    # FIGURE 2: (a) Approximation used by GPQ, (b) Approximation used by GPQ+D
+    print('Figure 2: (a) Approximation used by the GPQ, (b) Approximation used by the GPQ+D.')
+    # gp_fit_demo(UNGM().dyn_eval, [1], xrng=(-3, 3, 50), alpha=10.0, el=0.7)
+    gp_fit_demo(sos, None, xrng=(-3, 3, 50), alpha=1.0, el=10.0, save_figs=True)
+    # gpq_int_var_demo()
+    print('Figures saved in {}, {}'.format('sos_gpr_fcn_obs_small.pdf', 'sos_gpr_grad_obs_small.pdf'))
+    print()
+
+    # fig = plot_func(rss, 2, n=100)
+
+    # TABLE 4: Comparison of the SR, GPQ and GPQ+D moment transforms in terms of symmetrized KL-divergence.
+    print('Table 4: Comparison of the SR, GPQ and GPQ+D moment transforms in terms of symmetrized KL-divergence.')
+    kl_tab, re_mean_tab, re_cov_tab = gpq_kl_demo()
+    pd.set_option('display.float_format', '{:.2e}'.format)
+    print("\nSymmetrized KL-divergence")
+    print(kl_tab.T)
+    # print("\nRelative error in the mean")
+    # print(re_mean_tab)
+    # print("\nRelative error in the covariance")
+    # print(re_cov_tab)
+    with open('kl_div_table.tex', 'w') as fo:
+        kl_tab.T.to_latex(fo)
+    print('Saved in {}'.format('kl_div_table.tex'))
