@@ -1,19 +1,34 @@
-# SSM Toybox
-Python 3 implementation of the nonlinear sigma-point filters based on Gaussian process quadrature. Included are also the well-known classical nonlinear Kalman filters such as:
+# Content
 
-* Extended Kalman Filter
-* Unscented Kalman Filter
-* Cubature Kalman Filter
-* Gauss-Hermite Kalman Filter
+This branch of repo contains source code to reproduce the results published in the article
 
-## Structure
+Prüher, J., and Straka, 0. [Gaussian Process Quadrature Moment Transform](https://doi.org/10.1109/TAC.2017.2774444). IEEE Transactions on Automatic Control, 2017.
 
-`StateSpaceInference`
+> Computation of moments of transformed random variables is a problem appearing in many engineering applications. The current methods for moment transformation are mostly based on the classical quadrature rules, which cannot account for the approximation errors. Our aim is to design a method for moment transformation for Gaussian random variables, which accounts for the error in the numerically computed mean. We employ an instance of Bayesian quadrature, called Gaussian process quadrature (GPQ), which allows us to treat the integral itself as a random variable, where the integral variance informs about the incurred integration error. Experiments on the coordinate transformation and nonlinear filtering examples show that the proposed GPQ moment transform performs better than the classical transforms.
 
-`StateSpaceModel`
+All the code needed to reproduce the results is contained in the `paper_code` directory.
 
-`MomentTransform`
+## Reproducing the Results
+I was developing on Windows 10, so before launching, set the `PYTHONPATH` temporarily using
+
+`set PYTHONPATH=%PYTHONPATH%;[your_drive]:\path\to\SSMToybox\`
+
+and switch to the directory
+
+`cd paper_code`
+
+Executing `python gpq_tracking.py` will run the experiment comparing the *Gaussian Process Quadrature Kalman Filter* (GPQKF) with the *Unscented Kalman Filter* (UKF) on the radar tracking example.
+
+Executing `python polar2cartesian.py` will run the experiment comparing performance of the Gaussian Process Quarature moment transform on a transformation from polar to Cartesian coordinates.
 
 
-## Why toybox?
-Because 'toolbox' sounds too serious and, at least to me, implies certain standard of quality, which this code is lacking at this moment.
+## Requirements
+
+The following libraries are required to run the script
+
+- Python 3
+- NumPy
+- SciPy
+- GPy
+- Matplotlib
+- Pandas
