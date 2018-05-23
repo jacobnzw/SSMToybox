@@ -352,6 +352,7 @@ class GaussianStateSpaceModel(StateSpaceModel):
     def __init__(self, x0_mean=None, x0_cov=None, q_mean=None, q_cov=None, r_mean=None, r_cov=None, q_gain=None):
 
         # use default value of statistics for Gaussian SSM if None provided
+        # TODO: sensible defaults differ on case by case basis => specify defaults in subclasses
         kwargs = {
             'x0_mean': x0_mean if x0_mean is not None else np.zeros(self.xD),
             'x0_cov': x0_cov if x0_cov is not None else np.eye(self.xD),
@@ -1185,7 +1186,7 @@ class ReentryRadarSimple(GaussianStateSpaceModel):
                                [0, 0, 0]]),
             'r_mean': np.zeros(self.rD),
             'r_cov': np.array([[0.03048**2]]),
-            'q_factor': np.vstack(np.eye(3))
+            'q_gain': np.vstack(np.eye(3))
         }
         super(ReentryRadarSimple, self).__init__(**kwargs)
 
