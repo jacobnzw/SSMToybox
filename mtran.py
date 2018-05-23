@@ -63,8 +63,8 @@ class SigmaPointTruncTransform(SigmaPointTransform):
         dfx = fx - mean_f[:, na]
         cov_f = dfx_eff.dot(self.Wc).dot(dfx_eff.T)
         # input-output covariance
-        # cov_fx = dfx_eff.dot(self.Wcc).dot((x - mean).T)
-        cov_fx = None
+        cov_fx = dfx.dot(self.Wcc).dot((x - mean).T)
+        # cov_fx = None
         return mean_f, cov_f, cov_fx
 
 
