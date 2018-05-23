@@ -1,8 +1,12 @@
 from mtran import MonteCarlo, Unscented, UnscentedTrunc
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
 from mtran import MomentTransform
-from utils import ellipse_points, symmetrized_kl_divergence
+from utils import ellipse_points, symmetrized_kl_divergence, squared_error, log_cred_ratio, mse_matrix
+from ssinf import UnscentedTruncKalman, UnscentedKalman
+from ssmod import ReentryRadar as ReentryRadarModel
+from dynsys import ReentryRadar as ReentryRadarSystem
 
 
 def cartesian2polar(x, pars, dx=False):
@@ -109,8 +113,98 @@ def mt_trunc_demo(mt_trunc, mt, dim=None, full_input_cov=True, **kwargs):
     ax[1].set_xticks(dim)
     ax[1].set_xlabel('Dimension')
     ax[1].set_ylabel('SKL')
+    plt.legend()
     plt.show()
 
 
+def ukf_trunc_demo(mc_sims=50):
+    disc_tau = 0.5  # discretization period in seconds
+
+    # simulate reference state trajectory by ODE integration
+    sys = ReentryRadarSystem()
+    x = sys.simulate_trajectory(method='rk4', dt=disc_tau, duration=200, mc_sims=mc_sims)
+    x_ref = x.mean(axis=2)
+    # simulate corresponding radar measurements
+    y = np.zeros((sys.zD,) + x.shape[1:])
+    for i in range(mc_sims):
+        y[..., i] = sys.simulate_measurements(x[..., i], mc_per_step=1).squeeze()
+
+    # initialize state-space model; uses cartesian2polar as measurement (not polar2cartesian)
+    ssm = ReentryRadarModel(dt=disc_tau)
+
+    # initialize UKF and UKF in truncated version
+    alg = (
+        UnscentedKalman(ssm),
+        UnscentedTruncKalman(ssm),
+    )
+    num_alg = len(alg)
+
+    # space for filtered mean and covariance
+    steps = x.shape[1]
+    x_mean = np.zeros((ssm.xD, steps, mc_sims, num_alg))
+    x_cov = np.zeros((ssm.xD, ssm.xD, steps, mc_sims, num_alg))
+
+    # filtering estimate of the state trajectory based on provided measurements
+    for i_est, estimator in enumerate(alg):
+        for i_mc in range(mc_sims):
+            x_mean[..., i_mc, i_est], x_cov[..., i_mc, i_est] = estimator.forward_pass(y[..., i_mc])
+            estimator.reset()
+
+    # Plots
+    plt.figure()
+    g = GridSpec(2, 4)
+    plt.subplot(g[:, :2])
+
+    # Earth surface w/ radar position
+    t = 0.02 * np.arange(-1, 4, 0.1)
+    plt.plot(sys.R0 * np.cos(t), sys.R0 * np.sin(t), color='darkblue', lw=2)
+    plt.plot(sys.sx, sys.sy, 'ko')
+
+    plt.plot(x_ref[0, :], x_ref[1, :], color='r', ls='--')
+    # Convert from polar to cartesian
+    meas = np.stack((sys.sx + y[0, ...] * np.cos(y[1, ...]), sys.sy + y[0, ...] * np.sin(y[1, ...])), axis=0)
+    for i in range(mc_sims):
+        # Vehicle trajectory
+        # plt.plot(x[0, :, i], x[1, :, i], alpha=0.35, color='r', ls='--')
+
+        # Plot measurements
+        plt.plot(meas[0, :, i], meas[1, :, i], 'k.', alpha=0.3)
+
+        # Filtered position estimate
+        plt.plot(x_mean[0, 1:, i, 0], x_mean[1, 1:, i, 0], color='g', alpha=0.3)
+        plt.plot(x_mean[0, 1:, i, 1], x_mean[1, 1:, i, 1], color='orange', alpha=0.3)
+
+    # Performance score plots
+    error2 = x_mean.copy()
+    lcr = np.zeros((steps, mc_sims, num_alg))
+    for a in range(num_alg):
+        for k in range(steps):
+            mse = mse_matrix(x[:4, k, :], x_mean[:4, k, :, a])
+            for imc in range(mc_sims):
+                error2[:, k, imc, a] = squared_error(x[:, k, imc], x_mean[:, k, imc, a])
+                lcr[k, imc, a] = log_cred_ratio(x[:4, k, imc], x_mean[:4, k, imc, a], x_cov[:4, :4, k, imc, a], mse)
+
+    # Averaged RMSE and Inclination Indicator in time
+    pos_rmse_vs_time = np.sqrt((error2[:2, ...]).sum(axis=0)).mean(axis=1)
+    inc_ind_vs_time = lcr.mean(axis=1)
+
+    # Plots
+    plt.subplot(g[0, 2:])
+    plt.title('RMSE')
+    plt.plot(pos_rmse_vs_time[:, 0], label='UKF', color='g')
+    plt.plot(pos_rmse_vs_time[:, 1], label='UKF-trunc', color='r')
+    plt.legend()
+    plt.subplot(g[1, 2:])
+    plt.title('Inclination Indicator $I^2$')
+    plt.plot(inc_ind_vs_time[:, 0], label='UKF', color='g')
+    plt.plot(inc_ind_vs_time[:, 1], label='UKF-trunc', color='r')
+    plt.legend()
+    plt.show()
+
+    print('Average RMSE: {}'.format(pos_rmse_vs_time.mean(axis=0)))
+    print('Average I2: {}'.format(inc_ind_vs_time.mean(axis=0)))
+
+
 if __name__ == '__main__':
-    mt_trunc_demo(UnscentedTrunc, Unscented, [2, 5, 10, 15], kappa=0, full_input_cov=True)
+    # mt_trunc_demo(UnscentedTrunc, Unscented, [2, 5, 10, 15], kappa=0, full_input_cov=True)
+    ukf_trunc_demo(mc_sims=100)
