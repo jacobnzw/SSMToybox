@@ -105,6 +105,7 @@ def kernel_fit_demo_single():
     for i in range(num_samples):
         Y[:, i] = np.apply_along_axis(f, 1, X[..., i])
 
+    # TODO: try fitting vector function using kernel_obj(), use one output to estimate K_true
     K_true = estimate_kernel_mat(Y)
 
     # minimize matrix norm to find optimal kernel parameters
