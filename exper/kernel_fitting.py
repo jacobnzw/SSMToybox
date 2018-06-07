@@ -181,6 +181,19 @@ def kernel_fit_nlml_sgd():
     print(np.exp(log_theta))
 
 
+def cond_vs_lengthscale():
+    model = GaussianProcess(1, np.array([[1.0, 1.0]]), points='ut', point_par={'kappa': 0.5})
+
+    kernel_cond = lambda ell: np.linalg.cond(model.kernel.eval(np.array([[1.0, ell]]), model.points))
+    ells = np.logspace(-1, 1, 50)
+    conds = np.array([kernel_cond(ell) for ell in ells])
+
+    plt.semilogx(ells, conds)
+    plt.xlabel('$\ell$')
+    plt.ylabel('cond(K(l))')
+    plt.show()
+
+
 def plot_nlml():
     # define GP model with num_dim inputs
     from bq.bqmod import GaussianProcess
@@ -260,4 +273,6 @@ if __name__ == '__main__':
 
     # kernel_fit_nlml_sgd()
 
-    plot_nlml()
+    # plot_nlml()
+
+    cond_vs_lengthscale()
