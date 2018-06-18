@@ -11,6 +11,22 @@ from mtran import MomentTransform, Taylor1stOrder, TaylorGPQD, SphericalRadial, 
 
 
 class StateSpaceInference(metaclass=ABCMeta):
+    """
+    Base class for all local state-space inference algorithms, including nonlinear filters and smoothers.
+
+    Parameters
+    ----------
+    ssm : StateSpaceModel
+        State-space model to perform inference on.
+
+    tf_dyn : MomentTransform
+        Moment transform for computing predictive state moments.
+
+    tf_meas : MomentTransform
+        Moment transform for computing predictive measurement moments.
+
+    """
+
     def __init__(self, ssm, tf_dyn, tf_meas):
 
         # state-space model of a dynamical system whose state is to be estimated
@@ -38,6 +54,24 @@ class StateSpaceInference(metaclass=ABCMeta):
         self.flags[key] = value
 
     def forward_pass(self, data):
+        """
+        Forward pass of the state-space inference (filtering).
+
+        Parameters
+        ----------
+        data : (dim, n_time_steps) ndarray
+            Measurements to process
+
+        Returns
+        -------
+        filtered_mean : (dim, n_time_steps) ndarray
+            Filtered mean of the system state.
+
+        filtered_cov : (dim, dim, n_time_steps) ndarray
+            Filtered covariance of the system state.
+
+        """
+
         self.D, self.N = data.shape
         self.fi_mean = np.zeros((self.ssm.xD, self.N+1))
         self.fi_cov = np.zeros((self.ssm.xD, self.ssm.xD, self.N+1))
@@ -74,6 +108,19 @@ class StateSpaceInference(metaclass=ABCMeta):
         return self.fi_mean[:, 1:, ...], self.fi_cov[:, :, 1:, ...]
 
     def backward_pass(self):
+        """
+        Backward pass of the state-space inference (smoothing).
+
+        Returns
+        -------
+        smoothed_mean : ndarray
+            Smoothed mean of the system state.
+
+        smoothed_cov : ndarray
+            Smoothed covariance of the system state.
+
+        """
+
         assert self.get_flag('filtered')  # require filtered state
         self.sm_mean = self.fi_mean.copy()
         self.sm_cov = self.fi_cov.copy()
@@ -90,6 +137,13 @@ class StateSpaceInference(metaclass=ABCMeta):
         return self.sm_mean[:, 1:, ...], self.sm_cov[:, :, 1:, ...]
 
     def reset(self):
+        """
+        Reset internal variables and flags.
+
+        Returns
+        -------
+
+        """
         self.x_mean_pr, self.x_cov_pr = None, None
         self.x_mean_sm, self.x_cov_sm = None, None
         self.xx_cov, self.xy_cov = None, None
@@ -101,18 +155,74 @@ class StateSpaceInference(metaclass=ABCMeta):
 
     @abstractmethod
     def _time_update(self, time, theta_dyn=None, theta_obs=None):
+        """
+        Abstract method for time update, which computes predictive moments of state and measurement.
+
+        Parameters
+        ----------
+        time : int
+            Time step. Importannt for t-variant systems.
+
+        theta_dyn :
+            Parameters of the moment transform computing the predictive state moments.
+
+        theta_obs :
+            Parameters of the moment transform computing the predictive measurement moments.
+
+        Returns
+        -------
+
+        """
         pass
 
     @abstractmethod
     def _measurement_update(self, y, time=None):
+        """
+        Abstract method for measurement update, which takes predictive state and measurement moments and produces
+        filtered state mean and covariance.
+
+        Parameters
+        ----------
+        y : (dim, ) ndarray
+            Measurement vector.
+
+        time : int
+            Time step. Important for t-variant systems.
+
+        Returns
+        -------
+
+        """
         pass
 
     @abstractmethod
     def _smoothing_update(self):
+        """
+        Abstract method for smoothing update, which takes filtered states and predictive states from the forward pass
+        and goes backward in time producing smoothed moments of the system state.
+
+        Returns
+        -------
+
+        """
         pass
 
 
 class GaussianInference(StateSpaceInference):
+    """
+        Base class for all Gaussian state-space inference algorithms, such as nonlinear Kalman filters and smoothers.
+
+        Parameters
+        ----------
+        ssm : GaussianStateSpaceModel
+            State-space model to perform inference on.
+
+        tf_dyn : MomentTransform
+            Moment transform for computing predictive state moments.
+
+        tf_meas : MomentTransform
+            Moment transform for computing predictive measurement moments.
+        """
 
     def __init__(self, ssm, tf_dyn, tf_meas):
 
@@ -127,10 +237,35 @@ class GaussianInference(StateSpaceInference):
         super(GaussianInference, self).__init__(ssm, tf_dyn, tf_meas)
 
     def reset(self):
+        """
+        Reset internal variables and flags.
+
+        Returns
+        -------
+
+        """
         self.x_mean_fi, self.x_cov_fi = self.ssm.get_pars('x0_mean', 'x0_cov')
         super(GaussianInference, self).reset()
 
     def _time_update(self, time, theta_dyn=None, theta_obs=None):
+        """
+        Time update for Gaussian filters and smoothers, computing predictive moments of state and measurement.
+
+        Parameters
+        ----------
+        time : int
+            Time step. Important for t-variant systems.
+
+        theta_dyn : ndarray
+            Parameters of the moment transform computing the predictive state moments.
+
+        theta_obs : ndarray
+            Parameters of the moment transform computing the predictive measurement moments.
+
+        Returns
+        -------
+        """
+
         # in non-additive case, augment mean and covariance
         mean = self.x_mean_fi if self.ssm.q_additive else np.hstack((self.x_mean_fi, self.q_mean))
         cov = self.x_cov_fi if self.ssm.q_additive else block_diag(self.x_cov_fi, self.q_cov)
@@ -159,11 +294,51 @@ class GaussianInference(StateSpaceInference):
         self.xx_cov = self.xx_cov[:, :self.ssm.xD]
 
     def _measurement_update(self, y, time=None):
+        """
+        Measurement update for Gaussian filters, which takes predictive state and measurement moments and produces
+        filtered state mean and covariance.
+
+        Parameters
+        ----------
+        y : (dim, ) ndarray
+            Measurement vector.
+
+        time : int
+            Time step. Important for t-variant systems.
+
+        Notes
+        -----
+        Implements general Gaussian filter measurement update in the form
+
+        .. math::
+        \[
+            G_k = P^{xy}_{k|k-1}(P^y_{k|k-1})^{-1}
+            m^x_{k|k} = m^x_{k|k-1} + G_k (y_k - m^y_{k|k-1})
+            P^x_{k|k} = P^x_{k|k-1} - G_k P^y_{k|k-1} G^T_k
+        \]
+
+        """
         gain = cho_solve(cho_factor(self.y_cov_pr), self.xy_cov).T
         self.x_mean_fi = self.x_mean_pr + gain.dot(y - self.y_mean_pr)
         self.x_cov_fi = self.x_cov_pr - gain.dot(self.y_cov_pr).dot(gain.T)
 
     def _smoothing_update(self):
+        """
+        Smoothing update, which takes filtered states and predictive states from the forward pass and goes backward
+        in time producing moments of the smoothed system state.
+
+        Notes
+        -----
+        Implements general Gaussian Rauch-Tung-Striebel smoothing update equations in the form
+
+        .. math::
+        \[
+            D_{k+1} = P^{xx}_{k+1|K}(P^x{k+1|k})^{-1}
+            m^x_{k|K} = m^x_{k|k} + D_{k+1} (m^x_{k+1|K} - m^x_{k+1|k})
+            P^x_{k|K} = P^x_{k|k} + D_{k+1} (P^x_{k+1|K} - P^x_{k+1|k}) D^T_{k+1}
+        \]
+
+        """
         gain = cho_solve(cho_factor(self.x_cov_pr), self.xx_cov).T
         self.x_mean_sm = self.x_mean_fi + gain.dot(self.x_mean_sm - self.x_mean_pr)
         self.x_cov_sm = self.x_cov_fi + gain.dot(self.x_cov_sm - self.x_cov_pr).dot(gain.T)
@@ -172,31 +347,36 @@ class GaussianInference(StateSpaceInference):
 class StudentInference(StateSpaceInference):
     """
     Base class for state-space inference algorithms, which assume that the state and measurement variables are jointly
-    Student distributed.
+    Student's t-distributed.
 
-    Note, that even though Student's t distribution is not parametrized by the covariance matrix like the Gaussian,
+    Parameters
+    ----------
+    ssm : StudentStateSpaceModel
+        Studentian State space model to perform inference on. Must implement the 'q_dof' and 'r_dof' properties.
+
+    tf_dyn : MomentTransform
+        Moment transform for system dynamics.
+
+    tf_meas : MomentTransform
+        Moment transform for measurement function.
+
+    dof : float
+        Degree of freedom parameter of the filtered density.
+
+    fixed_dof : bool
+        If `True`, DOF will be fixed for all time steps, which preserves the heavy-tailed behaviour of the filter.
+        If `False`, DOF will be increasing after each measurement update, which means the heavy-tailed behaviour is
+        not preserved and therefore converges to a Gaussian filter.
+
+    Notes
+    -----
+    Even though Student's t distribution is not parametrized by the covariance matrix like the Gaussian,
     the filter still produces mean and covariance of the state.
+
     """
 
     def __init__(self, ssm, tf_dyn, tf_meas, dof=4.0, fixed_dof=True):
-        """
-
-        Parameters
-        ----------
-        ssm : StateSpaceModel
-            State space model to perform inference on. Must implement the 'q_dof' and 'r_dof' properties.
-        tf_dyn : MomentTransform
-            Moment transform for system dynamics.
-        tf_meas : MomentTransform
-            Moment transform for measurement function.
-        dof : float
-            Degree of freedom parameter of the filtered density.
-        fixed_dof : bool
-            If `True`, DOF will be fixed for all time steps, which preserves the heavy-tailed behaviour of the filter.
-            If `False`, DOF will be increasing after each measurement update, which means the heavy-tailed behaviour is
-            not preserved and therefore converges to a Gaussian filter.
-        """
-
+        # require Student state-space model
         assert isinstance(ssm, StudentStateSpaceModel)
 
         # extract SSM parameters
@@ -305,12 +485,36 @@ class StudentInference(StateSpaceInference):
         pass
 
 
-class MarginalInference(StateSpaceInference):
+class MarginalInference(GaussianInference):
     """
-    Kalman state-space inference with marginalized moment transform parameters. Standard Gaussian is used as a
-    prior on log-parameters (the parameters are assumed strictly positive). Aims to be used mainly with Bayesian
-    quadrature transforms, although, in principle, any moment transform with parameters fits into this framework.
+    Gaussian state-space inference with marginalized moment transform parameters. Standard Gaussian is used as a
+    prior on log-parameters (the parameters are assumed strictly positive) of the moment transforms.
 
+    Parameters
+    ----------
+    ssm : GaussianStateSpaceModel
+        State-space model to perform inference on.
+
+    tf_dyn : MomentTransform
+        Moment transform for computing predictive state moments.
+
+    tf_meas : MomentTransform
+        Moment transform for computing predictive measurement moments.
+
+    par_mean : ndarray
+        Mean of the Gaussian prior over moment transform parameters.
+
+    par_cov : ndarray
+        Covariance of the Gaussian prior over moment transform parameters.
+
+    Notes
+    -----
+    Aims to be used mainly with Bayesian quadrature transforms, although, in principle, any moment transform with
+    parameters fits into this framework.
+
+    Warning
+    -------
+    Purely for experimental purposes!
 
     """
 
@@ -333,7 +537,7 @@ class MarginalInference(StateSpaceInference):
         self.param_jitter = 1e-8 * np.eye(self.param_dim)
 
         # Spherical-radial quadrature rule for marginalizing transform parameters
-        from transforms.quad import SphericalRadial
+        from mtran import SphericalRadial
         self.param_upts = SphericalRadial.unit_sigma_points(self.param_dim)
         self.param_wts = SphericalRadial.weights(self.param_dim)
         self.param_pts_num = self.param_upts.shape[1]
