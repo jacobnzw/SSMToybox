@@ -137,13 +137,7 @@ class StateSpaceInference(metaclass=ABCMeta):
         return self.sm_mean[:, 1:, ...], self.sm_cov[:, :, 1:, ...]
 
     def reset(self):
-        """
-        Reset internal variables and flags.
-
-        Returns
-        -------
-
-        """
+        """Reset internal variables and flags."""
         self.x_mean_pr, self.x_cov_pr = None, None
         self.x_mean_sm, self.x_cov_sm = None, None
         self.xx_cov, self.xy_cov = None, None
@@ -210,19 +204,19 @@ class StateSpaceInference(metaclass=ABCMeta):
 
 class GaussianInference(StateSpaceInference):
     """
-        Base class for all Gaussian state-space inference algorithms, such as nonlinear Kalman filters and smoothers.
+    Base class for all Gaussian state-space inference algorithms, such as nonlinear Kalman filters and smoothers.
 
-        Parameters
-        ----------
-        ssm : GaussianStateSpaceModel
-            State-space model to perform inference on.
+    Parameters
+    ----------
+    ssm : GaussianStateSpaceModel
+        State-space model to perform inference on.
 
-        tf_dyn : MomentTransform
-            Moment transform for computing predictive state moments.
+    tf_dyn : MomentTransform
+        Moment transform for computing predictive state moments.
 
-        tf_meas : MomentTransform
-            Moment transform for computing predictive measurement moments.
-        """
+    tf_meas : MomentTransform
+        Moment transform for computing predictive measurement moments.
+    """
 
     def __init__(self, ssm, tf_dyn, tf_meas):
 
@@ -237,13 +231,7 @@ class GaussianInference(StateSpaceInference):
         super(GaussianInference, self).__init__(ssm, tf_dyn, tf_meas)
 
     def reset(self):
-        """
-        Reset internal variables and flags.
-
-        Returns
-        -------
-
-        """
+        """Reset internal variables and flags."""
         self.x_mean_fi, self.x_cov_fi = self.ssm.get_pars('x0_mean', 'x0_cov')
         super(GaussianInference, self).reset()
 
@@ -261,9 +249,6 @@ class GaussianInference(StateSpaceInference):
 
         theta_obs : ndarray
             Parameters of the moment transform computing the predictive measurement moments.
-
-        Returns
-        -------
         """
 
         # in non-additive case, augment mean and covariance
@@ -316,7 +301,6 @@ class GaussianInference(StateSpaceInference):
             m^x_{k|k} = m^x_{k|k-1} + G_k (y_k - m^y_{k|k-1})
             P^x_{k|k} = P^x_{k|k-1} - G_k P^y_{k|k-1} G^T_k
         \]
-
         """
         gain = cho_solve(cho_factor(self.y_cov_pr), self.xy_cov).T
         self.x_mean_fi = self.x_mean_pr + gain.dot(y - self.y_mean_pr)
@@ -402,6 +386,7 @@ class StudentInference(StateSpaceInference):
         super(StudentInference, self).__init__(ssm, tf_dyn, tf_meas)
 
     def reset(self):
+        """Reset internal variables and flags."""
         self.x_mean_fi, self.x_cov_fi, self.dof_fi = self.ssm.get_pars('x0_mean', 'x0_cov', 'x0_dof')
         scale = (self.dof - 2) / self.dof
         self.x_smat_fi = scale * self.x_cov_fi
@@ -409,6 +394,20 @@ class StudentInference(StateSpaceInference):
         super(StudentInference, self).reset()
 
     def _time_update(self, time, theta_dyn=None, theta_obs=None):
+        """
+        Time update for Studentian filters and smoothers, computing predictive moments of state and measurement.
+
+        Parameters
+        ----------
+        time : int
+            Time step. Important for t-variant systems.
+
+        theta_dyn : ndarray
+            Parameters of the moment transform computing the predictive state moments.
+
+        theta_obs : ndarray
+            Parameters of the moment transform computing the predictive measurement moments.
+        """
 
         if self.fixed_dof:  # fixed-DOF version
 
@@ -460,6 +459,22 @@ class StudentInference(StateSpaceInference):
         self.xy_smat = self.xy_smat[:, :self.ssm.xD]
 
     def _measurement_update(self, y, time=None):
+        """
+        Measurement update for Studentian filters, which takes predictive state and measurement moments and produces
+        filtered state mean and covariance.
+
+        Parameters
+        ----------
+        y : (dim, ) ndarray
+            Measurement vector.
+
+        time : int
+            Time step. Important for t-variant systems.
+
+        Notes
+        -----
+        Implements general Studentian filter measurement update.
+        """
 
         # scale the covariance matrices
         # scale = (self.dof - 2) / self.dof
@@ -515,7 +530,6 @@ class MarginalInference(GaussianInference):
     Warning
     -------
     Purely for experimental purposes!
-
     """
 
     def __init__(self, ssm, tf_dyn, tf_meas, par_mean=None, par_cov=None):
@@ -543,6 +557,7 @@ class MarginalInference(GaussianInference):
         self.param_pts_num = self.param_upts.shape[1]
 
     def reset(self):
+        """Reset internal variables and flags."""
         super(MarginalInference, self).reset()
         # Reset parameter moments to prior moments
         self.param_mean = self.param_prior_mean
@@ -559,12 +574,10 @@ class MarginalInference(GaussianInference):
 
         Parameters
         ----------
-        y: ndarray
-          Measurement at a given time step
-
-        Returns
-        -------
-
+        y: (dim, ) ndarray
+            Measurement vector.
+        time : int
+            Time step. Important for t-variant systems.
         """
 
         # Mean and covariance of the parameter posterior by Laplace approximation
@@ -588,21 +601,26 @@ class MarginalInference(GaussianInference):
 
     def _state_posterior_moments(self, theta, y, k):
         """
-        State posterior moments given moment transform parameters N(x_k | y_1:k, theta).
+        State posterior moments given moment transform parameters :math:`N(x_k | y_1:k, theta)`.
 
         Parameters
         ----------
-        theta: ndarray
+        theta : ndarray
             Moment transform parameters.
-        y: ndarray
+
+        y : ndarray
             Observations.
-        k: int
+
+        k : int
             Time index.
 
         Returns
         -------
-            (mean, cov): (ndarray, ndarray)
-                Conditional state posterior mean and covariance.
+        mean : ndarray
+            Conditional state posterior mean.
+
+        cov : ndarray
+            Conditional state posterior covariance.
         """
 
         # Dynamics and observation model parameters
@@ -619,16 +637,18 @@ class MarginalInference(GaussianInference):
 
     def _param_log_likelihood(self, theta, y, k):
         """
-        l(theta) = N(y_k | m_k^y(theta), P_k^y(theta))
+        :math:`l(theta) = N(y_k | m_k^y(theta), P_k^y(theta))`
 
         Parameters
         ----------
-        theta: ndarray
+        theta : ndarray
             Vector of transform parameters.
-        y: ndarray
-            Observation
-        k: int
-            Time (for time varying dynamics)
+
+        y : ndarray
+            Observation.
+
+        k : int
+            Time (for time varying dynamics).
 
         Returns
         -------
@@ -662,24 +682,21 @@ class MarginalInference(GaussianInference):
 
     def _param_log_prior(self, theta):
         """
-        Prior on transform parameters.
-
-        p(theta) = N(theta | m^theta_k-1, P^theta_k-1)
+        Prior on transform parameters :math:`p(\\theta) = N(\\theta | m^{\\theta}_k-1, P^{\\theta}_k-1)`.
 
         Parameters
         ----------
-        theta: ndarray
+        theta : ndarray
             Vector of transform parameters.
+
+        Returns
+        -------
+        log_prob : (ndarray or scalar)
+            Log of the probability density function evaluated at theta
 
         Notes
         -----
         At the moment, only Gaussian prior is supported. Student-t prior might be implemented in the future.
-
-        Returns
-        -------
-        p(theta): return type of scipy.stats.multivariate_normal.pdf
-            Value of a Gaussian prior PDF.
-
         """
         return multivariate_normal.logpdf(theta, self.param_mean, self.param_cov)
 
@@ -689,17 +706,19 @@ class MarginalInference(GaussianInference):
 
         Parameters
         ----------
-        theta: ndarray
-            Transform parameters
-        y: ndarray
-            Observation
-        k: int
-            Time
+        theta : ndarray
+            Moment transform parameters.
+
+        y : ndarray
+            Observation.
+
+        k : int
+            Time index.
 
         Returns
         -------
         x: float
-            Evaluation of un-normalized negative logarithm of posterior over transform parameters.
+            Evaluation of un-normalized negative log-posterior over transform parameters.
         """
         return -self._param_log_likelihood(theta, y, k) - self._param_log_prior(theta)
 
@@ -709,15 +728,11 @@ class MarginalInference(GaussianInference):
 
         Parameters
         ----------
-        y: ndarray
-            Observation
-        k: int
-            Time
+        y : ndarray
+            Observation.
 
-        Returns
-        -------
-        (mean, cov): tuple
-            Mean and covariance of the intractable parameter posterior.
+        k : int
+            Time index.
         """
 
         from scipy.optimize import minimize
@@ -738,7 +753,12 @@ class MarginalInference(GaussianInference):
 
 class ExtendedKalman(GaussianInference):
     """
-    Extended Kalman filter/smoother. For linear system functions this is a Kalman filter.
+    Extended Kalman filter and smoother. For linear system functions this is a Kalman filter/smoother.
+
+    Parameters
+    ----------
+    sys : GaussianStateSpaceModel
+        State-space model to perform inference on. Needs to have Jacobians implemented.
     """
 
     def __init__(self, sys):
@@ -751,6 +771,21 @@ class ExtendedKalman(GaussianInference):
 
 
 class ExtendedKalmanGPQD(GaussianInference):
+    """
+    Extended Kalman filter and smoother with a moment transform based on single-point Gaussian process quadrature with
+    derivative observations and RBF kernel.
+
+    Parameters
+    ----------
+    sys : GaussianStateSpaceModel
+        State-space model to perform inference on. Needs to have Jacobians implemented.
+
+    alpha : float, optional
+        Scaling parameter of the RBF kernel.
+
+    el : float, optional
+        Input scaling parameter (a.k.a. horizontal length-scale) of the RBF kernel.
+    """
     def __init__(self, sys, alpha=1.0, el=1.0):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
@@ -763,6 +798,11 @@ class ExtendedKalmanGPQD(GaussianInference):
 class CubatureKalman(GaussianInference):
     """
     Cubature Kalman filter and smoother.
+
+    Parameters
+    ----------
+    sys : GaussianStateSpaceModel
+        State-space model to perform inference on.
     """
 
     def __init__(self, sys):
@@ -776,7 +816,12 @@ class CubatureKalman(GaussianInference):
 
 class CubatureTruncKalman(GaussianInference):
     """
-    Truncated cubature Kalman filter and smoother. Aware of the effective dimension of the observation model.
+    Truncated cubature Kalman filter and smoother, aware of the effective dimension of the observation model.
+
+    Parameters
+    ----------
+    sys : GaussianStateSpaceModel
+        State-space model to perform inference on.
     """
 
     def __init__(self, sys):
@@ -791,6 +836,11 @@ class CubatureTruncKalman(GaussianInference):
 class UnscentedKalman(GaussianInference):
     """
     Unscented Kalman filter and smoother.
+
+    Parameters
+    ----------
+    sys : GaussianStateSpaceModel
+        State-space model to perform inference on.
     """
 
     def __init__(self, sys, kappa=None, alpha=1.0, beta=2.0):
@@ -804,7 +854,12 @@ class UnscentedKalman(GaussianInference):
 
 class UnscentedTruncKalman(GaussianInference):
     """
-    Unscented Kalman filter and smoother.
+    Truncated cubature Kalman filter and smoother, aware of the effective dimension of the observation model.
+
+    Parameters
+    ----------
+    sys : GaussianStateSpaceModel
+        State-space model to perform inference on.
     """
 
     def __init__(self, sys, kappa=None, alpha=1.0, beta=2.0):
@@ -819,6 +874,14 @@ class UnscentedTruncKalman(GaussianInference):
 class GaussHermiteKalman(GaussianInference):
     """
     Gauss-Hermite Kalman filter and smoother.
+
+    Parameters
+    ----------
+    sys : GaussianStateSpaceModel
+        State-space model to perform inference on.
+
+    deg : int, optional
+        Degree of the Gauss-Hermite integration rule. Determines the number of sigma-points.
     """
 
     def __init__(self, sys, deg=3):
@@ -832,7 +895,15 @@ class GaussHermiteKalman(GaussianInference):
 
 class GaussHermiteTruncKalman(GaussianInference):
     """
-    Truncated Gauss-Hermite Kalman filter and smoother. Aware of the effective dimensionality.
+    Truncated Gauss-Hermite Kalman filter and smoother, aware of the effective dimensionality of the observation model.
+
+    Parameters
+    ----------
+    sys : GaussianStateSpaceModel
+        State-space model to perform inference on.
+
+    deg : int, optional
+        Degree of the Gauss-Hermite integration rule. Determines the number of sigma-points.
     """
 
     def __init__(self, sys, deg=3):
@@ -846,7 +917,48 @@ class GaussHermiteTruncKalman(GaussianInference):
 
 class GPQKalman(GaussianInference):
     """
-    GP quadrature filter and smoother.
+    Gaussian process quadrature Kalman filter (GPQKF) and smoother (see [1]_).
+
+    Parameters
+    ----------
+    ssm : GaussianStateSpaceModel
+        State-space model to perform inference on.
+
+    kern_par_dyn : ndarray
+        Kernel parameters for GPQ transformation of the state moments.
+
+    kern_par_obs : ndarray
+        Kernel parameters for GPQ transformation of the measurement moments.
+
+    kernel : str {'rbf'}, optional
+        Kernel (covariance function) of the internal Gaussian process regression model.
+
+    points : str {'sr', 'ut', 'gh', 'fs'}, optional
+        Sigma-point set:
+
+        ``sr``
+            Spherical-radial sigma-points (originally used in CKF).
+        ``ut``
+            Unscented transform sigma-points (originally used in UKF).
+        ``gh``
+            Gauss-Hermite sigma-points (originally used in GHKF).
+        ``fs``
+            Fully-symmetric sigma-points [3]_ (originally used in [2]_).
+
+    point_hyp : dict, optional
+        Hyper-parameters of the sigma-point set.
+
+    References
+    ----------
+    .. [1] Prüher, J. and Straka, O. Gaussian Process Quadrature Moment Transform,
+           IEEE Transactions on Automatic Control, 2017, Pre-print, 1-1
+
+    .. [2] Tronarp, F. and Hostettler, R. and Särkkä, S. Sigma-point Filtering for Nonlinear Systems with Non-additive
+           Heavy-tailed Noise, 19th International Conference on Information Fusion, 2016, 1859-1866
+
+    .. [3] J. McNamee and F. Stenger, Construction of fully symmetric numerical integration formulas,
+           Numerische Mathematik, vol. 10, pp. 327–344, 1967
+
     """
 
     def __init__(self, ssm, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None):
@@ -859,20 +971,56 @@ class GPQKalman(GaussianInference):
 
 
 class GPQMOKalman(GaussianInference):
+    """
+    Gaussian process quadrature Kalman filter and smoother with multi-output Gaussian process model.
+
+    Parameters
+    ----------
+    ssm : GaussianStateSpaceModel
+        State-space model to perform inference on.
+
+    ker_par_dyn : ndarray
+        Kernel parameters for GPQ transformation of the state moments.
+
+    ker_par_obs : ndarray
+        Kernel parameters for GPQ transformation of the measurement moments.
+
+    kernel : str {'rbf'}, optional
+        Kernel (covariance function) of the internal Gaussian process regression model.
+
+    points : str {'sr', 'ut', 'gh', 'fs'}, optional
+        Sigma-point set:
+
+        ``sr``
+            Spherical-radial sigma-points (originally used in CKF).
+        ``ut``
+            Unscented transform sigma-points (originally used in UKF).
+        ``gh``
+            Gauss-Hermite sigma-points (originally used in GHKF).
+        ``fs``
+            Fully-symmetric sigma-points [3]_ (originally used in [2]_).
+
+    point_par : dict, optional
+        Hyper-parameters of the sigma-point set.
+
+    References
+    ----------
+    .. [1] Prüher, J. and Straka, O. Gaussian Process Quadrature Moment Transform,
+           IEEE Transactions on Automatic Control, 2017, Pre-print, 1-1
+
+    .. [2] Tronarp, F. and Hostettler, R. and Särkkä, S. Sigma-point Filtering for Nonlinear Systems with Non-additive
+           Heavy-tailed Noise, 19th International Conference on Information Fusion, 2016, 1859-1866
+
+    .. [3] J. McNamee and F. Stenger, Construction of fully symmetric numerical integration formulas,
+           Numerische Mathematik, vol. 10, pp. 327–344, 1967
+
+    Notes
+    -----
+    For experimental purposes only. Frequently breaks down with loss of positive definiteness!
+
+    """
 
     def __init__(self, ssm, ker_par_dyn, ker_par_obs, kernel='rbf', points='ut', point_par=None):
-        """
-        Nonlinear Kalman filter based on Gaussian process quadrature with multiple independent outputs.
-
-        Parameters
-        ----------
-        ssm : StateSpaceModel
-        ker_par_dyn : numpy.ndarray
-        ker_par_obs : numpy.ndarray
-        kernel : string
-        points : string
-        point_par : dict
-        """
         assert isinstance(ssm, StateSpaceModel)
         nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
         nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
@@ -882,7 +1030,13 @@ class GPQMOKalman(GaussianInference):
 
 
 class GPQMKalman(MarginalInference):
+    """
+    Gaussian process quadrature Kalman filter and smoother with marginalized GPQ moment transform kernel parameters.
 
+    Notes
+    -----
+    For experimental purposes only. Likely a dead-end!
+    """
     def __init__(self, sys, kernel, points, par_mean=None, par_cov=None, point_hyp=None):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
@@ -894,7 +1048,51 @@ class GPQMKalman(MarginalInference):
 
 class TPQKalman(GaussianInference):
     """
-    T-Process-quadrature filter and smoother for the Gaussian inference.
+    Student's t-process quadrature Kalman filter (TPQKF) and smoother (see [1]_).
+
+    Parameters
+    ----------
+    ssm : GaussianStateSpaceModel
+        Gaussian state-space model to perform inference on.
+
+    kern_par_dyn : ndarray
+        Kernel parameters for TPQ transformation of the state moments.
+
+    kern_par_obs : ndarray
+        Kernel parameters for TPQ transformation of the measurement moments.
+
+    kernel : str {'rbf'}, optional
+        Kernel (covariance function) of the internal Student's t-process regression model.
+
+    points : str {'sr', 'ut', 'gh', 'fs'}, optional
+        Sigma-point set:
+
+        ``sr``
+            Spherical-radial sigma-points (originally used in CKF).
+        ``ut``
+            Unscented transform sigma-points (originally used in UKF).
+        ``gh``
+            Gauss-Hermite sigma-points (originally used in GHKF).
+        ``fs``
+            Fully-symmetric sigma-points [3]_ (originally used in [2]_).
+
+    point_hyp : dict, optional
+        Hyper-parameters of the sigma-point set.
+
+    nu : float, optional
+        Degrees of freedom of the Student's t-regression model.
+
+    References
+    ----------
+    .. [1] Prüher, J.; Tronarp, F.; Karvonen, T.; Särkkä, S. and Straka, O. Student-t Process Quadratures for
+           Filtering of Non-linear Systems with Heavy-tailed Noise, 20th International Conference on Information
+           Fusion, 2017 , 1-8
+
+    .. [2] Tronarp, F. and Hostettler, R. and Särkkä, S. Sigma-point Filtering for Nonlinear Systems with Non-additive
+           Heavy-tailed Noise, 19th International Conference on Information Fusion, 2016, 1859-1866
+
+    .. [3] J. McNamee and F. Stenger, Construction of fully symmetric numerical integration formulas,
+           Numerische Mathematik, vol. 10, pp. 327–344, 1967
     """
 
     def __init__(self, ssm, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None, nu=3.0):
@@ -908,9 +1106,44 @@ class TPQKalman(GaussianInference):
 
 class TPQStudent(StudentInference):
     """
-    T-process quadrature filter and smoother for the Student's t inference. Uses RQ kernel and fully-symmetric
-    point-sets by default. RQ kernel expectations w.r.t. Student's t-density are expressed as a simplified scale
-    mixture representation which facilitates analytical tractability.
+    Student's t-process quadrature Student filter (TPQSF, see [1]_) with fully-symmetric sigma-points (see [3]_).
+
+    Parameters
+    ----------
+    ssm : StudentStateSpaceModel
+        Studentian state-space model to perform inference on.
+
+    kern_par_dyn : ndarray
+        Kernel parameters for TPQ transformation of the state moments.
+
+    kern_par_obs : ndarray
+        Kernel parameters for TPQ transformation of the measurement moments.
+
+    point_par : dict, optional
+        Hyper-parameters of the sigma-point set.
+
+    dof : float, optional
+        Desired degrees of freedom during the filtering process.
+
+    dof_tp : float, optional
+        Degrees of freedom of the Student's t-regression model. TODO: could be merged with `fixed_dof`.
+
+    fixed_dof : bool, optional
+        Fix degrees of freedom during filtering. If `True`, preserves the heavy-tailed behavior of the Student
+        filter with increasing time steps. If `False`, the Student filter measurement update rule effectively becomes
+        identical to the Kalman filter with increasing number of processed measurements.
+
+    References
+    ----------
+    .. [1] Prüher, J.; Tronarp, F.; Karvonen, T.; Särkkä, S. and Straka, O. Student-t Process Quadratures for
+           Filtering of Non-linear Systems with Heavy-tailed Noise, 20th International Conference on Information
+           Fusion, 2017 , 1-8
+
+    .. [2] Tronarp, F. and Hostettler, R. and Särkkä, S. Sigma-point Filtering for Nonlinear Systems with Non-additive
+           Heavy-tailed Noise, 19th International Conference on Information Fusion, 2016, 1859-1866
+
+    .. [3] J. McNamee and F. Stenger, Construction of fully symmetric numerical integration formulas,
+           Numerische Mathematik, vol. 10, pp. 327–344, 1967
     """
 
     def __init__(self, ssm, kern_par_dyn, kern_par_obs, point_par=None, dof=4.0, fixed_dof=True, dof_tp=4.0):
@@ -936,20 +1169,53 @@ class TPQStudent(StudentInference):
 
 
 class TPQMOStudent(StudentInference):
+    """
+    Student's t-process quadrature Student filter (TPQSF, see [1]_) with fully-symmetric sigma-points (see [3]_) and
+    multi-output Student's t-process regression model.
+
+    Parameters
+    ----------
+    ssm : StudentStateSpaceModel
+        Studentian state-space model to perform inference on.
+
+    ker_par_dyn : ndarray
+        Kernel parameters for TPQ transformation of the state moments.
+
+    ker_par_obs : ndarray
+        Kernel parameters for TPQ transformation of the measurement moments.
+
+    point_par : dict, optional
+        Hyper-parameters of the sigma-point set.
+
+    dof : float, optional
+        Desired degrees of freedom during the filtering process.
+
+    dof_tp : float, optional
+        Degrees of freedom of the Student's t-regression model. TODO: could be merged with `fixed_dof`.
+
+    fixed_dof : bool, optional
+        Fix degrees of freedom during filtering. If `True`, preserves the heavy-tailed behavior of the Student
+        filter with increasing time steps. If `False`, the Student filter measurement update rule effectively becomes
+        identical to the Kalman filter with increasing number of processed measurements.
+
+    Notes
+    -----
+    Just experimental, it doesn't work! Frequently fails with loss of positive definiteness.
+
+    References
+    ----------
+    .. [1] Prüher, J.; Tronarp, F.; Karvonen, T.; Särkkä, S. and Straka, O. Student-t Process Quadratures for
+           Filtering of Non-linear Systems with Heavy-tailed Noise, 20th International Conference on Information
+           Fusion, 2017 , 1-8
+
+    .. [2] Tronarp, F. and Hostettler, R. and Särkkä, S. Sigma-point Filtering for Nonlinear Systems with Non-additive
+           Heavy-tailed Noise, 19th International Conference on Information Fusion, 2016, 1859-1866
+
+    .. [3] J. McNamee and F. Stenger, Construction of fully symmetric numerical integration formulas,
+           Numerische Mathematik, vol. 10, pp. 327–344, 1967
+    """
 
     def __init__(self, ssm, ker_par_dyn, ker_par_obs, point_par=None, dof=4.0, fixed_dof=True, dof_tp=4.0):
-        """
-        Nonlinear Kalman filter based on Student process quadrature with multiple independent outputs.
-
-        Parameters
-        ----------
-        ssm : StateSpaceModel
-        ker_par_dyn : numpy.ndarray
-        ker_par_obs : numpy.ndarray
-        kernel : string
-        points : string
-        point_par : dict
-        """
         assert isinstance(ssm, StateSpaceModel)
         nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
         nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
