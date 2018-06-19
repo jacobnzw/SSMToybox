@@ -13,6 +13,11 @@ from utils import multivariate_t
 
 
 class StateSpaceModel(metaclass=ABCMeta):
+    """
+    Base class for all state-space models.
+
+
+    """
 
     xD = None  # state dimension
     zD = None  # measurement dimension
@@ -346,7 +351,30 @@ class StateSpaceModel(metaclass=ABCMeta):
 
 class GaussianStateSpaceModel(StateSpaceModel):
     """
-    State-space model with Gaussian noise and initial conditions.
+    State-space model with Gaussian noises and initial conditions.
+
+    Parameters
+    ----------
+    x0_mean : ndarray
+        Mean of the state at initial time step.
+
+    x0_cov : ndarray
+        Covariance of the state at initial time step.
+
+    q_mean : ndarray
+        Mean of the state (process) noise.
+
+    q_cov : ndarray
+        Covariance of the state (process) noise.
+
+    r_mean : ndarray
+        Mean of the measurement noise.
+
+    r_cov : ndarray
+        Covariance of the measurement noise.
+
+    q_gain : ndarray
+        Gain of the state (process) noise.
     """
 
     def __init__(self, x0_mean=None, x0_cov=None, q_mean=None, q_cov=None, r_mean=None, r_cov=None, q_gain=None):
@@ -372,17 +400,19 @@ class GaussianStateSpaceModel(StateSpaceModel):
 
         Parameters
         ----------
-        x : 1-D array_like of shape (self.xD,)
-            System state
-        q : 1-D array_like of shape (self.qD,)
-            System noise
-        pars : 1-D array_like
-            Parameters of the system dynamics
+        x : (dim_x, ) ndarray
+            System state.
+
+        q : (dim_q, ) ndarray
+            System noise.
+
+        pars : (dim_par, ) ndarray
+            Parameters of the system dynamics.
 
         Returns
         -------
-        1-D numpy.ndarray of shape (self.xD,)
-            system state in the next time step
+        : (dim_x, ) ndarray
+            System state in the next time step.
         """
         pass
 
@@ -394,17 +424,19 @@ class GaussianStateSpaceModel(StateSpaceModel):
 
         Parameters
         ----------
-        x : 1-D array_like of shape (self.xD,)
-            system state
-        r : 1-D array_like of shape (self.rD,)
-            measurement noise
-        pars : 1-D array_like
-            parameters of the measurement model
+        x : (dim_x, ) ndarray
+            System state.
+
+        r : (dim_r, ) ndarray
+            Measurement noise.
+
+        pars : (dim_par, ) ndarray
+            Parameters of the measurement model.
 
         Returns
         -------
-        1-D numpy.ndarray of shape (self.zD,)
-            measurement of the state
+        : (dim_y, ) ndarray
+            Measurement of the state.
         """
         pass
 
@@ -419,11 +451,11 @@ class GaussianStateSpaceModel(StateSpaceModel):
         Parameters
         ----------
         time : int
-            Discrete time step
+            Discrete time step.
 
         Returns
         -------
-        1-D numpy.ndarray of shape (self.pD,)
+        : (dim_par, ) ndarray
             Vector of parameters at a given time.
         """
         pass
@@ -436,20 +468,22 @@ class GaussianStateSpaceModel(StateSpaceModel):
 
         Parameters
         ----------
-        x : 1-D array_like of shape (self.xD,)
-            System state
-        q : 1-D array_like of shape (self.qD,)
-            System noise
-        pars : 1-D array_like of shape (self.pD,)
-            System parameter
+        x : (dim_x, ) ndarray
+            System state.
+
+        q : (dim_q, ) ndarray
+            System noise.
+
+        pars : (dim_par, ) ndarray
+            Parameters of the system dynamics.
 
         Returns
         -------
-        2-D numpy.ndarray
+        : (dim_x, dim_x) or (dim_x, dim_x + dim_q) ndarray
             Jacobian matrix of the system dynamics, where the second dimension depends on the noise additivity.
             The shape depends on whether or not the state noise is additive. The two cases are:
-                * additive: (self.xD, self.xD)
-                * non-additive: (self.xD, self.xD + self.qD)
+                * additive: (dim_x, dim_x)
+                * non-additive: (dim_x, dim_x + dim_q)
         """
         pass
 
@@ -461,32 +495,73 @@ class GaussianStateSpaceModel(StateSpaceModel):
 
         Parameters
         ----------
-        x : 1-D array_like of shape (self.xD,)
-            System state
-        r : 1-D array_like of shape (self.qD,)
-            Measurement noise
-        pars : 1-D array_like of shape (self.pD,)
-            System parameter
+        x : (dim_x, ) ndarray
+            System state.
+
+        r : (dim_r, ) ndarray
+            Measurement noise.
+
+        pars : (dim_par, ) ndarray
+            Parameters of the measurement model.
 
         Returns
         -------
-        2-D numpy.ndarray
+        : (dim_x, dim_x) or (dim_x, dim_x + dim_r) ndarray
             Jacobian matrix of the measurement model, where the second dimension depends on the noise additivity.
             The shape depends on whether or not the state noise is additive. The two cases are:
-                * additive: (self.xD, self.xD)
-                * non-additive: (self.xD, self.xD + self.rD)
+                * additive: (dim_x, dim_x)
+                * non-additive: (dim_x, dim_x + dim_r)
         """
         pass
 
     def state_noise_sample(self, size=None):
+        """
+        Samples of the state noise.
+
+        Parameters
+        ----------
+        size : int or tuple, optional
+            Shape of the returned array of noise samples.
+
+        Returns
+        -------
+        : float or (size) ndarray
+            Samples of the Gaussian state (process) noise.
+        """
         q_mean, q_cov = self.get_pars('q_mean', 'q_cov')
         return np.random.multivariate_normal(q_mean, q_cov, size).T
 
     def measurement_noise_sample(self, size=None):
+        """
+        Samples of the measurement noise.
+
+        Parameters
+        ----------
+        size : int or tuple, optional
+            Shape of the returned array of noise samples.
+
+        Returns
+        -------
+        : float or (size) ndarray
+            Samples of the Gaussian state (process) noise.
+        """
         r_mean, r_cov = self.get_pars('r_mean', 'r_cov')
         return np.random.multivariate_normal(r_mean, r_cov, size).T
 
     def initial_condition_sample(self, size=None):
+        """
+        Samples of the initial state Gaussian distribution.
+
+        Parameters
+        ----------
+        size : int or tuple, optional
+            Shape of the returned array of noise samples.
+
+        Returns
+        -------
+        : float or (size) ndarray
+            Samples of the initial system state.
+        """
         x0_mean, x0_cov = self.get_pars('x0_mean', 'x0_cov')
         return np.random.multivariate_normal(x0_mean, x0_cov, size).T
 
