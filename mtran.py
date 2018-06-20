@@ -9,13 +9,78 @@ from sklearn.utils.extmath import cartesian
 
 
 class MomentTransform(metaclass=ABCMeta):
+    """Base class for all moment transforms."""
     @abstractmethod
     def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
+        """
+        Transform random variable with given mean and covariance.
+
+        Parameters
+        ----------
+        f : function
+            Handle of the nonlinear transforming function acting on the input random variable.
+
+        mean : (dim, ) ndarray
+            Mean of the input random variable.
+
+        cov : (dim, dim) ndarray
+            Covariance of the input random variable.
+
+        fcn_pars : ndarray
+            Parameters of the nonlinear transforming function.
+
+        tf_pars : ndarray, optional
+            Parameters of the moment transform.
+
+        Returns
+        -------
+        mean_f : ndarray
+            Mean of the transformed random variable.
+
+        cov_f : ndarray
+            Covariance of the transformed random variable.
+
+        cov_fx : ndarray
+            Covariance between the transformed random variable and the input random variable.
+        """
         pass
 
 
 class SigmaPointTransform(MomentTransform):
+    """ Base class for all sigma-point moment transforms."""
+
     def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
+        """
+        Transform random variable with given mean and covariance.
+
+        Parameters
+        ----------
+        f : function
+            Handle of the nonlinear transforming function acting on the input random variable.
+
+        mean : (dim, ) ndarray
+            Mean of the input random variable.
+
+        cov : (dim, dim) ndarray
+            Covariance of the input random variable.
+
+        fcn_pars : ndarray
+            Parameters of the nonlinear transforming function.
+
+        tf_pars : ndarray, optional
+            Parameters of the moment transform.
+
+        Returns
+        -------
+        mean_f : ndarray
+            Mean of the transformed random variable.
+
+        cov_f : ndarray
+            Covariance of the transformed random variable.
+
+        cov_fx : ndarray
+            Covariance between the transformed random variable and the input random variable.
+        """
         mean = mean[:, na]
         # form sigma-points from unit sigma-points
         x = mean + cholesky(cov).dot(self.unit_sp)
@@ -167,7 +232,19 @@ class MonteCarlo(MomentTransform):
 
 
 class SphericalRadial(SigmaPointTransform):
-    # Could be implemented with Unscented with kappa=0, alpha=1, beta=0.
+    """
+    Spherical-radial moment transform.
+
+    Notes
+    -----
+    Equivalent to the Unscented transform with `kappa=0`, `alpha=1`, `beta=0`. Uses `num_points = 2*dim`.
+
+    Parameters
+    ----------
+    dim : int
+        Dimension of the input random variable.
+    """
+
     def __init__(self, dim):
         self.wm = self.weights(dim)
         self.Wc = np.diag(self.wm)
@@ -175,10 +252,36 @@ class SphericalRadial(SigmaPointTransform):
 
     @staticmethod
     def weights(dim):
+        """
+        Spherical-radial transform weights.
+
+        Parameters
+        ----------
+        dim : int
+            Dimension of the input random variable.
+
+        Returns
+        -------
+        w : (num_points, ) ndarray
+            Spherical-radial transform weights.
+        """
         return (1 / (2.0 * dim)) * np.ones(2 * dim)
 
     @staticmethod
     def unit_sigma_points(dim):
+        """
+        Spherical-radial sigma-points.
+
+        Parameters
+        ----------
+        dim : int
+            Dimension of the input random variable.
+
+        Returns
+        -------
+        : (dim, num_points) ndarray
+            Spherical-radial sigma-points.
+        """
         c = np.sqrt(dim)
         return np.hstack((c * np.eye(dim), -c * np.eye(dim)))
 
@@ -197,7 +300,21 @@ class SphericalRadialTrunc(SigmaPointTruncTransform):
 
 class Unscented(SigmaPointTransform):
     """
-    General purpose class implementing Unscented transform.
+    Unscented moment transform.
+
+    Parameters
+    ----------
+    dim : int
+        Dimension of the input random variable.
+
+    kappa : float, optional
+        Scaling parameter.
+
+    alpha : float, optional
+        Parameter affecting covariance.
+
+    beta : float, optional
+        Parameter affecting covariance.
     """
 
     def __init__(self, dim, kappa=None, alpha=1.0, beta=2.0):
@@ -210,6 +327,25 @@ class Unscented(SigmaPointTransform):
 
     @staticmethod
     def unit_sigma_points(dim, kappa=None, alpha=1.0):
+        """
+        Unscented sigma-points.
+
+        Parameters
+        ----------
+        dim : int
+            Dimension of the input random variable.
+
+        kappa : float, optional
+            Scaling parameter.
+
+        alpha : float, optional
+            Parameter affecting covariance.
+
+        Returns
+        -------
+        : (dim, num_points) ndarray
+            Unscented sigma-points.
+        """
         kappa = np.max([3.0 - dim, 0.0]) if kappa is None else kappa
         lam = alpha ** 2 * (dim + kappa) - dim
         c = np.sqrt(dim + lam)
@@ -217,6 +353,31 @@ class Unscented(SigmaPointTransform):
 
     @staticmethod
     def weights(dim, kappa=None, alpha=1.0, beta=2.0):
+        """
+        Unscented transform weights.
+
+        Parameters
+        ----------
+        dim : int
+            Dimension of the input random variable.
+
+        kappa : float, optional
+            Scaling parameter.
+
+        alpha : float, optional
+            Parameter affecting covariance.
+
+        beta : float, optional
+            Parameter affecting covariance.
+
+        Returns
+        -------
+        w : (num_points, ) ndarray
+            Unscented weights for the transformed mean.
+
+        wc : (num_points, ) ndarray
+            Unscented weights for the transformed covariance.
+        """
         kappa = np.max([3.0 - dim, 0.0]) if kappa is None else kappa
         lam = alpha ** 2 * (dim + kappa) - dim
         wm = 1.0 / (2.0 * (dim + lam)) * np.ones(2 * dim + 1)
@@ -239,6 +400,18 @@ class UnscentedTrunc(SigmaPointTruncTransform):
 
 
 class GaussHermite(SigmaPointTransform):
+    """
+    Gauss-Hermite moment transform.
+
+    Parameters
+    ----------
+    dim : int
+        Dimension of the input random variable.
+
+    degree : int, optional
+        Degree of the integration rule.
+
+    """
     def __init__(self, dim, degree=3):
         self.degree = degree
         self.wm = self.weights(dim, degree)
@@ -247,6 +420,22 @@ class GaussHermite(SigmaPointTransform):
 
     @staticmethod
     def weights(dim, degree=3):
+        """
+        Gauss-Hermite quadrature weights.
+
+        Parameters
+        ----------
+        dim : int
+            Dimension of the input random variable.
+
+        degree : int, optional
+            Degree of the integration rule.
+
+        Returns
+        -------
+        : (num_points, ) ndarray
+            GH quadrature weights of given degree.
+        """
         # 1D sigma-points (x) and weights (w)
         x, w = hermegauss(degree)
         # hermegauss() provides weights that cause posdef errors
@@ -255,6 +444,22 @@ class GaussHermite(SigmaPointTransform):
 
     @staticmethod
     def unit_sigma_points(dim, degree=3):
+        """
+        Unit Gauss-Hermite sigma-points of given degree.
+
+        Parameters
+        ----------
+        dim : int
+            Dimension of the input random variable.
+
+        degree : int, optional
+            Degree of the integration rule.
+
+        Returns
+        -------
+        : (dim, num_points) ndarray
+            GH sigma-points.
+        """
         # 1D sigma-points (x) and weights (w)
         x, w = hermegauss(degree)
         # nD sigma-points by cartesian product
@@ -275,9 +480,29 @@ class GaussHermiteTrunc(SigmaPointTruncTransform):
 
 class FullySymmetricStudent(SigmaPointTransform):
     """
-    Moment transform for Student-t distributions based on fully symmetric integration rule from [1]_. The weights are
-    coded for rule orders (degrees) 3 and 5 only. The 3rd order weights converge to UT weights for nu -> \infty.
+    Moment transform for Student's t-distributed random variables based on fully symmetric integration rule from [1]_.
 
+    Parameters
+    ----------
+    dim : int
+        Dimension of the input random variable (Dimension of the integration domain).
+
+    degree : int
+        Degree (order) of the quadrature rule.
+
+    kappa : float
+        Tuning parameter of the fully-symmetric point set. If `kappa=None`, chooses `kappa = max(3-dim, 0)`.
+
+    dof : float
+        Degree of freedom of the input density.
+
+    Notes
+    -----
+    The weights are coded for rule orders (degrees) 3 and 5 only. The 3rd order weights converge to UT weights for
+    :math:`\\nu \\to \\infty`.
+
+    References
+    ----------
     .. [1] J. McNamee and F. Stenger, “Construction of fully symmetric numerical integration formulas,”
            Numer. Math., vol. 10, no. 4, pp. 327–344, 1967.
     """
@@ -285,21 +510,6 @@ class FullySymmetricStudent(SigmaPointTransform):
     _supported_degrees_ = [3, 5]
 
     def __init__(self, dim, degree=3, kappa=None, dof=4):
-        """
-        Initialize moment transform for Student distributed random variables based on fully-symmetric quadrature rule.
-
-        Parameters
-        ----------
-        dim : int
-            Dimension of the input random variable (Dimension of the integration domain).
-        degree : int
-            Degree (order) of the quadrature rule.
-        kappa : float
-            Tuning parameter of the fully-symmetric point set. If `kappa=None`, chooses `kappa = max(3-dim, 0)`.
-        dof : float
-            Degree of freedom of the input density.
-        """
-
         # init parameters stored in object variables
         self.degree, self.kappa, self.dof = degree, kappa, dof
 
@@ -318,17 +528,21 @@ class FullySymmetricStudent(SigmaPointTransform):
         Parameters
         ----------
         dim : int
-            Dimension of the input random variable (Dimension of the integration domain)
+            Dimension of the input random variable (Dimension of the integration domain).
+
         degree : int
             Order of the quadrature rule, only `degree=3` or `degree=5` implemented.
+
         kappa : float
             Tuning parameter controlling spread of points from the center.
+
         dof : float
             Degree of freedom parameter for the Student distribution.
 
         Returns
         -------
-
+        : (num_points, ) ndarray
+            Quadrature weights.
         """
 
         if degree not in FullySymmetricStudent._supported_degrees_:
@@ -375,18 +589,21 @@ class FullySymmetricStudent(SigmaPointTransform):
         ----------
         dim : int
             Dimension of the input random variable (dimension of the integration domain).
+
         degree : int
             Order of the quadrature rule, only `degree=3` or `degree=5` implemented.
+
         kappa : float
-            Tuning parameter controlling spread of points from the center.
-            If `kappa=None`, chooses `kappa = max(3-dim, 0)`.
+            Tuning parameter controlling spread of points from the center. If `kappa=None`, chooses
+            `kappa = max(3-dim, 0)`.
+
         dof : float
             Degree of freedom parameter of the input density.
 
         Returns
         -------
-        : numpy.ndarray
-            Shape (dim, num_pts)
+        : (dim, num_pts) ndarray
+            Sigma-points.
 
         """
 
@@ -428,9 +645,10 @@ class FullySymmetricStudent(SigmaPointTransform):
         Parameters
         ----------
         dim : int
-            Dimension
+            Dimension.
+
         gen : array_like (1 dimensional)
-            Generator
+            Generator.
 
         Notes
         -----
@@ -441,7 +659,8 @@ class FullySymmetricStudent(SigmaPointTransform):
 
         Returns
         -------
-
+        : ndarray
+            Fully-symmetric point set.
         """
 
         # if generator has no element
