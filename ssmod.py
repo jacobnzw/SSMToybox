@@ -516,7 +516,7 @@ class GaussianStateSpaceModel(StateSpaceModel):
 
     def state_noise_sample(self, size=None):
         """
-        Samples of the state noise.
+        Samples of the multivariate Gaussian state noise.
 
         Parameters
         ----------
@@ -533,7 +533,7 @@ class GaussianStateSpaceModel(StateSpaceModel):
 
     def measurement_noise_sample(self, size=None):
         """
-        Samples of the measurement noise.
+        Samples of the multivariate Gaussian measurement noise.
 
         Parameters
         ----------
@@ -550,7 +550,7 @@ class GaussianStateSpaceModel(StateSpaceModel):
 
     def initial_condition_sample(self, size=None):
         """
-        Samples of the initial state Gaussian distribution.
+        Samples of the multivariate Gaussian initial state.
 
         Parameters
         ----------
@@ -571,21 +571,30 @@ class StudentStateSpaceModel(StateSpaceModel):
     def __init__(self, x0_mean=None, x0_cov=None, x0_dof=None, q_mean=None, q_cov=None, q_dof=None, q_gain=None,
                  r_mean=None, r_cov=None, r_dof=None):
         """
-        State-space model where the noises are Student distributed.
-        Takes covariances instead of scale matrices.
+        State-space model where the state and measurement noises and the initial conditions are Student's t-distributed.
 
         Parameters
         ----------
-        x0_mean
-        x0_cov
-        x0_dof
-        q_mean
-        q_cov
-        q_dof
-        q_gain
-        r_mean
-        r_cov
-        r_dof
+        x0_mean : (dim_x, ) ndarray
+            Mean of the state at initial time step.
+
+        x0_cov : (dim_x, dim_x) ndarray
+            Covariance of the state at initial time step.
+
+        q_mean : (dim_q, ) ndarray
+            Mean of the state (process) noise.
+
+        q_cov : (dim_q, dim_q) ndarray
+            Covariance of the state (process) noise.
+
+        r_mean : (dim_r, ) ndarray
+            Mean of the measurement noise.
+
+        r_cov : (dim_r, dim_r) ndarray
+            Covariance of the measurement noise.
+
+        q_gain : (dim_x, dim_q) ndarray
+            Gain of the state (process) noise.
         """
         kwargs = {
             'x0_mean': x0_mean if x0_mean is not None else np.zeros(self.xD),
@@ -609,17 +618,19 @@ class StudentStateSpaceModel(StateSpaceModel):
 
         Parameters
         ----------
-        x : 1-D array_like of shape (self.xD,)
-            System state
-        q : 1-D array_like of shape (self.qD,)
-            System noise
-        pars : 1-D array_like
-            Parameters of the system dynamics
+        x : (dim_x, ) ndarray
+            System state.
+
+        q : (dim_q, ) ndarray
+            System noise.
+
+        pars : (dim_par, ) ndarray
+            Parameters of the system dynamics.
 
         Returns
         -------
-        1-D numpy.ndarray of shape (self.xD,)
-            system state in the next time step
+        : (dim_x, ) ndarray
+            System state in the next time step.
         """
         pass
 
@@ -631,17 +642,19 @@ class StudentStateSpaceModel(StateSpaceModel):
 
         Parameters
         ----------
-        x : 1-D array_like of shape (self.xD,)
-            system state
-        r : 1-D array_like of shape (self.rD,)
-            measurement noise
-        pars : 1-D array_like
-            parameters of the measurement model
+        x : (dim_x, ) ndarray
+            System state.
+
+        r : (dim_r, ) ndarray
+            Measurement noise.
+
+        pars : (dim_par, ) ndarray
+            Parameters of the measurement model.
 
         Returns
         -------
-        1-D numpy.ndarray of shape (self.zD,)
-            measurement of the state
+        : (dim_y, ) ndarray
+            Measurement of the state.
         """
         pass
 
@@ -656,11 +669,11 @@ class StudentStateSpaceModel(StateSpaceModel):
         Parameters
         ----------
         time : int
-            Discrete time step
+            Discrete time step.
 
         Returns
         -------
-        1-D numpy.ndarray of shape (self.pD,)
+        : (dim_par, ) ndarray
             Vector of parameters at a given time.
         """
         pass
@@ -673,20 +686,22 @@ class StudentStateSpaceModel(StateSpaceModel):
 
         Parameters
         ----------
-        x : 1-D array_like of shape (self.xD,)
-            System state
-        q : 1-D array_like of shape (self.qD,)
-            System noise
-        pars : 1-D array_like of shape (self.pD,)
-            System parameter
+        x : (dim_x, ) ndarray
+            System state.
+
+        q : (dim_q, ) ndarray
+            System noise.
+
+        pars : (dim_par, ) ndarray
+            Parameters of the system dynamics.
 
         Returns
         -------
-        2-D numpy.ndarray
+        : (dim_x, dim_x) or (dim_x, dim_x + dim_q) ndarray
             Jacobian matrix of the system dynamics, where the second dimension depends on the noise additivity.
             The shape depends on whether or not the state noise is additive. The two cases are:
-                * additive: (self.xD, self.xD)
-                * non-additive: (self.xD, self.xD + self.qD)
+                * additive: (dim_x, dim_x)
+                * non-additive: (dim_x, dim_x + dim_q)
         """
         pass
 
@@ -698,47 +713,87 @@ class StudentStateSpaceModel(StateSpaceModel):
 
         Parameters
         ----------
-        x : 1-D array_like of shape (self.xD,)
-            System state
-        r : 1-D array_like of shape (self.qD,)
-            Measurement noise
-        pars : 1-D array_like of shape (self.pD,)
-            System parameter
+        x : (dim_x, ) ndarray
+            System state.
+
+        r : (dim_r, ) ndarray
+            Measurement noise.
+
+        pars : (dim_par, ) ndarray
+            Parameters of the measurement model.
 
         Returns
         -------
-        2-D numpy.ndarray
+        : (dim_x, dim_x) or (dim_x, dim_x + dim_r) ndarray
             Jacobian matrix of the measurement model, where the second dimension depends on the noise additivity.
             The shape depends on whether or not the state noise is additive. The two cases are:
-                * additive: (self.xD, self.xD)
-                * non-additive: (self.xD, self.xD + self.rD)
+                * additive: (dim_x, dim_x)
+                * non-additive: (dim_x, dim_x + dim_r)
         """
         pass
 
     def state_noise_sample(self, size=None):
+        """
+        Samples of the multivariate Student's state noise.
+
+        Parameters
+        ----------
+        size : int or tuple, optional
+            Shape of the returned array of noise samples.
+
+        Returns
+        -------
+        : float or (size) ndarray
+            Samples of the Student's t-distributed state (process) noise.
+        """
         q_mean, q_cov, q_dof = self.get_pars('q_mean', 'q_cov', 'q_dof')
         return multivariate_t(q_mean, q_cov, q_dof, size).T
 
     def measurement_noise_sample(self, size=None):
+        """
+        Samples of the multivariate Student's measurement noise.
+
+        Parameters
+        ----------
+        size : int or tuple, optional
+            Shape of the returned array of noise samples.
+
+        Returns
+        -------
+        : float or (size) ndarray
+            Samples of the Student's t-distributed measurement noise.
+        """
         r_mean, r_cov, r_dof = self.get_pars('r_mean', 'r_cov', 'r_dof')
         return multivariate_t(r_mean, r_cov, r_dof, size).T
 
     def initial_condition_sample(self, size=None):
+        """
+        Samples of the multivariate Student's initial state.
+
+        Parameters
+        ----------
+        size : int or tuple, optional
+            Shape of the returned array of noise samples.
+
+        Returns
+        -------
+        : float or (size) ndarray
+            Samples of the Student's t-distributed system initial state.
+        """
         x0_mean, x0_cov, x0_dof = self.get_pars('x0_mean', 'x0_cov', 'x0_dof')
         return multivariate_t(x0_mean, x0_cov, x0_dof, size).T
 
 
 class FrequencyDemodulation(GaussianStateSpaceModel):
     """
-    Frequence demodulation experiment from [1]_
+    Frequency demodulation SSM from [1]_.
 
-    The objective is to estimate the frequency message $$ x_1 = \omega $$ from noisy in-phase and quadrature
+    The objective is to estimate the frequency message :math:`x_1 = \\omega` from noisy in-phase and quadrature
     observations.
 
-
     References
-    ==========
-    .. [1] Pakki, K., et al., (2011) Cubature Information Filter and its Applications, Proceedings of the ACC 2011
+    ----------
+    .. [1] Pakki, K., et al., Cubature Information Filter and its Applications, Proceedings of the ACC, 2011
     """
 
     xD = 2
@@ -782,6 +837,10 @@ class FrequencyDemodulation(GaussianStateSpaceModel):
 
 
 class VanDerPol(GaussianStateSpaceModel):
+    """
+    Van der Pol oscillator in 2D.
+
+    """
 
     xD = 2  # state dimension
     zD = 1  # measurement dimension
@@ -822,6 +881,9 @@ class VanDerPol(GaussianStateSpaceModel):
 
 
 class Pendulum(GaussianStateSpaceModel):
+    """
+    Pendulum in 2D.
+    """
 
     xD = 2  # state dimension
     zD = 1  # measurement dimension
@@ -990,22 +1052,35 @@ class CoordinatedTurnBOT(GaussianStateSpaceModel):
 
 class CoordinatedTurnRadar(GaussianStateSpaceModel):
     """
-    Maneuvering target tracking using radar measurements .
+    Tracking of a maneuvering target in 2D using radar measurements.
 
-    TODO:
-    Coordinated turn model [1]_ assumes constant turn rate (not implemented).
-    Model in [2]_ is implemented here, where the turn rate can change in time and measurements are range and bearing.
-    [3]_ considers only bearing measurements.
+    Parameters
+    ----------
+    dt : float
+        Time interval between two consecutive measurements in seconds.
 
-    State
+    sensor_pos : (num_sensors, 2) ndarray
+        Array containing sensor [x, y] positions in rows.
+
+    Notes
     -----
-    x = [x_1, v_1, x_2, v_2, omega]
-        x_1, x_2 - target position [m]
-        v_1, v_2 - target velocity [m/s]
-        omega - target turn rate [deg/s]
+    Coordinated turn model [1]_ assumes constant turn rate (not implemented). Model in [2]_ is implemented here, where
+    the turn rate can change in time and measurements are range and bearing. [3]_ considers only bearing measurements.
 
-    Measurements
-    ------------
+    State: :math:`\\mathbf{x} = [x, \dot{x}, y, \dot{y}, \\omega]`, where
+
+        :math`x`, :math:`y`
+            target position in 2D [m]
+        :math`\\dot{x}`, :math`\\dot{y}`
+            target velocity [m/s]
+        :math:`\\omega`
+            target turn rate [deg/s]
+
+    Measurements: there are `num_sensors` of bearing measurements, given by
+    .. math::
+    \[
+        \\theta_s = \\mathrm{atan2}\\left( \\frac{y - y_s}{x - x_s} \\right)
+    \]
 
 
     References
@@ -1029,15 +1104,6 @@ class CoordinatedTurnRadar(GaussianStateSpaceModel):
     rho_1, rho_2 = 0.5, 1e-6  # noise intensities
 
     def __init__(self, dt=0.2, sensor_pos=np.vstack((np.eye(2), -np.eye(2)))):
-        """
-
-        Parameters
-        ----------
-        dt :
-            time interval between two consecutive measurements
-        sensor_pos :
-            sensor [x, y] positions in rows
-        """
         self.dt = dt
         self.sensor_pos = sensor_pos  # np.vstack((np.eye(2), -np.eye(2)))
         kwargs = {
@@ -1057,19 +1123,24 @@ class CoordinatedTurnRadar(GaussianStateSpaceModel):
 
     def dyn_fcn(self, x, q, *args):
         """
-        Model describing an object in 2D plane moving with constant speed (magnitude of the velocity vector) and
+        Equation describing an object in 2D plane moving with constant speed (magnitude of the velocity vector) and
         turning with a constant angular rate (executing a coordinated turn).
 
         Parameters
         ----------
-        x
-        q
-        args
+        x : (dim_x, ) ndarray
+            State vector.
 
+        q : (dim_q, ) ndarray
+            State noise vector.
+
+        args : tuple
+            Unused.
 
         Returns
         -------
-
+        : (dim_x, ) ndarray
+            System state in the next time step.
         """
         om = x[4]
         a = np.sin(om * self.dt)
@@ -1089,13 +1160,19 @@ class CoordinatedTurnRadar(GaussianStateSpaceModel):
 
         Parameters
         ----------
-        x
-        r
-        args
+        x : (dim_x, ) ndarray
+            State vector.
+
+        r : (dim_r, ) ndarray
+            Measurement noise vector.
+
+        args : tuple
+            Unused.
 
         Returns
         -------
-
+        : (dim_y, ) ndarray
+            Bearing measurements provided by each sensor.
         """
         a = x[2] - self.sensor_pos[:, 1]
         b = x[0] - self.sensor_pos[:, 0]
@@ -1113,19 +1190,30 @@ class CoordinatedTurnRadar(GaussianStateSpaceModel):
 
 class ReentryRadar(GaussianStateSpaceModel):
     """
-    Radar tracking of the reentry vehicle as described in [1]_.
+    Radar tracking of the reentry vehicle entering Earth's atmosphere as described in [1]_.
+
+    Parameters
+    ----------
+    dt : float
+        Time interval between two consecutive measurements.
+
+    Notes
+    -----
     Vehicle is entering Earth's atmosphere at high altitude and with great speed, ground radar is tracking it.
 
-    State
-    -----
-    [px, py, vx, vy, x5]
-    (px, py) - position,
-    (vx, vy) - velocity,
-    x5 - aerodynamic parameter
+    State: :math:`\\mathbf{x} = [x, y, \\dot{x}, \\dot{y}, \\omega]`, where
+        :math:`x`, :math:`y`
+            Position in 2D.
+        :math:`\\dot{x}`, :math:`\\dot{y}`
+            Velocity in 2D.
+        :math:`\\omega`
+            Aerodynamic parameter.
 
-    Measurements
-    ------------
-    range and bearing
+    Measurements: :math:`\\mathbf{y} = [r, \\theta]`, where
+        :math:`r`
+            Range to target.
+        :math:`\\theta`
+            Bearing to the target.
 
 
     References
@@ -1150,13 +1238,6 @@ class ReentryRadar(GaussianStateSpaceModel):
     sx, sy = R0, 0  # radar location
 
     def __init__(self, dt=0.1):
-        """
-
-        Parameters
-        ----------
-        dt :
-            time interval between two consecutive measurements
-        """
         self.dt = dt
         kwargs = {
             'x0_mean': np.array([6500.4, 349.14, -1.8093, -6.7967, 0.6932]),  # m, m/s, m m/s, rad/s
@@ -1174,6 +1255,25 @@ class ReentryRadar(GaussianStateSpaceModel):
         super(ReentryRadar, self).__init__(**kwargs)
 
     def dyn_fcn(self, x, q, pars):
+        """
+        Equation describing dynamics of the reentry vehicle.
+
+        Parameters
+        ----------
+        x : (dim_x, ) ndarray
+            State vector.
+
+        q : (dim_q, ) ndarray
+            State noise vector.
+
+        pars :
+            Unused.
+
+        Returns
+        -------
+        : (dim_x, ) ndarray
+            System state in the next time step.
+        """
         # scaled ballistic coefficient
         b = self.b0 * np.exp(x[4])
         # distance from center of the Earth
@@ -1191,6 +1291,25 @@ class ReentryRadar(GaussianStateSpaceModel):
                          x[4] + q[2]])
 
     def meas_fcn(self, x, r, pars):
+        """
+        Bearing measurement from the sensor to the moving object.
+
+        Parameters
+        ----------
+        x : (dim_x, ) ndarray
+            State vector.
+
+        r : (dim_r, ) ndarray
+            Measurement noise vector.
+
+        pars : tuple
+            Unused.
+
+        Returns
+        -------
+        : (dim_y, ) ndarray
+            Range and bearing measurements.
+        """
         # range
         rng = np.sqrt((x[0] - self.sx) ** 2 + (x[1] - self.sy) ** 2)
         # bearing
@@ -1209,26 +1328,34 @@ class ReentryRadar(GaussianStateSpaceModel):
 
 class ReentryRadarSimple(GaussianStateSpaceModel):
     """
-    Radar tracking of the reentry vehicle as described in [1]_.
-    Vehicle is entering Earth's atmosphere at high altitude and with great speed, ground radar is tracking it.
+    Simplified model of the reentry vehicle entering Earth's atmosphere.
 
-    State
+    Parameters
+    ----------
+    dt : float
+        Time interval between two consecutive measurements.
+
+    Notes
     -----
-    [px, py, vx, vy, x5]
-    (px, py) - position,
-    (vx, vy) - velocity,
-    x5 - aerodynamic parameter
+    The object moves only vertically and the radar is positioned at 30km above the ground and 30km away from the
+    vertical path of the falling object.
 
-    Measurements
-    ------------
-    range and bearing
+    State: :math:`\\mathbf{x} = [y, \\dot{y}, \\omega]`, where
+        :math:`y`
+            Position.
+        :math:`\\dot{y}`
+            Velocity.
+        :math:`\\omega`
+            Aerodynamic parameter.
 
+    Measurements: :math:`y = r`, where
+        :math:`r`
+            Range to target.
 
     References
     ----------
     .. [1] Julier, S. J., & Uhlmann, J. K. (2004). Unscented Filtering and Nonlinear Estimation.
            Proceedings of the IEEE, 92(3), 401-422
-
     """
 
     xD = 3
@@ -1244,13 +1371,6 @@ class ReentryRadarSimple(GaussianStateSpaceModel):
     Gamma = 1/6.096
 
     def __init__(self, dt=0.1):
-        """
-
-        Parameters
-        ----------
-        dt :
-            time interval between two consecutive measurements
-        """
         self.dt = dt
         kwargs = {
             'x0_mean': np.array([90, 6, 1.7]),  # km, km/s
@@ -1266,11 +1386,49 @@ class ReentryRadarSimple(GaussianStateSpaceModel):
         super(ReentryRadarSimple, self).__init__(**kwargs)
 
     def dyn_fcn(self, x, q, pars):
+        """
+        Discretized equation describing simplified dynamics of the reentry vehicle.
+
+        Parameters
+        ----------
+        x : (dim_x, ) ndarray
+            State vector.
+
+        q : (dim_q, ) ndarray
+            State noise vector.
+
+        pars :
+            Unused.
+
+        Returns
+        -------
+        : (dim_x, ) ndarray
+            System state in the next time step.
+        """
         return np.array([x[0] - self.dt * x[1] + q[0],
                          x[1] - self.dt * np.exp(-self.Gamma*x[0])*x[1]**2*x[2] + q[1],
                          x[2] + q[2]])
 
     def meas_fcn(self, x, r, pars):
+        """
+        Range (distance) to the target.
+
+        Parameters
+        ----------
+        x : (dim_x, ) ndarray
+            State vector.
+
+        r : (dim_r, ) ndarray
+            Measurement noise vector.
+
+        pars : tuple
+            Unused.
+
+        Returns
+        -------
+        : (dim_y, ) ndarray
+            Range measurement.
+        """
         # range
         rng = np.sqrt(self.sx ** 2 + (x[0] - self.sy) ** 2)
         return np.array([rng]) + r
