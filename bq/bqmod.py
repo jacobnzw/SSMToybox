@@ -9,67 +9,73 @@ from .bqkern import RBF, RQ, RBFStudent
 from mtran import SphericalRadial, Unscented, GaussHermite, FullySymmetricStudent
 
 
-# TODO: documentation
-
-
 class Model(object, metaclass=ABCMeta):
     """
-    A parent class for all models of the integrated function in the BQ quadrature context. It is intended to be used
+    Base class for all models of the integrated function in the BQ quadrature context. It is intended to be used
     by the subclasses of the `BQTransform` (i.e. Gaussian process and t-process quadrature moment transforms). The
     Model class ties together the kernel and the point-set used by the underlying quadrature rule. In modelling
     terms, the Model is composed of a kernel and point-set, that is, `Model` *has-a* `Kernel` and `points`.
 
-    Assumptions
-    -----------
-      - The model of the integrand relies on a Kernel class, that is, it is either a GP or TP regression model.
+    Parameters
+    ----------
+    dim : int
+        Dimension of the points (integration domain).
+
+    kern_par : ndarray
+        Kernel parameters in a vector.
+
+    kernel : str
+        String abbreviation for the kernel.
+
+    points : str
+        String abbreviation for the point-set.
+
+    point_par : dict
+        Any parameters for constructing desired point-set.
 
     Attributes
     ----------
     Model._supported_points_ : list
         Each element of the list is an acronym of a point-set.
+
     Model._supported_kernels_ : list
         Each element of the list is an acronym of a kernel.
+
     kernel : Kernel
         Kernel used by the Model.
-    points : numpy.ndarray
+
+    points : ndarray
         Quadrature rule point-set.
-    str_pts : string
-    str_pts_par : string
+
+    str_pts : str
+    str_pts_par : str
         String representation of the kernel parameter values.
+
     emv : float
         Expected model variance.
+
     ivar : float
         Variance of the integral.
+
     dim_in : int
         Dimension of the point-set.
+
     num_pts : int
         Number of points.
-    eye_d
-    eye_n : numpy.ndarray
+
+    eye_d : ndarray
+    eye_n : ndarray
         Pre-allocated identity matrices to ease the computations.
+
+    Notes
+    -----
+    The model of the integrand relies on a Kernel class, that is, it is either a GP or TP regression model.
     """
 
     _supported_points_ = ['sr', 'ut', 'gh', 'fs']
     _supported_kernels_ = ['rbf', 'rq', 'rbf-student']
 
     def __init__(self, dim, kern_par, kernel, points, point_par=None):
-        """
-        Initialize model of the integrand with specified kernel and point set.
-
-        Parameters
-        ----------
-        dim : int
-            Dimension of the points (integration domain).
-        kern_par : numpy.ndarray
-            Kernel parameters in a vector.
-        kernel : string
-            String abbreviation for the kernel.
-        points : string
-            String abbreviation for the point-set.
-        point_par : dict
-            Any parameters for constructing desired point-set.
-        """
-
         # init kernel and sigma-points
         self.kernel = Model.get_kernel(dim, kernel, kern_par)
         self.points = Model.get_points(dim, points, point_par)
@@ -91,7 +97,7 @@ class Model(object, metaclass=ABCMeta):
 
         Returns
         -------
-        string
+        : str
             String representation including short name of the point-set, the kernel and its parameter values.
         """
         return '{}\n{} {}'.format(self.kernel, self.str_pts, self.str_pts_par)
@@ -104,13 +110,19 @@ class Model(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        par : array_like
+        par : ndarray
+            Kernel parameters.
 
         Returns
         -------
-        : tuple
-        Weights for computation of the transformed mean, covariance and cross-covariance in a tuple ``(wm, Wc, Wcc)``.
+        wm : ndarray
+            Weights for computation of the transformed mean.
 
+        Wc : ndarray
+            Weights for computation of the transformed covariance.
+
+        Wcc : ndarray
+            Weights for computation of the transformed cross-covariance.
         """
         par = self.kernel.get_parameters(par)
         x = self.points
@@ -141,23 +153,28 @@ class Model(object, metaclass=ABCMeta):
         """
         Model predictions based on test points and the kernel parameters.
 
-        Notes
-        -----
-        This is an abstract method. Implementation needs to be provided by the subclass.
-
         Parameters
         ----------
-        test_data : numpy.ndarray
+        test_data : ndarray
             Test points where to generate data.
-        fcn_obs : numpy.ndarray
+
+        fcn_obs : ndarray
             Observed function values at the point-set locations.
-        par : numpy.ndarray
+
+        par : ndarray
             Kernel parameters, default `par=None`.
 
         Returns
         -------
-        (mean, var)
-            Model predictive mean and variance at the test point locations.
+        mean : ndarray
+            Model predictive mean at the test point locations.
+
+        var : ndarray
+            Model predictive variance at the test point locations.
+
+        Notes
+        -----
+        This is an abstract method. Implementation needs to be provided by the subclass.
         """
         pass
 
@@ -166,20 +183,20 @@ class Model(object, metaclass=ABCMeta):
         """
         Expected model variance given the function observations and the kernel parameters.
 
-        Notes
-        -----
-        This is an abstract method. Implementation needs to be provided by the subclass and should be easily
-        accomplished using the kernel expectation method from the `Kernel` class.
-
         Parameters
         ----------
-        fcn_obs : numpy.ndarray
+        fcn_obs : ndarray
             Observed function values at the point-set locations.
 
         Returns
         -------
-        float
+        : float
             Expected model variance.
+
+        Notes
+        -----
+        This is an abstract method. Implementation needs to be provided by the subclass and should be easily
+        accomplished using the kernel expectation method from the `Kernel` class.
         """
         pass
 
@@ -195,9 +212,10 @@ class Model(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        fcn_obs : numpy.ndarray
+        fcn_obs : ndarray
             Observed function values at the point-set locations.
-        par : numpy.ndarray
+
+        par : ndarray
             Kernel parameters, default `par=None`.
 
         Returns
@@ -213,20 +231,18 @@ class Model(object, metaclass=ABCMeta):
         Negative logarithm of marginal likelihood of the model given the kernel parameters and the function
         observations.
 
-        Notes
-        -----
-        Intends to be used as an objective function passed into the optimizer, thus it needs to subscribe to certain
-        implementation conventions.
-
         Parameters
         ----------
-        log_par : numpy.ndarray
+        log_par : ndarray
             Logarithm of the kernel parameters.
-        fcn_obs : numpy.ndarray
+
+        fcn_obs : ndarray
             Observed function values at the inputs supplied in `x_obs`.
-        x_obs : numpy.ndarray
+
+        x_obs : ndarray
             Function inputs.
-        jitter : numpy.ndarray
+
+        jitter : ndarray
             Regularization term for kernel matrix inversion.
 
         Returns
@@ -234,6 +250,10 @@ class Model(object, metaclass=ABCMeta):
         float
             Negative log marginal likelihood.
 
+        Notes
+        -----
+        Intends to be used as an objective function passed into the optimizer, thus it needs to subscribe to certain
+        implementation conventions.
         """
         pass
 
@@ -243,13 +263,15 @@ class Model(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        log_par : numpy.ndarray
+        log_par : ndarray
             Logarithm of the kernel parameters.
-        fcn_obs : numpy.ndarray
+
+        fcn_obs : ndarray
             Observed function values at the point-set locations.
 
         Returns
         -------
+        : float
             Sum of negative marginal log-likelihood and expected model variance.
         """
         # negative marginal log-likelihood w/ additional regularizing term
@@ -266,9 +288,10 @@ class Model(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        log_par : numpy.ndarray
+        log_par : ndarray
             Logarithm of the kernel parameters.
-        fcn_obs : numpy.ndarray
+
+        fcn_obs : ndarray
             Observed function values at the point-set locations.
 
         Returns
@@ -287,26 +310,33 @@ class Model(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        log_par_0 : numpy.ndarray
+        log_par_0 : ndarray
             Initial guess of the kernel log-parameters.
-        fcn_obs : numpy.ndarray
+
+        fcn_obs : ndarray
             Observed function values at the point-set locations.
-        x_obs : numpy.ndarray
+
+        x_obs : ndarray
             Function inputs.
-        crit : string
-            Objective function to use as a criterion for finding optimal setting of kernel parameters. Possible
-            values are:
-              - 'nlml' : negative marginal log-likelihood,
-              - 'nlml+emv' : NLML with expected model variance as regularizer,
-              - 'nlml+ivar' : NLML with integral variance as regularizer.
-        method : string
+
+        crit : str
+            Objective function to use as a criterion for finding optimal setting of kernel parameters.
+            'nlml'
+                Negative marginal log-likelihood.
+            'nlml+emv'
+                NLML with expected model variance as regularizer.
+            'nlml+ivar'
+                NLML with integral variance as regularizer.
+
+        method : str
             Optimization method for `scipy.optimize.minimize`, default method='BFGS'.
+
         **kwargs
             Keyword arguments for the `scipy.optimize.minimize`.
 
         Returns
         -------
-        scipy.optimize.OptimizeResult
+        : scipy.optimize.OptimizeResult
             Results of the optimization in a dict-like structure returned by `scipy.optimize.minimize`.
 
         Notes
@@ -339,26 +369,29 @@ class Model(object, metaclass=ABCMeta):
         Plot of predictive mean and variance of the fitted model of the integrand. Since we're plotting a function with
         multiple inputs and outputs, we need to specify which is to be plotted.
 
-        Notes
-        -----
-        Not tested very much, likely to misbehave.
-
         Parameters
         ----------
-        test_data : numpy.ndarray
+        test_data : ndarray
             1D array of locations, where the function is to be evaluated for plotting.
-        fcn_obs : numpy.ndarray
+
+        fcn_obs : ndarray
             Observed function values at the point-set locations.
-        par : numpy.ndarray
+
+        par : ndarray
             Kernel parameters, default `par=None`.
+
         fcn_true :
-            True function values
+            True function values.
+
         in_dim : int
             Index of the input dimension to plot.
 
         Returns
         -------
 
+        Notes
+        -----
+        Not tested very much, likely to misbehave.
         """
         assert in_dim <= self.dim_in - 1
 
@@ -395,12 +428,13 @@ class Model(object, metaclass=ABCMeta):
 
         points : string
             String abbreviation for the point-set.
+
         point_par : dict
             Parameters for constructing desired point-set.
 
         Returns
         -------
-        numpy.ndarray
+        : ndarray
             Point set in (D, N) array, where D is dimension and N number of points.
 
         Notes
@@ -436,9 +470,11 @@ class Model(object, metaclass=ABCMeta):
         ----------
         dim : int
             Dimension of input (integration domain).
-        kernel : string
+
+        kernel : str
             String abbreviation of the kernel.
-        par : numpy.ndarray
+
+        par : ndarray
             Parameters of the kernel.
 
         Returns
@@ -480,12 +516,16 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         ----------
         dim : int
             Number of input dimensions.
-        kern_par : numpy.ndarray
+
+        kern_par : ndarray
             Kernel parameters in matrix.
-        kernel : string
+
+        kernel : str
             Acronym of the covariance function of the Gaussian process model.
-        points : string
+
+        points : str
             Acronym for the sigma-point set to use in BQ.
+
         point_par : dict
             Parameters of the sigma-point set.
         """
@@ -498,20 +538,25 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
         Parameters
         ----------
-        test_data : numpy.ndarray
-            Test data, shape (D, M)
-        fcn_obs : numpy.ndarray
+        test_data : ndarray
+            Test data, shape (D, M).
+
+        fcn_obs : ndarray
             Observations of the integrand at sigma-points.
-        x_obs : numpy.ndarray
+
+        x_obs : ndarray
             Training inputs.
-        par : numpy.ndarray
+
+        par : ndarray
             Kernel parameters.
 
         Returns
         -------
-        : tuple
-            Predictive mean and variance in a tuple (mean, var).
+        mean : ndarray
+            Predictive mean.
 
+        var : ndarray
+            Predictive variance.
         """
 
         if x_obs is None:
@@ -530,28 +575,32 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
     def exp_model_variance(self, fcn_obs):
         """
+        Expected model variance.
 
         Parameters
         ----------
-        fcn_obs : numpy.ndarray
-        Q : numpy.ndarray
-        iK : numpy.ndarray
+        fcn_obs : ndarray
+            Function evaluations.
 
         Returns
         -------
         : float
-
+            Expected model variance.
         """
 
         return self.kernel.scale.squeeze() ** 2 * (1 - np.trace(self.Q.dot(self.iK)))
 
     def integral_variance(self, fcn_obs, par=None):
         """
+        Variance of the integral.
 
         Parameters
         ----------
-        fcn_obs : numpy.ndarray
-        par : numpy.ndarray
+        fcn_obs : ndarray
+            Function evaluations.
+
+        par : ndarray
+            Kernel parameters.
 
         Returns
         -------
@@ -573,7 +622,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
         .. math::
         \[
-        -\log p(Y \mid X, \theta) = -\sum_{e=1}^{\mathrm{dim_out}} \log p(y_e \mid X, \theta)
+        -\\log p(Y \\mid X, \\theta) = -\\sum_{e=1}^{\\mathrm{dim_out}} \\log p(y_e \\mid X, \\theta)
         \]
 
         where :math:`y_e` is e-th column of :math:`Y`. We have the same parameters :math:`\theta` for all outputs,
@@ -582,23 +631,26 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
 
         Parameters
         ----------
-        log_par : numpy.ndarray
-            Kernel log-parameters, shape (num_par, ).
-        fcn_obs : numpy.ndarray
-            Function values, shape (num_pts, dim_out).
-        x_obs : numpy.ndarray
-            Function inputs, shape ().
-        jitter : numpy.ndarray
+        log_par : (num_par, ) ndarray
+            Kernel log-parameters.
+
+        fcn_obs : (num_pts, dim_out) ndarray
+            Function values.
+
+        x_obs : ndarray
+            Function inputs.
+
+        jitter : ndarray
             Regularization term for kernel matrix inversion.
+
+        Returns
+        -------
+        : float
+            Negative log-likelihood and gradient for given parameter.
 
         Notes
         -----
         Used as an objective function by the `Model.optimize()` to find an estimate of the kernel parameters.
-
-        Returns
-        -------
-        Negative log-likelihood and gradient for given parameter.
-
         """
 
         # convert from log-par to par
@@ -631,20 +683,25 @@ class StudentTProcess(Model):
 
     def __init__(self, dim, kern_par, kernel='rbf', points='ut', point_par=None, nu=3.0):
         """
-        Student t process regression model.
+        Student's t-process regression model.
 
         Parameters
         ----------
         dim : int
             Number of input dimensions.
-        kern_par : numpy.ndarray
+
+        kern_par : ndarray
             Kernel parameters in matrix.
-        kernel : string
+
+        kernel : str
             Acronym of the covariance function of the Gaussian process model.
-        points : string
+
+        points : str
             Acronym for the sigma-point set to use in BQ.
+
         point_par : dict
             Parameters of the sigma-point set.
+
         nu : float
             Degrees of freedom.
         """
@@ -655,25 +712,32 @@ class StudentTProcess(Model):
 
     def predict(self, test_data, fcn_obs, x_obs=None, par=None, nu=None):
         """
-        Student t process predictions.
+        Student's t-process predictions.
 
         Parameters
         ----------
-        test_data : numpy.ndarray
-            Test data, shape (D, M)
-        fcn_obs : numpy.ndarray
+        test_data : (D, M) ndarray
+            Test data.
+
+        fcn_obs : ndarray
             Observations of the integrand at sigma-points.
-        x_obs : numpy.ndarray
+
+        x_obs : ndarray
             Training inputs.
-        par : numpy.ndarray
+
+        par : ndarray
             Kernel parameters.
+
         nu : float
             Degrees of freedom.
 
         Returns
         -------
-        : tuple
-            Predictive mean and variance in a tuple (mean, var).
+        mean : ndarray
+            Predictive mean.
+
+        var : ndarray
+            Predictive variance.
 
         """
 
@@ -693,17 +757,17 @@ class StudentTProcess(Model):
 
     def exp_model_variance(self, fcn_obs):
         """
+        Expected model variance.
 
         Parameters
         ----------
-        fcn_obs
-        par
-        Q
-        iK
+        fcn_obs : ndarray
+            Function evaluations.
 
         Returns
         -------
-
+        : float
+            Expected model variance.
         """
 
         fcn_obs = np.squeeze(fcn_obs)
@@ -712,14 +776,19 @@ class StudentTProcess(Model):
 
     def integral_variance(self, fcn_obs, par=None):
         """
+        Variance of the integral.
 
         Parameters
         ----------
-        fcn_obs
-        par
+        fcn_obs : ndarray
+            Function evaluations.
+
+        par : ndarray
+            Kernel parameters.
 
         Returns
         -------
+        : float
 
         """
 
@@ -735,27 +804,30 @@ class StudentTProcess(Model):
 
     def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
         """
-        Negative marginal log-likelihood of Student t process regression model.
+        Negative marginal log-likelihood of Student's t-process regression model.
 
         Parameters
         ----------
-        log_par : numpy.ndarray
-            Kernel log-parameters, shape (num_par, ).
-        fcn_obs : numpy.ndarray
-            Function values, shape (num_pts, dim_out).
-        x_obs : numpy.ndarray
-            Function inputs, shape ().
-        jitter : numpy.ndarray
+        log_par : (num_par, ) ndarray
+            Kernel log-parameters.
+
+        fcn_obs : (num_pts, dim_out) ndarray
+            Function values.
+
+        x_obs : ndarray
+            Function inputs.
+
+        jitter : ndarray
             Regularization term for kernel matrix inversion.
+
+        Returns
+        -------
+        : float
+            Negative log-likelihood and gradient for given parameter.
 
         Notes
         -----
         Used as an objective function by the `Model.optimize()` to find an estimate of the kernel parameters.
-
-        Returns
-        -------
-        Negative log-likelihood and gradient for given parameter.
-
         """
 
         # convert from log-par to par
@@ -799,17 +871,19 @@ class MultiOutputModel(Model):
 
         Parameters
         ----------
-        par : numpy.ndarray of shape (dim_out, num_par)
+        par : (dim_out, num_par) ndarray
             Kernel parameters in a matrix, where e-th row contains parameters for e-th output.
 
         Returns
         -------
-        : tuple (w_m, w_c, w_cc)
-            GP quadrature weights for the mean (w_m), covariance (w_c) and cross-covariance (w_cc).
-            w_m : numpy.ndarray of shape (num_pts, dim_out)
-            w_c : numpy.ndarray of shape (num_pts, num_pts, dim_out, dim_out)
-            w_cc : numpy.ndarray of shape (dim_in, num_pts, dim_out)
+        wm : (num_pts, dim_out) ndarray
+            Multi-output GP quadrature weights for the mean.
 
+        wc : (num_pts, num_pts, dim_out, dim_out) ndarray
+            Multi-output GP quadrature weights for the mean.
+
+        wcc : (dim_in, num_pts, dim_out) ndarray
+            Multi-output GP quadrature weights for the cross-covariance.
         """
 
         # if kern_par=None return parameters stored in Kernel
@@ -860,26 +934,31 @@ class MultiOutputModel(Model):
 
         Parameters
         ----------
-        log_par_0 : numpy.ndarray
+        log_par_0 : ndarray
             Initial guess of the kernel log-parameters.
-        fcn_obs : numpy.ndarray
+
+        fcn_obs : ndarray
             Observed function values at the point-set locations.
-        x_obs : numpy.ndarray
+
+        x_obs : ndarray
             Function inputs.
-        crit : string
+
+        crit : str
             Objective function to use as a criterion for finding optimal setting of kernel parameters. Possible
             values are:
               - 'nlml' : negative marginal log-likelihood,
               - 'nlml+emv' : NLML with expected model variance as regularizer,
               - 'nlml+ivar' : NLML with integral variance as regularizer.
-        method : string
+
+        method : str
             Optimization method for `scipy.optimize.minimize`, default method='BFGS'.
+
         **kwargs
             Keyword arguments for the `scipy.optimize.minimize`.
 
         Returns
         -------
-        scipy.optimize.OptimizeResult
+        : scipy.optimize.OptimizeResult
             Results of the optimization in a dict-like structure returned by `scipy.optimize.minimize`.
 
         Notes
@@ -919,8 +998,10 @@ class MultiOutputModel(Model):
         ----------
         test_data : numpy.ndarray
             Test points where to generate data.
+
         fcn_obs : numpy.ndarray
             Observed function values at the point-set locations.
+
         par : numpy.ndarray
             Kernel parameters, default `par=None`.
 
@@ -967,6 +1048,7 @@ class MultiOutputModel(Model):
         ----------
         fcn_obs : numpy.ndarray
             Observed function values at the point-set locations.
+
         par : numpy.ndarray
             Kernel parameters, default `par=None`.
 
@@ -983,19 +1065,17 @@ class MultiOutputModel(Model):
         Negative logarithm of marginal likelihood of the model given the kernel parameters and the function
         observations.
 
-        Notes
-        -----
-        Intends to be used as an objective function passed into the optimizer, thus it needs to subscribe to certain
-        implementation conventions.
-
         Parameters
         ----------
         log_par : numpy.ndarray
             Logarithm of the kernel parameters.
+
         fcn_obs : numpy.ndarray
             Observed function values at the inputs supplied in `x_obs`.
+
         x_obs : numpy.ndarray
             Function inputs.
+
         jitter : numpy.ndarray
             Regularization term for kernel matrix inversion.
 
@@ -1004,6 +1084,10 @@ class MultiOutputModel(Model):
         float
             Negative log marginal likelihood.
 
+        Notes
+        -----
+        Intends to be used as an objective function passed into the optimizer, thus it needs to subscribe to certain
+        implementation conventions.
         """
         pass
 
@@ -1021,14 +1105,19 @@ class GaussianProcessMO(MultiOutputModel):  # TODO: Multiple inheritance could b
         ----------
         dim_in : int
             Number of input dimensions.
+
         dim_out : int
             Number of output dimensions.
+
         kern_par : numpy.ndarray
             Kernel parameters in matrix.
+
         kernel : string
             Acronym of the covariance function of the Gaussian process model.
+
         points : string
             Acronym for the sigma-point set to use in BQ.
+
         point_par : dict
             Parameters of the sigma-point set.
         """
@@ -1042,9 +1131,11 @@ class GaussianProcessMO(MultiOutputModel):  # TODO: Multiple inheritance could b
         Parameters
         ----------
         test_data : numpy.ndarray
-            Test data, shape (dim_in, num_test)
+            Test data, shape (dim_in, num_test).
+
         fcn_obs : numpy.ndarray
             Observations of the integrand at sigma-points, shape (dim_out, num_pts)?
+
         par : numpy.ndarray
             Kernel parameters.
 
@@ -1096,21 +1187,23 @@ class GaussianProcessMO(MultiOutputModel):  # TODO: Multiple inheritance could b
         ----------
         log_par : numpy.ndarray
             Kernel log-parameters, shape (num_par, ).
+
         fcn_obs : numpy.ndarray
             Function values, shape (num_pts, dim_out).
+
         x_obs : numpy.ndarray
             Function inputs, shape ().
+
         jitter : numpy.ndarray
             Regularization term for kernel matrix inversion.
-
-        Notes
-        -----
-        Used as an objective function by the `Model.optimize()` to find an estimate of the kernel parameters.
 
         Returns
         -------
         Negative log-likelihood and gradient for given parameter.
 
+        Notes
+        -----
+        Used as an objective function by the `Model.optimize()` to find an estimate of the kernel parameters.
         """
 
         # convert from log-par to par
@@ -1144,14 +1237,19 @@ class StudentTProcessMO(MultiOutputModel):
         ----------
         dim_in : int
             Number of input dimensions.
+
         dim_out : int
             Number of output dimensions.
-        kern_par : numpy.ndarray
+
+        kern_par : ndarray
             Kernel parameters in matrix.
-        kernel : string
+
+        kernel : str
             Acronym of the covariance function of the Gaussian process model.
-        points : string
+
+        points : str
             Acronym for the sigma-point set to use in BQ.
+
         point_par : dict
             Parameters of the sigma-point set.
         """
@@ -1193,23 +1291,28 @@ class StudentTProcessMO(MultiOutputModel):
 
         Parameters
         ----------
-        log_par : numpy.ndarray
+        log_par : ndarray
             Kernel log-parameters, shape (num_par, ).
-        fcn_obs : numpy.ndarray
+
+        fcn_obs : ndarray
             Function values, shape (num_pts, dim_out).
-        x_obs : numpy.ndarray
+
+        x_obs : ndarray
             Function inputs, shape ().
-        jitter : numpy.ndarray
+
+        jitter : ndarray
             Regularization term for kernel matrix inversion.
+
+        Returns
+        -------
+        value : float
+            Negative log-likelihood.
+        grad : ndarray
+            Negative log-likelihood gradient.
 
         Notes
         -----
         Used as an objective function by the `Model.optimize()` to find an estimate of the kernel parameters.
-
-        Returns
-        -------
-        Negative log-likelihood and gradient for given parameter.
-
         """
 
         # convert from log-par to par
