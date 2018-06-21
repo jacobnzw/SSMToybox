@@ -6,10 +6,47 @@ from numpy.linalg import cholesky
 
 from mtran import MomentTransform
 
-# TODO: docstrings
-
 
 class BQTransform(MomentTransform, metaclass=ABCMeta):
+    """
+    Base class for Bayesian Quadrature moment transforms.
+
+    Parameters
+    ----------
+    dim_in : int
+        Dimensionality of the input.
+
+    dim_out : int
+        Dimensionality of the output.
+
+    kern_par : ndarray
+        Kernel parameters.
+
+    model : str {'gp', 'tp', 'gp-mo', 'tp-mo'}
+        Probabilistic model of the integrand.
+        'gp'
+            Gaussian process.
+        'tp'
+            Student's t-process.
+        'gp-mo'
+            Multi-output Gaussian process.
+        'tp-mo'
+            Multi-output Student's t-process.
+
+    kernel : str {'rbf'}
+        Kernel of the integrand model.
+
+    points : str {'ut', 'sr', 'gh', 'fs'}
+        Sigma-point set for representing the input probability density.
+
+    point_par : dict
+        Sigma-point set parameters.
+
+    Attributes
+    ----------
+    BQTransform._supported_models_ : list ['gp', 'gp-mo', 'tp', 'tp-mo']
+        The implemented probabilistic models of the integrand.
+    """
 
     # list of supported models for the integrand
     _supported_models_ = ['gp', 'gp-mo', 'tp', 'tp-mo']  # mgp, gpder, ...
@@ -28,20 +65,29 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         ----------
         f : func
             Integrand, transforming function of the random variable.
-        mean : numpy.ndarray
+
+        mean : ndarray
             Input mean.
-        cov : numpy.ndarray
+
+        cov : ndarray
             Input covariance.
-        fcn_par : numpy.ndarray
+
+        fcn_par : ndarray
             Integrand parameters.
-        kern_par : numpy.ndarray
+
+        kern_par : ndarray
             Kernel parameters.
 
         Returns
         -------
-        : tuple
-            Transformed mean, covariance and cross-covariance in tuple.
+        mean_f : ndarray
+            Transformed mean.
 
+        cov_f : ndarray
+            Transformed covariance.
+
+        cov_fx : ndarray
+            Covariance between input and output random variables.
         """
 
         # re-compute weights if transform parameter kern_par explicitly given
@@ -73,24 +119,33 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         Parameters
         ----------
         dim_in : int
+            Input dimensionality.
+
         dim_out : int
-        model : string
+            Output dimensionality.
+
+        model : str
             Model of the integrand. See `BQTransform._supported_models_`.
-        kernel : string
+
+        kernel : str
             Kernel of the model. See `Model._supported_kernels_`.
-        points : string
+
+        points : str
             Point-set to use for the integration. See `Model._supported_points_`.
-        kern_par : numpy.ndarray
+
+        kern_par : ndarray
             Kernel parameters.
+
         point_par : dict
             Parameters of the point-set scheme.
+
         kwargs : dict
             Additional kwargs passed to the model.
 
         Returns
         -------
         : Model
-
+            Initialized model.
         """
 
         # import must be after SigmaPointTransform
@@ -122,7 +177,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
         Parameters
         ----------
-        kern_par : numpy.ndarray
+        kern_par : ndarray
             Kernel parameters to use in computation of the weights.
 
         Returns
@@ -149,19 +204,21 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         ----------
         fcn : func
             Integrand as a function handle, which is expected to behave certain way.
-        x : numpy.ndarray
+
+        x : ndarray
             Argument (input) of the integrand.
+
         fcn_par :
             Parameters of the integrand.
-        Notes
-        -----
-        Methods in derived subclasses decides whether to return derivatives also
 
         Returns
         -------
-        : numpy.ndarray
+        : ndarray
             Function evaluations of shape (out_dim, num_pts).
 
+        Notes
+        -----
+        Methods in derived subclasses decides whether to return derivatives also
         """
         pass
 
@@ -171,13 +228,16 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
         Parameters
         ----------
-        weights : numpy.ndarray
-        fcn_evals : numpy.ndarray
+        weights : ndarray
+            Quadrature weights.
+
+        fcn_evals : ndarray
+            Integrand evaluations.
 
         Returns
         -------
-        : numpy.ndarray
-
+        : ndarray
+            Transformed mean.
         """
         return fcn_evals.dot(weights)
         # return np.einsum('en, n -> e', fcn_evals, weights)
@@ -188,18 +248,24 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
         Parameters
         ----------
-        weights : numpy.ndarray
-        fcn_evals : numpy.ndarray
-        mean_out : numpy.ndarray
+        weights : ndarray
+            Quadrature weights.
+
+        fcn_evals : ndarray
+            Integrand evaluations.
+
+        mean_out : ndarray
+            Transformed mean.
 
         Returns
         -------
-        : numpy.ndarray
-
+        : ndarray
+            Transformed covariance.
         """
         expected_model_var = self.model.exp_model_variance(fcn_evals)
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + expected_model_var
-        # return np.einsum('in, nm, jm -> ij', fcn_evals, weights, fcn_evals) - np.outer(mean_out, mean_out.T) + expected_model_var
+        # return np.einsum('in, nm, jm -> ij', fcn_evals, weights, fcn_evals) - \
+        #        np.outer(mean_out, mean_out.T) + expected_model_var
 
     def _cross_covariance(self, weights, fcn_evals, chol_cov_in):
         """
@@ -207,17 +273,19 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
         Parameters
         ----------
-        weights : numpy.ndarray
-            Shape (D, N)
-        fcn_evals : numpy.ndarray
-            Shape (E, N)
-        chol_cov_in : numpy.ndarray
-            Shape (D, D)
+        weights : (D, N) ndarray
+            Quadrature weights.
+
+        fcn_evals : (E, N) ndarray
+            Integrand evaluations.
+
+        chol_cov_in : (D, D) ndarray
+            Cholesky factor of the input covariance.
 
         Returns
         -------
-        : numpy.ndarray
-
+        : ndarray
+            Covariance between the input and transformed random variable.
         """
         return fcn_evals.dot(weights.T).dot(chol_cov_in.T)
         # return np.einsum('en, dn, dj -> ej', fcn_evals, weights, chol_cov_in)
@@ -227,26 +295,70 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
 
 class GPQ(BQTransform):  # consider renaming to GPQTransform
+    """
+    Gaussian process quadrature moment transform.
+
+    Parameters
+    ----------
+    dim_in : int
+        Dimensionality of the input.
+
+    kern_par : ndarray
+        Kernel parameters.
+
+    kernel : str {'rbf'}
+        Kernel of the integrand model.
+
+    points : str {'ut', 'sr', 'gh', 'fs'}
+        Sigma-point set for representing the input probability density.
+
+    point_par : dict
+        Sigma-point set parameters.
+    """
     def __init__(self, dim_in, kern_par, kernel='rbf', points='ut', point_par=None):
         super(GPQ, self).__init__(dim_in, 1, kern_par, 'gp', kernel, points, point_par)
 
     def _fcn_eval(self, fcn, x, fcn_par):
+        """
+        Evaluate integrand at sigma-points.
+
+        Parameters
+        ----------
+        fcn : function
+            Random variable transforming function (integrand).
+
+        x : (dim, N) ndarray
+            Sigma-points.
+
+        fcn_par :
+            Parameters of the random variable transforming function (integrand).
+
+        Returns
+        -------
+        : ndarray
+            Integrand evaluations.
+        """
         return np.apply_along_axis(fcn, 0, x, fcn_par)
 
     def _covariance(self, weights, fcn_evals, mean_out):
         """
-        Transformed covariance.
+        GPQ transformed covariance.
 
         Parameters
         ----------
-        weights : numpy.ndarray
-        fcn_evals : numpy.ndarray
-        mean_out : numpy.ndarray
+        weights : ndarray
+            Quadrature weights.
+
+        fcn_evals : ndarray
+            Integrand evaluations.
+
+        mean_out : ndarray
+            Transformed mean.
 
         Returns
         -------
-        : numpy.ndarray
-
+        : ndarray
+            Transformed covariance.
         """
         expected_model_var = self.model.exp_model_variance(fcn_evals)
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + expected_model_var
@@ -256,13 +368,74 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
 
 
 class TPQ(BQTransform):
+    """
+    Student's t-process quadrature moment transforms.
+
+    Parameters
+    ----------
+    dim_in : int
+        Dimensionality of the input.
+
+    kern_par : ndarray
+        Kernel parameters.
+
+    kernel : str {'rbf'}, optional
+        Kernel of the integrand model.
+
+    points : str {'ut', 'sr', 'gh', 'fs'}, optional
+        Sigma-point set for representing the input probability density.
+
+    point_par : None or dict, optional
+        Sigma-point set parameters.
+
+    nu : float
+        Degrees of freedom parameter of the t-process regression model.
+    """
     def __init__(self, dim_in, kern_par, kernel='rbf', points='ut', point_par=None, nu=3.0):
         super(TPQ, self).__init__(dim_in, 1, kern_par, 'tp', kernel, points, point_par, nu=nu)
 
     def _fcn_eval(self, fcn, x, fcn_par):
+        """
+        Evaluations of the integrand, which can comprise function observations as well as derivative observations.
+
+        Parameters
+        ----------
+        fcn : func
+            Integrand as a function handle, which is expected to behave certain way.
+
+        x : ndarray
+            Argument (input) of the integrand.
+
+        fcn_par :
+            Parameters of the integrand.
+
+        Returns
+        -------
+        : ndarray
+            Function evaluations of shape (out_dim, num_pts).
+        """
         return np.apply_along_axis(fcn, 0, x, fcn_par)
 
     def _covariance(self, weights, fcn_evals, mean_out):
+        """
+        TPQ transformed covariance.
+
+        Parameters
+        ----------
+        weights : ndarray
+            Quadrature weights.
+
+        fcn_evals : ndarray
+            Integrand evaluations.
+
+        mean_out : ndarray
+            Transformed mean.
+
+        Returns
+        -------
+        : ndarray
+            Transformed covariance.
+        """
         expected_model_var = self.model.exp_model_variance(fcn_evals)
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + expected_model_var
 
