@@ -9,21 +9,22 @@ from utils import maha, multivariate_t
 
 
 class Kernel(object, metaclass=ABCMeta):
+    """
+    Kernel base class.
+
+    Parameters
+    ----------
+    dim : int
+        Input dimension.
+
+    par : ndarray
+        Kernel parameters in a (dim_out, num_par) matrix, where i-th row contains parameters for i-th output.
+
+    jitter : float
+        Jitter for stabilizing inversion of kernel matrix.
+    """
 
     def __init__(self, dim, par, jitter):
-        """
-        Kernel base class.
-
-        Parameters
-        ----------
-        dim : int
-            Input dimension
-        par : numpy.ndarray
-            Kernel parameters in a (dim_out, num_par) matrix, where i-th row contains parameters for i-th output.
-        jitter : float
-            Jitter for stabilizing inversion of kernel matrix.
-        """
-
         # ensure parameter is 2d array of type float
         self.par = np.atleast_2d(par).astype(float)
         assert self.par.ndim == 2, "Kernel parameters must be 2D array, you donkey!"  # in case ndim > 2
@@ -39,16 +40,16 @@ class Kernel(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        A : numpy.ndarray
+        A : ndarray
             Symmetric positive definite matrix.
-        b : numpy.ndarray
-            Right-hand side. If `b=None` defaults to unit matrix of the same shape as :math:`A`.
+
+        b : None or ndarray
+            Right-hand side. If `b=None` defaults to unit matrix of the same shape as `A`.
 
         Returns
         -------
-        : numpy.ndarray
+        : ndarray
             If `b=None`, an :math:`A^{-1}` is returned, otherwise :math:`A^{-1}b` is returned.
-
         """
 
         b = np.eye(A.shape[0]) if b is None else b
@@ -68,29 +69,78 @@ class Kernel(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        par : array_like
-        x1 : numpy.ndarray
-        x2 : numpy.ndarray
-        diag : bool
-            If True, return only diagonal of the kernel matrix.
-        scaling : bool
+        par : ndarray
+            Kernel parameters.
+
+        x1 : ndarray
+            Data set.
+
+        x2 : ndarray, optional
+            Data set. If `None`, correlations between `x1`, `x1` are computed.
+
+        diag : bool, optional
+            If `True`, return only diagonal of the kernel matrix.
+
+        scaling : bool, optional
             Use kernel scaling parameter.
 
         Returns
         -------
-        : numpy.ndarray
+        : ndarray
             Kernel matrix of shape `(N, N)`.
         """
         pass
 
     def eval_inv_dot(self, par, x, b=None, scaling=True):
+        """
+        Compute the product of kernel matrix inverse and a vector `b`.
+
+        Parameters
+        ----------
+        par : ndarray
+            Kernel parameters.
+
+        x : ndarray
+            Data set.
+
+        b : None or ndarray, optional
+            If `None`, inverse kernel matrix is computed (i.e. `b=np.eye(N)`).
+
+        scaling : bool, optional
+            Use scaling parameter of the kernel matrix.
+
+        Returns
+        -------
+        : (N, N) ndarray
+            Product of kernel matrix inverse and vector `b`.
+        """
         # if b=None returns inverse of K
         return Kernel._cho_inv(self.eval(par, x, scaling=scaling) + self.jitter * np.eye(x.shape[1]), b)
 
     def eval_chol(self, par, x, scaling=True):
+        """
+        Compute of Cholesky factor of the kernel matrix.
+
+        Parameters
+        ----------
+        par : (dim+1, ) ndarray
+            Kernel parameters.
+
+        x : (dim, N) ndarray
+            Data set.
+
+        scaling : bool, optional
+            Use scaling parameter of the kernel.
+
+        Returns
+        -------
+        : (N, N) ndarray
+            Cholesky factor of the kernel matrix.
+        """
         return la.cholesky(self.eval(par, x, scaling=scaling) + self.jitter * np.eye(x.shape[1]))
 
     def get_parameters(self, par=None):
+        """Get kernel parameters."""
         if par is None:
             # return parameters kernel was initialized with
             return self.par
@@ -107,13 +157,14 @@ class Kernel(object, metaclass=ABCMeta):
     @abstractmethod
     def exp_x_kx(self, par, x):
         """
-        Computes :math:`\mathbb{E}_{x}[k(x, x_i \mid \theta_m)]`.
+        Computes :math:`\\mathbb{E}_{x}[k(x, x_i \\mid \\theta_m)]`.
 
         Parameters
         ----------
-        x : numpy.ndarray
-            Sigma-points (data) in a 2d array of shape (dim, N).
-        par : array_like
+        x : (dim, N) ndarray
+            Data (sigma-points).
+
+        par : ndarray
             Kernel parameters in a vector. The first element must be kernel scaling parameter.
 
         Notes
@@ -122,8 +173,8 @@ class Kernel(object, metaclass=ABCMeta):
 
         Returns
         -------
-        : numpy.ndarray
-            Expectation for given data points :math:`x_i` and vector of kernel parameters :math:`\theta_m` returned
+        : ndarray
+            Expectation for given data points :math:`x_i` and vector of kernel parameters :math:`\\theta_m` returned
             in an array of shape `(N, )`, where `N = x.shape[1]`.
         """
         pass
@@ -131,18 +182,19 @@ class Kernel(object, metaclass=ABCMeta):
     @abstractmethod
     def exp_x_xkx(self, par, x):
         """
-        Computes :math:`\mathbb{E}_{x}[xk(x, x_i \mid \theta_m)]`.
+        Computes :math:`\\mathbb{E}_{x}[xk(x, x_i \\mid \\theta_m)]`.
 
         Parameters
         ----------
-        x : numpy.ndarray
-            Sigma-points (data) in a 2d array of shape (dim, N).
-        par : array_like
+        x : (dim, N) ndarray
+            Data (sigma-points).
+
+        par : ndarray
             Kernel parameters in a vector. The first element must be kernel scaling parameter.
 
         Returns
         -------
-        : numpy.ndarray
+        : ndarray
             Expectation for given data points :math:`x_i` and vector of kernel parameters :math:`\theta_m` returned
             in an array of shape `(D, N)`, where `(D, N) = x.shape`.
         """
@@ -155,11 +207,13 @@ class Kernel(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        x : numpy.ndarray
-            Sigma-points (data) in a 2d array of shape (dim, N).
-        par_0 : array_like
+        x : (dim, N) ndarray
+            Data (sigma-points).
+
+        par_0 : ndarray
             Kernel parameters in a vector. The first element must be kernel scaling parameter.
-        par_1 : array_like
+
+        par_1 : ndarray
             Kernel parameters in a vector. The first element must be kernel scaling parameter.
 
         Notes
@@ -168,27 +222,28 @@ class Kernel(object, metaclass=ABCMeta):
 
         Returns
         -------
-        : numpy.ndarray
-            Expectation for given data points :math:`x_i,\ x_j` and vectors of kernel parameters :math:`\theta_m` and
-            :math:`\theta_n` returned in an array of shape `(N, N)`, where `N = x.shape[1]`.
+        : ndarray
+            Expectation for given data points :math:`x_i,\ x_j` and vectors of kernel parameters :math:`\\theta_m` and
+            :math:`\\theta_n` returned in an array of shape `(N, N)`, where `N = x.shape[1]`.
         """
         pass
 
     @abstractmethod
     def exp_x_kxx(self, par):
         """
-        Computes :math:`\mathbb{E}_{x}[k(x, x \mid \theta_m)]`.
+        Computes :math:`\\mathbb{E}_{x}[k(x, x \\mid \\theta_m)]`.
 
         Parameters
         ----------
-        x : numpy.ndarray
-            Sigma-points (data) in a 2d array of shape (dim, N).
-        par : array_like
+        x : (dim, N) ndarray
+            Data (sigma-points).
+
+        par : ndarray
             Kernel parameters in a vector. The first element must be kernel scaling parameter.
 
         Returns
         -------
-        : numpy.ndarray
+        : ndarray
             Expectation for given data points :math:`x_i` and vector of kernel parameters :math:`\theta_m` returned
             in an array of shape `(N, )`, where `N = x.shape[1]`.
         """
@@ -208,7 +263,7 @@ class Kernel(object, metaclass=ABCMeta):
 
         Returns
         -------
-        : numpy.ndarray
+        : ndarray
             Expectation for and vector of kernel parameters :math:`\theta_m` returned in an array of shape `(1, )`.
         """
         pass
@@ -216,7 +271,22 @@ class Kernel(object, metaclass=ABCMeta):
     # derivatives
     @abstractmethod
     def der_par(self, par_0, x):
-        # evaluates derivative of the kernel matrix at par_0; x is data, now acting as parameter
+        """
+        Evaluates derivative of the kernel matrix w.r.t. its parameters at `par_0`.
+
+        Parameters
+        ----------
+        par_0 : ndarray
+            Values of kernel parameters where to evaluate.
+
+        x : ndarray
+            Data.
+
+        Returns
+        -------
+        : ndarray
+            Kernel matrix derivatives evaluated at `par_0`.
+        """
         pass
 
 
@@ -227,15 +297,17 @@ class RBF(Kernel):
         Radial Basis Function kernel.
 
         .. math::
-           k(x, x') = s^2 \exp\left(-\frac{1}{2}(x - x')^{\top}\ Lambda^{-1} (x - x') \right)
+           k(x, x') = s^2 \\exp\\left(-\\frac{1}{2}(x - x')^{\\top}\\ Lambda^{-1} (x - x') \\right)
 
         Parameters
         ----------
         dim : int
-            Input dimension
-        par : numpy.ndarray
+            Input dimension.
+
+        par : ndarray
             Kernel parameters in a matrix of shape (dim_out, num_par), where i-th row contains parameters for i-th
-            output. Each row is :math: `[s, \ell_1, \ldots, \ell_dim]`
+            output. Each row is :math:`[s, \\ell_1, \\ldots, \\ell_D]`.
+
         jitter : float
             Jitter for stabilizing inversion of the kernel matrix. Default ``jitter=1e-8``.
 
@@ -294,22 +366,24 @@ class RBF(Kernel):
 
         .. math:
         \[
-            \mathbb{E}[k(x, x_i), k(x, x_j)] = \int\! k(x, x_i), k(x, x_j) N(x \mid 0, I)\, \mathrm{d}x
+            \\mathbb{E}[k(x, x_i), k(x, x_j)] = \\int\\! k(x, x_i), k(x, x_j) N(x \\mid 0, I)\\, \\mathrm{d}x
         \]
 
         Parameters
         ----------
-        x : numpy.ndarray
-            Data points, shape (D, N)
-        par_0 : numpy.ndarray
-        par_1 : numpy.ndarray
-            Kernel parameters, shape (D, )
-        scaling : bool
+        x : (dim, N) ndarray
+            Data points.
+
+        par_0 : (dim, ) ndarray
+        par_1 : (dim, ) ndarray
+            Kernel parameters.
+
+        scaling : bool, optional
             Kernel scaling parameter used when `scaling=True`.
 
         Returns
         -------
-        : numpy.ndarray
+        : ndarray
             Correlation matrix of kernels computed for given pair of kernel parameters.
         """
 
@@ -362,11 +436,11 @@ class RBF(Kernel):
     @staticmethod
     def _unpack_parameters(par):
         """
-        Extract scaling parameter and square-root of inverse lengthscale matrix from vector of kernel parameters.
+        Extract scaling parameter and square-root of inverse length-scale matrix from vector of kernel parameters.
 
         Parameters
         ----------
-        par : numpy.ndarray
+        par : (dim, ) ndarray
 
         Returns
         -------
@@ -374,7 +448,7 @@ class RBF(Kernel):
 
         """
         par = par.astype(float).squeeze()
-        # TODO: return scaling and lengthscale, not sqrt inv lambda
+        # TODO: return scaling and length-scale, not sqrt inv lambda
         return par[0], np.diag(par[1:] ** -1)
 
 
@@ -406,22 +480,24 @@ class RBFStudent(RBF):
 
         .. math:
         \[
-            \mathbb{E}[k(x, x_i), k(x, x_j)] = \int\! k(x, x_i), k(x, x_j) N(x \mid 0, I)\, \mathrm{d}x
+            \\mathbb{E}[k(x, x_i), k(x, x_j)] = \\int\\! k(x, x_i), k(x, x_j) N(x \\mid 0, I)\\, \\mathrm{d}x
         \]
 
         Parameters
         ----------
-        x : numpy.ndarray
-            Data points, shape (D, N)
-        par_0 : numpy.ndarray
-        par_1 : numpy.ndarray
-            Kernel parameters, shape (D, )
+        x : (dim, N) ndarray
+            Data points.
+
+        par_0 : (dim, ) ndarray
+        par_1 : (dim, ) ndarray
+            Kernel parameters.
+
         scaling : bool
             Kernel scaling parameter used when `scaling=True`.
 
         Returns
         -------
-        : numpy.ndarray
+        : ndarray
             Correlation matrix of kernels computed for given pair of kernel parameters.
         """
 
