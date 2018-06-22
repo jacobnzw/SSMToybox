@@ -17,23 +17,23 @@ def squared_error(x, m):
     Squared Error
 
     .. math::
-
-    SE = (x_k - m_k)^2
+    \[
+        SE = (x_k - m_k)^2
+    \]
 
     Parameters
     ----------
-    x: numpy.ndarray with shape (d, time_steps, mc_sims)
-        True state
+    x: (dim_x, num_time_steps, num_mc_sims) ndarray
+        True state.
 
-    m: numpy.ndarray with shape (d, time_steps, mc_sims, algs)
-        State mean
+    m: (dim_x, num_time_steps, num_mc_sims, num_algs) ndarray
+        State mean (state estimate).
 
     Returns
     -------
-    (d, time_steps, mc_sims)
-
+    (d, time_steps, mc_sims) ndarray
+        Difference between the true state and its estimate squared.
     """
-
     return (x - m) ** 2
 
 
@@ -43,12 +43,16 @@ def mse_matrix(x, m):
 
     Parameters
     ----------
-    x
-    m
+    x: (dim_x, 1) ndarray
+        True state.
+
+    m: (dim_x, num_mc_sims) ndarray
+        State mean (state estimate).
 
     Returns
     -------
-
+    : (dim_x, dim_x) ndarray
+        Sample mean square error matrix.
     """
 
     d, mc_sims = m.shape
@@ -64,50 +68,53 @@ def log_cred_ratio(x, m, P, MSE):
     Logarithm of Credibility Ratio [1]_ is given by
 
     .. math::
-
-    \gamma_n = 10*\log_10 \frac{(x - m_n)^{\top}P_n^{-1}(x - m_n)}{(x - m_n)^{\top}\Sig^{-1}(x - m_n)}
+    \[
+        \\gamma_n = 10*\\log_10 \\frac{(x - m_n)^{\\top}P_n^{-1}(x - m_n)}{(x - m_n)^{\\top}\Sig^{-1}(x - m_n)}
+    \]
 
     Parameters
     ----------
-    x:
-        True state
-    m:
-        State mean
-    P:
-        State covariance matrix
-    MSE:
-        Mean square error matrix
+    x : (dim_x, ) ndarray
+        True state.
+
+    m : (dim_x, ) ndarray
+        State mean.
+
+    P : (dim_x, dim_x) ndarray
+        State covariance matrix.
+
+    MSE : (dim_x, dim_x) ndarray
+        Mean square error matrix.
 
     Returns
     -------
-    :float
-
+    : float
+        Logarithm of credibility ratio.
 
     Notes
     -----
     Log credibility ratio is defined in [1]_ and is an essential quantity for computing the inclination indicator
 
     .. math::
-
-    I^2 = \frac{1}{N}\sum\limits_{n=1}^{N} \gamma_n,
+    \[
+        I^2 = \\frac{1}{N}\\sum\\limits_{n=1}^{N} \\gamma_n,
+    \]
 
     and the non-credibility index given by
 
     .. math::
-
-    NCI = \frac{1}{N}\sum\limits_{n=1}^{N} \| \gamma_n \|.
+    \[
+        NCI = \\frac{1}{N}\\sum\\limits_{n=1}^{N} \\| \\gamma_n \\|.
+    \]
 
     Since in state estimation examples one can either average over time or MC simulations, the implementation of I^2
     and NCI is left for the user.
-
 
     References
     ----------
     .. [1] X. R. Li and Z. Zhao, “Measuring Estimator’s Credibility: Noncredibility Index,”
            in Information Fusion, 2006 9th International Conference on, 2006, pp. 1–8.
-
     """
-
     dx = x - m
     sqrtP = mat_sqrt(P)
     sqrtMSE = mat_sqrt(MSE)
@@ -124,16 +131,19 @@ def neg_log_likelihood(x, m, P):
 
     Parameters
     ----------
-    x:
-        True state
-    m:
-        State mean
-    P:
-        State covariance
+    x : (dim_x, ) ndarray
+        True state.
+
+    m : (dim_x, ) ndarray
+        State mean.
+
+    P : (dim_x, dim_x) ndarray
+        State covariance matrix.
 
     Returns
     -------
-
+    : float
+        Negative logarithm of likelihood of the state given the true state.
     """
 
     dx = x - m
@@ -145,18 +155,25 @@ def neg_log_likelihood(x, m, P):
 
 def kl_divergence(mean_0, cov_0, mean_1, cov_1):
     """
-    KL-divergence
+    KL-divergence between the true and approximate Gaussian probability density functions.
 
     Parameters
     ----------
-    mean_0
-    cov_0
-    mean_1
-    cov_1
+    mean_0 : (dim_x, ) ndarray
+        Mean of the true distribution.
+
+    cov_0 : (dim_x, dim_x) ndarray
+        Covariance of the true distribution.
+
+    mean_1 : (dim_x, ) ndarray
+        Mean of the approximate distribution.
+
+    cov_1 : (dim_x, dim_x) ndarray
+        Covariance of the approximate distribution.
 
     Returns
     -------
-    :float
+    : float
         KL-divergence of two Gaussian densities.
     """
     k = 1 if np.isscalar(mean_0) else mean_0.shape[0]
@@ -172,41 +189,50 @@ def kl_divergence(mean_0, cov_0, mean_1, cov_1):
 
 def symmetrized_kl_divergence(mean_0, cov_0, mean_1, cov_1):
     """
-    Symmetrized KL-divergence :math:`0.5[KL(q(x)||p(x)) + KL(p(x)||q(x))]`
+    Symmetrized KL-divergence between the true and approximate Gaussian probability density functions.
 
     Parameters
     ----------
-    mean_0
-    cov_0
-    mean_1
-    cov_1
+    mean_0 : (dim_x, ) ndarray
+        Mean of the true distribution.
+
+    cov_0 : (dim_x, dim_x) ndarray
+        Covariance of the true distribution.
+
+    mean_1 : (dim_x, ) ndarray
+        Mean of the approximate distribution.
+
+    cov_1 : (dim_x, dim_x) ndarray
+        Covariance of the approximate distribution.
 
     Returns
     -------
-    :float
-        Symmetrized KL-divergence
+    : float
+        Symmetrized KL-divergence of two Gaussian densities.
+
+    Notes
+    -----
+    Implements symmetrization given by :math:`0.5[KL(q(x)||p(x)) + KL(p(x)||q(x))]`. Other symmetrizations exist.
     """
     return 0.5 * (kl_divergence(mean_0, cov_0, mean_1, cov_1) + kl_divergence(mean_1, cov_1, mean_0, cov_0))
 
 
 def bootstrap_var(data, samples=1000):
     """
-    Estimates variance of a given data sample by bootstrapping
+    Estimates variance of a given data sample by bootstrapping.
 
     Parameters
     ----------
-    data: numpy.ndarray (1, mc_sims)
-        Data set
-    samples: int
-        how many samples to use during bootstrapping
+    data: (1, mc_sims) ndarray
+        Data set.
+    samples: int, optional
+        Number of samples to use during bootstrapping.
 
     Returns
     -------
     : float
         Bootstrap estimate of variance of the data set.
     """
-
-    # data
     data = data.squeeze()
     mc_sims = data.shape[0]
     # sample with replacement to create new datasets
@@ -227,31 +253,36 @@ def bigauss_mixture(m0, c0, m1, c1, alpha, size):
     Samples from a Gaussian mixture with two components.
 
     Draw samples of a random variable :math:`X` following a Gaussian mixture density with two components,
-    given by :math:`X \sim \alpha \mathrm{N}(m_0, C_0) + (1 - \alpha)\mathrm{N}(m_1, C_1)`.
+    given by :math:`X \\sim \\alpha \\mathrm{N}(m_0, C_0) + (1 - \\alpha)\\mathrm{N}(m_1, C_1)`.
 
     Parameters
     ----------
-    m0 : numpy.ndarray
+    m0 : (dim_x, ) ndarray
         Mean of the first component.
-    c0 : numpy.ndarray
+
+    c0 : (dim_x, dim_x) ndarray
         Covariance of the first component.
-    m1 : numpy.ndarray
+
+    m1 : (dim_x, ) ndarray
         Mean of the second component.
-    c1 : numpy.ndarray
+
+    c1 : (dim_x, dim_x) ndarray
         Covariance of the second component.
+
     alpha : float
-        Mixing proportions, alpha
+        Mixing proportions, alpha.
+
     size : int or tuple of ints
         Number of samples to draw, gets passed into Numpy's random number generators.
+
+    Returns
+    -------
+    : ndarray
+        Samples of a Gaussian mixture with two components.
 
     Notes
     -----
     Very inefficient implementation, because it throws away a lot of the samples!
-
-    Returns
-    -------
-    : numpy.ndarray
-        Samples of a Gaussian mixture with two components.
     """
     mi = np.random.binomial(1, alpha, size).T  # 1 w.p. alpha, 0 w.p. 1-alpha
     n0 = np.random.multivariate_normal(m0, c0, size).T
@@ -266,27 +297,31 @@ def multivariate_t(mean, scale, nu, size):
     Samples from a multivariate Student's t-distribution.
 
     Samples of a random variable :math:`X` following a multivariate t-distribution
-    :math:`X \sim \mathrm{St}(\mu, \Sigma, \nu)`.
+    :math:`X \\sim \\mathrm{St}(\\mu, \\Sigma, \\nu)`.
 
     Parameters
     ----------
-    mean
-        Mean vector
-    scale
-        Scale matrix
+    mean : (dim_x, ) ndarray
+        Mean vector.
+
+    scale : (dim_x, dim_x) ndarray
+        Scale matrix.
+
     nu : float
-        Degrees of freedom
+        Degrees of freedom.
+
     size : int or tuple of ints
-
-
-    Notes
-    -----
-    If :math:`y \sim \mathrm{N}(0, \Sigma)` and :math:`u \sim \mathrm{Gamma}(k=\nu/2, \theta=2/\nu)`,
-    then :math:`x \sim \mathrm{St}(\mu, \Sigma, \nu)`, where :math:`x = \mu + \frac{y}{\sqrt{u}}`.
+        Number of samples to draw, gets passed into Numpy's random number generators.
 
     Returns
     -------
+    : ndarray
+        Samples of a multivariate Student's t-distribution with two components.
 
+    Notes
+    -----
+    If :math:`y \\sim \\mathrm{N}(0, \\Sigma)` and :math:`u \\sim \\mathrm{Gamma}(k=\\nu/2, \\theta=2/\\nu)`,
+    then :math:`x \\sim \\mathrm{St}(\\mu, \\Sigma, \\nu)`, where :math:`x = \\mu + \\frac{y}{\\sqrt{u}}`.
     """
     v = np.random.gamma(nu / 2, 2 / nu, size)[:, na]
     n = np.random.multivariate_normal(np.zeros_like(mean), scale, size)
@@ -299,16 +334,18 @@ def maha(x, y, V=None):
 
     Parameters
     ----------
-    x : numpy.ndarray
-        Data points in (N, D) matrix.
-    y : numpy.ndarray
-        Data points in (N, D) matrix.
-    V : numpy.ndarray
-        Weight matrix (D, D), if `V=None`, `V=eye(D)` is used
+    x : (num_points, dim_x) ndarray
+        Data points.
+
+    y : (num_points, dim_x) ndarray
+        Data points.
+
+    V : ndarray (dim_x, dim_x)
+        Weight matrix, if `V=None`, `V=eye(D)` is used.
 
     Returns
     -------
-    : numpy.ndarray
+    : (num_points, num_points) ndarray
         Pair-wise Mahalanobis distance of rows of x and y with given weight matrix V.
     """
     if V is None:
@@ -324,13 +361,14 @@ def mat_sqrt(a):
 
     Parameters
     ----------
-    a : numpy.ndarray
-
+    a : (n, n) ndarray
+        Matrix to factor.
 
     Returns
     -------
-    : numpy.ndarray
-        Returns `cholesky(a)` for SPD matrices, and `u.dot(sqrt(s))`, where `u, s, v = svd(a)`.
+    : (n, n) ndarray
+        If `a` is symmetric positive-definite, `cholesky(a)` is returned. Otherwise `u.dot(sqrt(s))` is returned,
+        where `u, s, v = svd(a)`.
     """
     try:
         b = sp.linalg.cholesky(a, lower=True)
@@ -343,21 +381,20 @@ def mat_sqrt(a):
 
 def ellipse_points(pos, mat):
     """
-    Points on an ellipse.
-
+    Points on an ellipse given by center position and symmetric positive-definite matrix.
 
     Parameters
     ----------
-    pos : ndarray
-          1-D array specifying position of the center of the ellipse.
-    mat : ndarray
+    pos : (dim_x) ndarray
+          specifying center of the ellipse.
+
+    mat : (dim_x, dim_x) ndarray
           Symmetric positive-definite matrix.
 
     Returns
     -------
-    x : (D, 1) ndarray
+    x : (dim_x, 1) ndarray
         Points on an ellipse defined my the input mean and covariance.
-
     """
     w, v = la.eig(mat)
     theta = np.linspace(0, 2 * np.pi)
