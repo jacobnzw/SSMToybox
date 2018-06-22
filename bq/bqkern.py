@@ -17,8 +17,8 @@ class Kernel(object, metaclass=ABCMeta):
     dim : int
         Input dimension.
 
-    par : ndarray
-        Kernel parameters in a (dim_out, num_par) matrix, where i-th row contains parameters for i-th output.
+    par : (dim_out, num_par) ndarray
+        Kernel parameters in a matrix, where i-th row contains parameters for i-th output.
 
     jitter : float
         Jitter for stabilizing inversion of kernel matrix.
@@ -195,7 +195,7 @@ class Kernel(object, metaclass=ABCMeta):
         Returns
         -------
         : ndarray
-            Expectation for given data points :math:`x_i` and vector of kernel parameters :math:`\theta_m` returned
+            Expectation for given data points :math:`x_i` and vector of kernel parameters :math:`\\theta_m` returned
             in an array of shape `(D, N)`, where `(D, N) = x.shape`.
         """
         pass
@@ -203,7 +203,7 @@ class Kernel(object, metaclass=ABCMeta):
     @abstractmethod
     def exp_x_kxkx(self, par_0, par_1, x):
         """
-        Computes :math:`\mathbb{E}_{x}[k(x, x_i \mid \theta_m)k(x, x_j \mid \theta_n)]`.
+        Computes :math:`\\mathbb{E}_{x}[k(x, x_i \\mid \\theta_m)k(x, x_j \\mid \\theta_n)]`.
 
         Parameters
         ----------
@@ -223,7 +223,7 @@ class Kernel(object, metaclass=ABCMeta):
         Returns
         -------
         : ndarray
-            Expectation for given data points :math:`x_i,\ x_j` and vectors of kernel parameters :math:`\\theta_m` and
+            Expectation for given data points :math:`x_i,\\ x_j` and vectors of kernel parameters :math:`\\theta_m` and
             :math:`\\theta_n` returned in an array of shape `(N, N)`, where `N = x.shape[1]`.
         """
         pass
@@ -244,7 +244,7 @@ class Kernel(object, metaclass=ABCMeta):
         Returns
         -------
         : ndarray
-            Expectation for given data points :math:`x_i` and vector of kernel parameters :math:`\theta_m` returned
+            Expectation for given data points :math:`x_i` and vector of kernel parameters :math:`\\theta_m` returned
             in an array of shape `(N, )`, where `N = x.shape[1]`.
         """
         pass
@@ -252,19 +252,19 @@ class Kernel(object, metaclass=ABCMeta):
     @abstractmethod
     def exp_xy_kxy(self, par):
         """
-        Computes :math:`\mathbb{E}_{x,x'}[k(x, x' \mid \theta_m)]`.
+        Computes :math:`\\mathbb{E}_{x,x'}[k(x, x' \\mid \\theta_m)]`.
 
         Parameters
         ----------
-        x : numpy.ndarray
-            Sigma-points (data) in a 2d array of shape (dim, N).
+        x : (dim, N) ndarray
+            Sigma-points (data).
         par : array_like
             Kernel parameters in a vector. The first element must be kernel scaling parameter.
 
         Returns
         -------
         : ndarray
-            Expectation for and vector of kernel parameters :math:`\theta_m` returned in an array of shape `(1, )`.
+            Expectation for and vector of kernel parameters :math:`\\theta_m` returned in an array of shape `(1, )`.
         """
         pass
 
@@ -291,32 +291,31 @@ class Kernel(object, metaclass=ABCMeta):
 
 
 class RBF(Kernel):
+    """
+    Radial Basis Function kernel.
+
+    .. math::
+       k(x, x') = s^2 \\exp\\left(-\\frac{1}{2}(x - x')^{\\top}\\Lambda^{-1} (x - x') \\right)
+
+    Parameters
+    ----------
+    dim : int
+        Input dimension.
+
+    par : ndarray
+        Kernel parameters in a matrix of shape (dim_out, num_par), where i-th row contains parameters for i-th
+        output. Each row is :math:`[s, \\ell_1, \\ldots, \\ell_D]`.
+
+    jitter : float
+        Jitter for stabilizing inversion of the kernel matrix. Default ``jitter=1e-8``.
+
+    Notes
+    -----
+    The kernel is also known as Squared Exponential (popular, but wrong), Exponentiated Quadratic (too mouthful)
+    or Gaussian (conflicts with terminology for PDFs).
+    """
 
     def __init__(self, dim, par, jitter=1e-8):
-        """
-        Radial Basis Function kernel.
-
-        .. math::
-           k(x, x') = s^2 \\exp\\left(-\\frac{1}{2}(x - x')^{\\top}\\ Lambda^{-1} (x - x') \\right)
-
-        Parameters
-        ----------
-        dim : int
-            Input dimension.
-
-        par : ndarray
-            Kernel parameters in a matrix of shape (dim_out, num_par), where i-th row contains parameters for i-th
-            output. Each row is :math:`[s, \\ell_1, \\ldots, \\ell_D]`.
-
-        jitter : float
-            Jitter for stabilizing inversion of the kernel matrix. Default ``jitter=1e-8``.
-
-        Notes
-        -----
-        The kernel is also known as Squared Exponential (popular, but wrong), Exponentiated Quadratic (too mouthful)
-        or Gaussian (conflicts with terminology for PDFs).
-        """
-
         assert par.shape[1] == dim + 1
         super(RBF, self).__init__(dim, par, jitter)
 
@@ -364,10 +363,9 @@ class RBF(Kernel):
         """
         Correlation matrix of kernels with elements
 
-        .. math:
-        \[
+        .. math::
             \\mathbb{E}[k(x, x_i), k(x, x_j)] = \\int\\! k(x, x_i), k(x, x_j) N(x \\mid 0, I)\\, \\mathrm{d}x
-        \]
+
 
         Parameters
         ----------
@@ -478,10 +476,8 @@ class RBFStudent(RBF):
         """
         Correlation matrix of kernels with elements
 
-        .. math:
-        \[
+        .. math::
             \\mathbb{E}[k(x, x_i), k(x, x_j)] = \\int\\! k(x, x_i), k(x, x_j) N(x \\mid 0, I)\\, \\mathrm{d}x
-        \]
 
         Parameters
         ----------
@@ -514,30 +510,30 @@ class RBFStudent(RBF):
 
 
 class RQ(Kernel):
+    """
+    Rational Quadratic kernel.
+
+    .. math::
+        k(x, x') = s^2 \\left( 1 + \\frac{1}{2\\alpha}(x - x')^{\\top}\\Lambda^{-1} (x - x') \\right)^{-\\alpha}
+
+    Parameters
+    ----------
+    dim : int
+        Input dimension.
+
+    par : (dim_out, num_par) ndarray
+        Kernel parameters in a matrix, where i-th row contains parameters for i-th output.
+        Each row is :math:`[s, \\alpha, \\ell_1, \\ldots, \\ell_dim]`.
+
+    jitter : float
+        Jitter for stabilizing inversion of the kernel matrix. Default ``jitter=1e-8``.
+
+    Notes
+    -----
+    The kernel expectations are w.r.t standard Student's t-density and are approximate.
+    """
 
     def __init__(self, dim, par, jitter=1e-8):
-        """
-        Rational Quadratic kernel.
-
-        .. math::
-        \[
-           k(x, x') = s^2 \left( 1 + \frac{1}{2\alpha}(x - x')^{\top}\ Lambda^{-1} (x - x') \right)^{-\alpha}
-        \]
-
-        Parameters
-        ----------
-        dim : int
-            Input dimension
-        par : numpy.ndarray
-            Kernel parameters in a matrix of shape (dim_out, num_par), where i-th row contains parameters
-            for i-th output. Each row is :math: `[s, \alpha, \ell_1, \ldots, \ell_dim]`
-        jitter : float
-            Jitter for stabilizing inversion of the kernel matrix. Default ``jitter=1e-8``.
-
-        Notes
-        -----
-        The kernel expectations are w.r.t standard Student's t density and are approximate.
-        """
         assert par.shape[1] == dim + 2
         super(RQ, self).__init__(dim, par, jitter)
 
@@ -559,21 +555,23 @@ class RQ(Kernel):
 
     def exp_x_kx(self, par, x, scaling=False):
         """
-        RQ kernel mean
+        RQ kernel mean, where each element is given by
 
         .. math::
-        \[
-            \mathbb{E}_{x}{k(x, x_i)} = \int\! k(x, x_i) St(x \mid 0, I, \nu) \,\mathrm{d}x
-        \]
+            \\mathbb{E}_{x}[k(x, x_i)] = \\int\\! k(x, x_i) St(x \\mid 0, I, \\nu) \\,\\mathrm{d}x
 
         Parameters
         ----------
-        par : numpy.ndarray
-        x : numpy.ndarray
+        par : ndarray
+            Kernel parameters.
+
+        x : ndarray
+            Data points.
 
         Returns
         -------
-
+        : ndarray
+            Kernel mean.
         """
         s, alpha, sqrt_inv_lam = RQ._unpack_parameters(par)
         s = 1.0 if not scaling else s
@@ -590,23 +588,21 @@ class RQ(Kernel):
         RQ kernel cross-correlation
 
         .. math::
-        \[
-            \mathbb{E}_{x}[xk(x, x_i)] = \int\! xk(x, x_i) St(x \mid 0, I, \nu) \mathrm{d}x
-        \]
+            \\mathbb{E}_{x}[xk(x, x_i)] = \\int\\! xk(x, x_i) St(x \\mid 0, I, \\nu)\\, \\mathrm{d}x
 
         Parameters
         ----------
-        x : numpy.ndarray
+        x : ndarray
             Sigma-points (data) in a 2d array of shape (dim, N).
+
         par : array_like
             Kernel parameters in a vector. The first element must be kernel scaling parameter.
 
         Returns
         -------
-        : numpy.ndarray
-            Expectation for given data points :math:`x_i` and vector of kernel parameters :math:`\theta_m`
-            returned
-            in an array of shape `(D, N)`, where `(D, N) = x.shape`.
+        : ndarray
+            Expectation for given data points :math:`x_i` and vector of kernel parameters :math:`\\theta_m`
+            returned in an array of shape `(D, N)`, where `(D, N) = x.shape`.
         """
         s, alpha, sqrt_inv_lam = RQ._unpack_parameters(par)
         lam = np.diag(sqrt_inv_lam.diagonal() ** -2)
@@ -619,27 +615,26 @@ class RQ(Kernel):
         """
         RQ kernel correlation
 
-        .. math:
-        \[
-            \mathbb{E}[k(x, x_i), k(x, x_j)] = \int\! k(x, x_i), k(x, x_j) St(x \mid 0, I, \nu)\, \mathrm{d}x
-        \]
+        .. math::
+            \\mathbb{E}[k(x, x_i), k(x, x_j)] = \\int\\! k(x, x_i), k(x, x_j) St(x \\mid 0, I, \\nu)\\, \\mathrm{d}x
 
         Parameters
         ----------
-        x : numpy.ndarray
-            Data points, shape (D, N)
-        par_0 : numpy.ndarray
-        par_1 : numpy.ndarray
-            Kernel parameters, shape (D, )
+        x : (dim, N) ndarray
+            Data points.
+
+        par_0 : (dim, ) ndarray
+        par_1 : (dim, ) ndarray
+            Kernel parameters.
+
         scaling : bool
             Kernel scaling parameter used when `scaling=True`.
 
         Returns
         -------
-        : numpy.ndarray
+        : ndarray
             Correlation matrix of kernels computed for given pair of kernel parameters.
         """
-
         # unpack kernel parameters
         s, alpha, sqrt_inv_lam = RQ._unpack_parameters(par_0)
         s_1, alpha_1, sqrt_inv_lam_1 = RQ._unpack_parameters(par_1)
@@ -666,9 +661,38 @@ class RQ(Kernel):
         return s**2 * s_1**2 * la.det(r) ** -0.5 * (1 + (2*alpha) ** -1 * n) ** (-alpha)
 
     def exp_x_kxx(self, par):
+        """
+        RQ kernel expectation
+
+        .. math::
+            \\mathbb{E}_x[k(x, x)] = \\int\\! k(x, x) St(x \\mid 0, I, \\nu)\\, \\mathrm{d}x
+
+        Parameters
+        ----------
+        par : (dim, ) ndarray
+            Kernel parameters.
+
+        Returns
+        -------
+        : ndarray
+            Kernel expectation.
+        """
         return par[0] ** 2
 
     def exp_xy_kxy(self, par):
+        """
+        RQ kernel expectation :math:`\\mathbb{E}_{x, x'}[k(x, x')]`, where :math:`x,x' \\sim St(0, I, \\nu)`.
+
+        Parameters
+        ----------
+        par : (dim, ) ndarray
+            Kernel parameters.
+
+        Returns
+        -------
+        : ndarray
+            Correlation matrix of kernels computed for given pair of kernel parameters.
+        """
         s, alpha, sqrt_inv_lam = RQ._unpack_parameters(par)
         inv_lam = sqrt_inv_lam ** 2
         return s ** 2 * la.det(2 * inv_lam + self.eye_d) ** -0.5
@@ -683,7 +707,7 @@ class RQ(Kernel):
 
         Parameters
         ----------
-        par : numpy.ndarray
+        par : ndarray
 
         Returns
         -------
