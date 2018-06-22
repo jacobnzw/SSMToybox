@@ -280,6 +280,28 @@ class System(object, metaclass=ABCMeta):
                                                    np.abs(jac_hx - self.meas_eval(xr, par, dx=True))))
 
     def simulate_trajectory(self, method='euler', dt=0.1, duration=10, mc_sims=1):
+        """
+        Computes continuous-time system state trajectory using the given ODE integration method.
+
+        Parameters
+        ----------
+        method : str {'euler', 'rk4'}, optional
+            ODE integration method.
+
+        dt : float, optional
+            Discretization step.
+
+        duration : int, optional
+            Length of trajectory in seconds.
+
+        mc_sims : int, optional
+            Number of Monte Carlo simulations.
+
+        Returns
+        -------
+        : (dim_x, num_time_steps, num_mc_sims) ndarray
+            State trajectories of the continuous-time dynamic system.
+        """
         # ensure sensible values of dt
         assert dt < duration
 
@@ -302,6 +324,21 @@ class System(object, metaclass=ABCMeta):
         return x[:, 1:, :]
 
     def simulate_measurements(self, x, mc_per_step=1):
+        """
+        Simulates measurements
+
+        Parameters
+        ----------
+        x : ndarray
+            State trajectory.
+
+        mc_per_step : int, optional
+            Number of measurements to generate in each time step.
+
+        Returns
+        -------
+        : (dim_y, num_time_steps, num_mc_sims) ndarray
+        """
         # x - state trajectory, freq - sampling frequency [Hz],
         # mc_per_step - how many measurement to generate in each time step
 
@@ -317,13 +354,60 @@ class System(object, metaclass=ABCMeta):
         return y
 
     def _ode_euler(self, func, x, q, theta, dt):
-        # Euler ODE integration
-        # x-state, q-noise, dt-time increment, func-function handle
+        """
+        ODE integration using Euler approximation.
+
+        Parameters
+        ----------
+        func : function
+            Function defining the system dynamics.
+
+        x : (dim_x, ) ndarray
+            Previous system state.
+
+        q : (dim_q, ) ndarray
+            System (process) noise.
+
+        theta : (dim_par, ) ndarray
+            Dynamics parameters.
+
+        dt : float
+            Discretization step.
+
+        Returns
+        -------
+        : (dim_x, ) ndarray
+            State in the next time step.
+        """
         xdot = func(x, q, theta)
         return x + dt * xdot
 
     def _ode_rk4(self, func, x, q, theta, dt):
-        # 4-th order Runge-Kutta ODE integration
+        """
+        ODE integration using 4th-order Runge-Kutta approximation.
+
+        Parameters
+        ----------
+        func : function
+            Function defining the system dynamics.
+
+        x : (dim_x, ) ndarray
+            Previous system state.
+
+        q : (dim_q, ) ndarray
+            System (process) noise.
+
+        theta : (dim_par, ) ndarray
+            Dynamics parameters.
+
+        dt : float
+            Discretization step.
+
+        Returns
+        -------
+        : (dim_x, ) ndarray
+            State in the next time step.
+        """
         dt2 = 0.5 * dt
         k1 = func(x, q, theta)
         k2 = func(x + dt2 * k1, q, theta)
@@ -332,6 +416,19 @@ class System(object, metaclass=ABCMeta):
         return x + (dt / 6) * (k1 + 2 * (k2 + k3) + k4)
 
     def _get_ode_method(self, method):
+        """
+        Get an ODE integration method.
+
+        Parameters
+        ----------
+        method : str {'euler', 'rk4'}
+            ODE integration method.
+
+        Returns
+        -------
+        : function
+            Function handle to the desired ODE integration method.
+        """
         method = method.lower()
         if method == 'euler':
             return self._ode_euler
