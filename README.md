@@ -1,19 +1,26 @@
 # SSM Toybox
-Python 3 implementation of the nonlinear sigma-point filters based on Gaussian process quadrature. Included are also the well-known classical nonlinear Kalman filters such as:
+Python 3 implementation of the nonlinear sigma-point filters based on Bayesian quadrature, such as
+
+* Gaussian Process Quadrature Kalman Filter
+* Student's t-Process Quadrature Kalman Filter
+
+Included are also the well-known classical nonlinear Kalman filters such as:
 
 * Extended Kalman Filter
 * Unscented Kalman Filter
 * Cubature Kalman Filter
 * Gauss-Hermite Kalman Filter
 
-## Structure
 
-`StateSpaceInference`
+### Build documentation
 
-`StateSpaceModel`
+```
+cd docs
+sphinx-apidoc -o ./ ../ssmtoybox ../ssmtoybox/tests
+make html
+```
 
-`MomentTransform`
 
+### Why toybox?
 
-## Why toybox?
-Because 'toolbox' sounds too serious and, at least to me, implies certain standard of quality, which this code is lacking at this moment.
+Because 'toolbox' sounds too serious :-).
