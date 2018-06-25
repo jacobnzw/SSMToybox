@@ -7,6 +7,26 @@ from numpy import newaxis as na
 class System(object, metaclass=ABCMeta):
     """
     General continuous-time dynamical system
+
+    Attributes
+    ----------
+    xD : int
+        State dimension.
+
+    zD : int
+        Measurement dimension.
+
+    qD : int
+        State noise dimension.
+
+    rD : int
+        Measurement noise dimension.
+
+    q_additive : bool
+        Indicates additivity of state noise.
+
+    r_additive : bool
+        Indicates additivity of measurement noise.
     """
 
     xD = None  # state dimension
@@ -30,17 +50,19 @@ class System(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        x : 1-D array_like of shape (self.xD,)
-            System state
-        q : 1-D array_like of shape (self.qD,)
-            System noise
-        pars : 1-D array_like
-            Parameters of the system dynamics
+        x : (dim_x, ) ndarray
+            System state.
+
+        q : (dim_q, ) ndarray
+            System noise.
+
+        pars : (dim_par, ) ndarray
+            Parameters of the system dynamics.
 
         Returns
         -------
-        1-D numpy.ndarray of shape (self.xD,)
-            system state in the next time step
+        : (dim_x, ) ndarray
+            System state in the next time step.
         """
         pass
 
@@ -52,17 +74,19 @@ class System(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        x : 1-D array_like of shape (self.xD,)
-            system state
-        r : 1-D array_like of shape (self.rD,)
-            measurement noise
-        pars : 1-D array_like
-            parameters of the measurement model
+        x : (dim_x, ) ndarray
+            System state.
+
+        r : (dim_r, ) ndarray
+            Measurement noise.
+
+        pars : (dim_par, ) ndarray
+            Parameters of the measurement model.
 
         Returns
         -------
-        1-D numpy.ndarray of shape (self.zD,)
-            measurement of the state
+        : (dim_z, ) ndarray
+            Measurement of the state.
         """
         pass
 
@@ -77,11 +101,11 @@ class System(object, metaclass=ABCMeta):
         Parameters
         ----------
         time : int
-            Discrete time step
+            Discrete time step.
 
         Returns
         -------
-        1-D numpy.ndarray of shape (self.pD,)
+        : (dim_par, ) ndarray
             Vector of parameters at a given time.
         """
         pass
@@ -94,20 +118,22 @@ class System(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        x : 1-D array_like of shape (self.xD,)
-            System state
-        q : 1-D array_like of shape (self.qD,)
-            System noise
-        pars : 1-D array_like of shape (self.pD,)
-            System parameter
+        x : (dim_x, ) ndarray
+            System state.
+
+        q : (dim_q, ) ndarray
+            System noise.
+
+        pars : (dim_par, ) ndarray
+            Parameters of the system dynamics.
 
         Returns
         -------
-        2-D numpy.ndarray
+        : (dim_x, dim_x) ndarray
             Jacobian matrix of the system dynamics, where the second dimension depends on the noise additivity.
             The shape depends on whether or not the state noise is additive. The two cases are:
-                * additive: (self.xD, self.xD)
-                * non-additive: (self.xD, self.xD + self.qD)
+                * additive: (dim_x, dim_x)
+                * non-additive: (dim_x, dim_x + dim_q)
         """
         pass
 
@@ -119,20 +145,22 @@ class System(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        x : 1-D array_like of shape (self.xD,)
-            System state
-        r : 1-D array_like of shape (self.qD,)
-            Measurement noise
-        pars : 1-D array_like of shape (self.pD,)
-            System parameter
+        x : (dim_x, ) ndarray
+            System state.
+
+        r : (dim_r, ) ndarray
+            Measurement noise.
+
+        pars : (dim_par, ) ndarray
+            Parameters of the measurement model.
 
         Returns
         -------
         2-D numpy.ndarray
             Jacobian matrix of the measurement model, where the second dimension depends on the noise additivity.
             The shape depends on whether or not the state noise is additive. The two cases are:
-                * additive: (self.xD, self.xD)
-                * non-additive: (self.xD, self.xD + self.rD)
+                * additive: (dim_x, dim_x)
+                * non-additive: (dim_x, dim_x + dim_r)
         """
         pass
 
@@ -143,11 +171,13 @@ class System(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        size : int or tuple of ints
+        size : int or tuple
+            Sample size.
 
         Returns
         -------
-
+        : (size) ndarray
+            Noise samples.
         """
         pass
 
@@ -158,11 +188,13 @@ class System(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        size : int or tuple of ints
+        size : int or tuple
+            Sample size.
 
         Returns
         -------
-
+        : (size) ndarray
+            Noise samples.
         """
         pass
 
@@ -173,11 +205,13 @@ class System(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        size : int or tuple of ints
+        size : int or tuple
+            Sample size.
 
         Returns
         -------
-
+        : (size) ndarray
+            Initial state samples.
         """
         pass
 
@@ -186,15 +220,20 @@ class System(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        xq : 1-D array_like
-            Augmented system state
-        pars : 1-D array_like
-            System dynamics parameters
+        xq : (dim_x + dim_q, ) ndarray
+            Augmented system state.
+
+        pars : (dim_par, ) ndarray
+            System dynamics parameters.
+
         dx : bool
-            * ``True``: Evaluates derivatives (Jacobian) of the system dynamics
-            * ``False``: Evaluates system dynamics
+            Evaluate derivatives
+            * ``True``: Evaluates derivatives (Jacobian) of the system dynamics.
+            * ``False``: Evaluates system dynamics.
+
         Returns
         -------
+        : (dim_x, ) ndarray
             Evaluated system dynamics or evaluated Jacobian of the system dynamics.
         """
         if self.q_additive:
@@ -217,15 +256,20 @@ class System(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        xr : 1-D array_like
-            Augmented system state
-        pars : 1-D array_like
-            Measurement model parameters
+        xr : (dim_x + dim_r, ) ndarray
+            Augmented system state.
+
+        pars : (dim_par, ) ndarray
+            Measurement model parameters.
+
         dx : bool
-            * ``True``: Evaluates derivatives (Jacobian) of the measurement model
-            * ``False``: Evaluates measurement model
+            Evaluate derivatives
+            * ``True``: Evaluates derivatives (Jacobian) of the measurement model.
+            * ``False``: Evaluates measurement model.
+
         Returns
         -------
+        : (dim_z, ) ndarray
             Evaluated measurement model or evaluated Jacobian of the measurement model.
         """
         if self.r_additive:
@@ -246,16 +290,13 @@ class System(object, metaclass=ABCMeta):
     def check_jacobians(self, h=1e-8):
         """Checks implemented Jacobians.
 
-        Checks that both Jacobians are correctly implemented using numerical approximations.
+        Checks that both Jacobians are correctly implemented using numerical approximations. Prints the errors and
+        user decides whether they're acceptable.
 
         Parameters
         ----------
         h : float
-            step size in derivative approximations
-
-        Returns
-        -------
-            Prints the errors and user decides whether they're acceptable.
+            Step size in derivative approximations.
         """
         nq = self.xD if self.q_additive else self.xD + self.qD
         nr = self.xD if self.r_additive else self.xD + self.rD
@@ -329,7 +370,7 @@ class System(object, metaclass=ABCMeta):
 
         Parameters
         ----------
-        x : ndarray
+        x : (dim_x, ) ndarray
             State trajectory.
 
         mc_per_step : int, optional
@@ -338,6 +379,7 @@ class System(object, metaclass=ABCMeta):
         Returns
         -------
         : (dim_y, num_time_steps, num_mc_sims) ndarray
+            Measurement trajectories of the continuous-time dynamic system.
         """
         # x - state trajectory, freq - sampling frequency [Hz],
         # mc_per_step - how many measurement to generate in each time step
@@ -450,6 +492,29 @@ class System(object, metaclass=ABCMeta):
 class GaussianSystem(System):
     """
     System where the state and measurement noise are Gaussian.
+
+    Parameters
+    ----------
+    x0_mean : (dim_x, ) ndarray
+        Mean of the initial system state.
+
+    x0_cov : (dim_x, dim_x) ndarray
+        Covariance of the initial system state.
+
+    q_mean : (dim_q, ) ndarray
+        Mean of the state noise.
+
+    q_cov : (dim_q, dim_q) ndarray
+        Covariance of the state noise.
+
+    r_mean : (dim_r, ) ndarray
+        Mean of the measurement noise.
+
+    r_cov : (dim_r, dim_r) ndarray
+        Covariance of the measurement noise.
+
+    q_gain : (dim_x, dim_q) ndarray
+        Gain of the state noise.
     """
 
     def __init__(self, x0_mean=None, x0_cov=None, q_mean=None, q_cov=None, r_mean=None, r_cov=None, q_gain=None):
@@ -468,153 +533,99 @@ class GaussianSystem(System):
 
     @abstractmethod
     def dyn_fcn(self, x, q, pars):
-        """ System dynamics.
-
-        Abstract method for the system dynamics.
-
-        Parameters
-        ----------
-        x : 1-D array_like of shape (self.xD,)
-            System state
-        q : 1-D array_like of shape (self.qD,)
-            System noise
-        pars : 1-D array_like
-            Parameters of the system dynamics
-
-        Returns
-        -------
-        1-D numpy.ndarray of shape (self.xD,)
-            system state in the next time step
-        """
         pass
 
     @abstractmethod
     def meas_fcn(self, x, r, pars):
-        """Measurement model.
-
-        Abstract method for the measurement model.
-
-        Parameters
-        ----------
-        x : 1-D array_like of shape (self.xD,)
-            system state
-        r : 1-D array_like of shape (self.rD,)
-            measurement noise
-        pars : 1-D array_like
-            parameters of the measurement model
-
-        Returns
-        -------
-        1-D numpy.ndarray of shape (self.zD,)
-            measurement of the state
-        """
         pass
 
     @abstractmethod
     def par_fcn(self, time):
-        """Parameter function of the system dynamics and measurement model.
-
-        Abstract method for the parameter function of the whole state-space model. The implementation should ensure
-        that the system dynamics parameters come before the measurement model parameters in the returned vector of
-        parameters.
-
-        Parameters
-        ----------
-        time : int
-            Discrete time step
-
-        Returns
-        -------
-        1-D numpy.ndarray of shape (self.pD,)
-            Vector of parameters at a given time.
-        """
         pass
 
     @abstractmethod
     def dyn_fcn_dx(self, x, q, pars):
-        """Jacobian of the system dynamics.
-
-        Abstract method for the Jacobian of system dynamics. Jacobian is a matrix of first partial derivatives.
-
-        Parameters
-        ----------
-        x : 1-D array_like of shape (self.xD,)
-            System state
-        q : 1-D array_like of shape (self.qD,)
-            System noise
-        pars : 1-D array_like of shape (self.pD,)
-            System parameter
-
-        Returns
-        -------
-        2-D numpy.ndarray
-            Jacobian matrix of the system dynamics, where the second dimension depends on the noise additivity.
-            The shape depends on whether or not the state noise is additive. The two cases are:
-                * additive: (self.xD, self.xD)
-                * non-additive: (self.xD, self.xD + self.qD)
-        """
         pass
 
     @abstractmethod
     def meas_fcn_dx(self, x, r, pars):
-        """Jacobian of the measurement model.
-
-        Abstract method for the Jacobian of measurement model. Jacobian is a matrix of first partial derivatives.
-
-        Parameters
-        ----------
-        x : 1-D array_like of shape (self.xD,)
-            System state
-        r : 1-D array_like of shape (self.qD,)
-            Measurement noise
-        pars : 1-D array_like of shape (self.pD,)
-            System parameter
-
-        Returns
-        -------
-        2-D numpy.ndarray
-            Jacobian matrix of the measurement model, where the second dimension depends on the noise additivity.
-            The shape depends on whether or not the state noise is additive. The two cases are:
-                * additive: (self.xD, self.xD)
-                * non-additive: (self.xD, self.xD + self.rD)
-        """
         pass
 
     def state_noise_sample(self, size=None):
+        """
+        Generate samples of Gaussian state noise.
+
+        Parameters
+        ----------
+        size : int or tuple
+            Sample size.
+
+        Returns
+        -------
+        : (size) ndarray
+            Samples of Gaussian state noise.
+        """
         q_mean, q_cov = self.get_pars('q_mean', 'q_cov')
         return np.random.multivariate_normal(q_mean, q_cov, size).T
 
     def measurement_noise_sample(self, size=None):
+        """
+        Generate samples of Gaussian measurement noise.
+
+        Parameters
+        ----------
+        size : int or tuple
+            Sample size.
+
+        Returns
+        -------
+        : (size) ndarray
+            Samples of Gaussian measurement noise.
+        """
         r_mean, r_cov = self.get_pars('r_mean', 'r_cov')
         return np.random.multivariate_normal(r_mean, r_cov, size).T
 
     def initial_condition_sample(self, size=None):
+        """
+        Generate samples of Gaussian initial system state.
+
+        Parameters
+        ----------
+        size : int or tuple
+            Sample size.
+
+        Returns
+        -------
+        : (size) ndarray
+            Samples of Gaussian initial system state.
+        """
         x0_mean, x0_cov = self.get_pars('x0_mean', 'x0_cov')
         return np.random.multivariate_normal(x0_mean, x0_cov, size).T
 
 
 class ReentryRadar(GaussianSystem):
     """
-    Radar tracking of the reentry vehicle as described in [1]_.
+    Radar tracking of the reentry vehicle as described in [Julier2004]_.
     Vehicle is entering Earth's atmosphere at high altitude and with great speed, ground radar is tracking it.
 
-    State
-    -----
-    [px, py, vx, vy, x5]
-    (px, py) - position,
-    (vx, vy) - velocity,
-    x5 - aerodynamic parameter
+    State: :math:`\\mathbf{x} = [x, y, \\dot{x}, \\dot{y}, \\omega]`, where
+        :math:`x`, :math:`y`
+            Position in 2D.
+        :math:`\\dot{x}`, :math:`\\dot{y}`
+            Velocity in 2D.
+        :math:`\\omega`
+            Aerodynamic parameter.
 
-    Measurements
-    ------------
-    range and bearing
-
+    Measurements: :math:`\\mathbf{y} = [r, \\theta]`, where
+        :math:`r`
+            Range to target.
+        :math:`\\theta`
+            Bearing to the target.
 
     References
     ----------
-    .. [1] Julier, S. J., & Uhlmann, J. K. (2004). Unscented Filtering and Nonlinear Estimation.
-           Proceedings of the IEEE, 92(3), 401-422
-
+    .. [Julier2004] Julier, S. J., & Uhlmann, J. K. (2004). Unscented Filtering and Nonlinear Estimation.
+                    Proceedings of the IEEE, 92(3), 401-422
     """
 
     xD = 5
@@ -632,13 +643,6 @@ class ReentryRadar(GaussianSystem):
     sx, sy = R0, 0  # radar location
 
     def __init__(self):
-        """
-
-        Parameters
-        ----------
-        dt :
-            time interval between two consecutive measurements
-        """
         kwargs = {
             'x0_mean': np.array([6500.4, 349.14, -1.8093, -6.7967, 0.6932]),  # m, m/s, m m/s, rad/s
             'x0_cov': np.diag([1e-6, 1e-6, 1e-6, 1e-6, 0]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
@@ -689,27 +693,27 @@ class ReentryRadar(GaussianSystem):
 
 class ReentryRadarSimple(GaussianSystem):
     """
-    Radar tracking of the reentry vehicle as described in [1]_.
+    Radar tracking of the reentry vehicle as described in [Julier2000]_.
     High velocity projectile is entering atmosphere, radar positioned 100,000ft above Earth's surface (and 100,
     000ft horizontally) is producing range measurements.
 
-    State
-    -----
-    [p, v, x5]
-    p - altitude,
-    v - velocity,
-    x5 - aerodynamic parameter
+    State: :math:`\\mathbf{x} = [y, \\dot{y}, \\omega]`, where
+        :math:`y`
+            Position.
+        :math:`\\dot{y}`
+            Velocity.
+        :math:`\\omega`
+            Aerodynamic parameter.
 
-    Measurements
-    ------------
-    range and bearing
-
+    Measurements: :math:`y = r`, where
+        :math:`r`
+            Range to target.
 
     References
     ----------
-    .. [1] S. J. Julier, J. K. Uhlmann, and H. F. Durrant-Whyte, "A New Method for the Nonlinear Transformation
-    of Means and Covariances in Filters and Estimators," IEEE Trans. Automat. Contr., vol. 45, no. 3, pp. 477–482, 2000.
-
+    .. [Julier2000] S. J. Julier, J. K. Uhlmann, and H. F. Durrant-Whyte, "A New Method for the Nonlinear Transformation
+                    of Means and Covariances in Filters and Estimators," IEEE Transactions on Automatic Control.,
+                    vol. 45, no. 3, pp. 477–482, 2000.
     """
 
     xD = 3
@@ -725,13 +729,6 @@ class ReentryRadarSimple(GaussianSystem):
     Gamma = 1/6.096
 
     def __init__(self):
-        """
-
-        Parameters
-        ----------
-        dt :
-            time interval between two consecutive measurements
-        """
         kwargs = {
             'x0_mean': np.array([90, 6, 1.5]),  # km, km/s
             'x0_cov': np.diag([0.3048**2, 1.2192**2, 1e-4]),  # km^2, km^2/s^2
