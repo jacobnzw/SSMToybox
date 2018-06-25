@@ -3,8 +3,8 @@ from unittest import TestCase
 import numpy as np
 import numpy.linalg as la
 
-from ssinf import GPQMKalman
-from ssmod import Pendulum, UNGM
+from ssmtoybox.ssinf import GPQMKalman
+from ssmtoybox.ssmod import Pendulum, UNGM
 
 
 class GPQMarginalizedTest(TestCase):

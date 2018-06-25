@@ -6,7 +6,7 @@ import scipy.linalg as la
 from scipy.optimize import minimize
 
 from .bqkern import RBF, RQ, RBFStudent
-from mtran import SphericalRadial, Unscented, GaussHermite, FullySymmetricStudent
+from ssmtoybox.mtran import SphericalRadial, Unscented, GaussHermite, FullySymmetricStudent
 
 
 class Model(object, metaclass=ABCMeta):

@@ -3,8 +3,8 @@ from unittest import TestCase
 import numpy as np
 import numpy.linalg as la
 
-from bq.bqmtran import GPQ, GPQMO
-from ssmod import Pendulum, CoordinatedTurnBOT, ReentryRadar, UNGM
+from ssmtoybox.bq.bqmtran import GPQ, GPQMO
+from ssmtoybox.ssmod import Pendulum, CoordinatedTurnBOT, ReentryRadar, UNGM
 
 np.set_printoptions(precision=4)
 

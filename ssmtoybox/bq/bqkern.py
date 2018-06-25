@@ -5,7 +5,7 @@ import numpy.linalg as la
 from numpy import newaxis as na
 from scipy.linalg import cho_factor, cho_solve
 
-from utils import maha, multivariate_t
+from ssmtoybox.utils import maha, multivariate_t
 
 
 class Kernel(object, metaclass=ABCMeta):

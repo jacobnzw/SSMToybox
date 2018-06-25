@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 
 import numpy as np
 from numpy import newaxis as na
-from utils import multivariate_t
+from ssmtoybox.utils import multivariate_t
 
 # NOTE : The class should recognize input dimensions of dynamics and observation models separately
 # This is because observation models do not always use all the state dimensions, e.g. radar only uses position
@@ -786,14 +786,14 @@ class StudentStateSpaceModel(StateSpaceModel):
 
 class FrequencyDemodulation(GaussianStateSpaceModel):
     """
-    Frequency demodulation SSM from [1]_.
+    Frequency demodulation SSM from [Pakki]_.
 
     The objective is to estimate the frequency message :math:`x_1 = \\omega` from noisy in-phase and quadrature
     observations.
 
     References
     ----------
-    .. [1] Pakki, K., et al., Cubature Information Filter and its Applications, Proceedings of the ACC, 2011
+    .. [Pakki] Pakki, K., et al., Cubature Information Filter and its Applications, Proceedings of the ACC, 2011
     """
 
     xD = 2

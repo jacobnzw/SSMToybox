@@ -2,8 +2,8 @@ import unittest
 
 import numpy as np
 
-from ssinf import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GPQKalman, TPQKalman
-from ssmod import Pendulum, UNGM, UNGMnonadd
+from ssmtoybox.ssinf import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GPQKalman, TPQKalman
+from ssmtoybox.ssmod import Pendulum, UNGM, UNGMnonadd
 
 
 def default_bq_hypers(sys):

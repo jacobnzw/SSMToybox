@@ -1,9 +1,9 @@
 import numpy as np
 import numpy.linalg as la
 from scipy.linalg import cho_factor, cho_solve
-from ssmod import ReentryRadar
-from bq.bqmtran import GPQ
-from mtran import MonteCarlo
+from ssmtoybox.ssmod import ReentryRadar
+from ssmtoybox.bq.bqmtran import GPQ
+from ssmtoybox.mtran import MonteCarlo
 from unittest import TestCase
 
 

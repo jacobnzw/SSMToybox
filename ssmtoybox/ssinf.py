@@ -4,9 +4,9 @@ import numpy.linalg as la
 from scipy.linalg import cho_factor, cho_solve, block_diag
 from scipy.stats import multivariate_normal
 from numpy import newaxis as na
-from ssmod import StateSpaceModel, StudentStateSpaceModel
-from bq.bqmtran import GPQ, GPQMO, TPQ, TPQMO
-from mtran import MomentTransform, Taylor1stOrder, TaylorGPQD, SphericalRadial, SphericalRadialTrunc, \
+from ssmtoybox.ssmod import StateSpaceModel, StudentStateSpaceModel
+from ssmtoybox.bq.bqmtran import GPQ, GPQMO, TPQ, TPQMO
+from ssmtoybox.mtran import MomentTransform, Taylor1stOrder, TaylorGPQD, SphericalRadial, SphericalRadialTrunc, \
     Unscented, UnscentedTrunc, GaussHermite, GaussHermiteTrunc
 
 

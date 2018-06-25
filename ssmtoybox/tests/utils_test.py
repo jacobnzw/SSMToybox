@@ -1,6 +1,6 @@
 import unittest
 
-from utils import *
+from ssmtoybox.utils import *
 
 
 class TestMetrics(unittest.TestCase):

@@ -17,9 +17,7 @@ def squared_error(x, m):
     Squared Error
 
     .. math::
-    \[
-        SE = (x_k - m_k)^2
-    \]
+        \mathrm{SE} = (x_k - m_k)^2
 
     Parameters
     ----------
@@ -65,12 +63,10 @@ def mse_matrix(x, m):
 
 def log_cred_ratio(x, m, P, MSE):
     """
-    Logarithm of Credibility Ratio [1]_ is given by
+    Logarithm of Credibility Ratio [Li2006]_ is given by
 
     .. math::
-    \[
-        \\gamma_n = 10*\\log_10 \\frac{(x - m_n)^{\\top}P_n^{-1}(x - m_n)}{(x - m_n)^{\\top}\Sig^{-1}(x - m_n)}
-    \]
+        \\gamma_n = 10*\\log_10 \\frac{(x - m_n)^{\\top}P_n^{-1}(x - m_n)}{(x - m_n)^{\\top}\Sigma^{-1}(x - m_n)}
 
     Parameters
     ----------
@@ -93,26 +89,22 @@ def log_cred_ratio(x, m, P, MSE):
 
     Notes
     -----
-    Log credibility ratio is defined in [1]_ and is an essential quantity for computing the inclination indicator
+    Log credibility ratio is defined in [Li2006]_ and is an essential quantity for computing the inclination indicator
 
     .. math::
-    \[
         I^2 = \\frac{1}{N}\\sum\\limits_{n=1}^{N} \\gamma_n,
-    \]
 
     and the non-credibility index given by
 
     .. math::
-    \[
         NCI = \\frac{1}{N}\\sum\\limits_{n=1}^{N} \\| \\gamma_n \\|.
-    \]
 
     Since in state estimation examples one can either average over time or MC simulations, the implementation of I^2
     and NCI is left for the user.
 
     References
     ----------
-    .. [1] X. R. Li and Z. Zhao, “Measuring Estimator’s Credibility: Noncredibility Index,”
+    .. [Li2006] X. R. Li and Z. Zhao, “Measuring Estimator’s Credibility: Noncredibility Index,”
            in Information Fusion, 2006 9th International Conference on, 2006, pp. 1–8.
     """
     dx = x - m
@@ -189,7 +181,13 @@ def kl_divergence(mean_0, cov_0, mean_1, cov_1):
 
 def symmetrized_kl_divergence(mean_0, cov_0, mean_1, cov_1):
     """
-    Symmetrized KL-divergence between the true and approximate Gaussian probability density functions.
+    Symmetrized KL-divergence
+
+    .. math::
+        \\mathrm{SKL} = \\frac{1}{2}[KL(q(x)||p(x)) + KL(p(x)||q(x))]
+
+    between the true :math:`p(x) = \\mathrm{N}(x | m_0, C_0)` and the approximate Gaussian probability density function
+     :math:`q(x) = \\mathrm{N}(x | m_1, C_1)`.
 
     Parameters
     ----------
@@ -212,7 +210,7 @@ def symmetrized_kl_divergence(mean_0, cov_0, mean_1, cov_1):
 
     Notes
     -----
-    Implements symmetrization given by :math:`0.5[KL(q(x)||p(x)) + KL(p(x)||q(x))]`. Other symmetrizations exist.
+    Other symmetrizations exist.
     """
     return 0.5 * (kl_divergence(mean_0, cov_0, mean_1, cov_1) + kl_divergence(mean_1, cov_1, mean_0, cov_0))
 
@@ -253,7 +251,10 @@ def bigauss_mixture(m0, c0, m1, c1, alpha, size):
     Samples from a Gaussian mixture with two components.
 
     Draw samples of a random variable :math:`X` following a Gaussian mixture density with two components,
-    given by :math:`X \\sim \\alpha \\mathrm{N}(m_0, C_0) + (1 - \\alpha)\\mathrm{N}(m_1, C_1)`.
+    given by
+
+    .. math::
+        X \\sim \\alpha \\mathrm{N}(m_0, C_0) + (1 - \\alpha)\\mathrm{N}(m_1, C_1)
 
     Parameters
     ----------

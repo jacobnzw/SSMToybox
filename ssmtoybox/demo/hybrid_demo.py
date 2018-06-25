@@ -16,10 +16,10 @@ import time
 import numpy as np
 import pandas as pd
 
-from demo.icinco_demo import evaluate_performance
-from ssinf import ExtendedKalman, ExtendedKalmanGPQD
-from ssmod import UNGM
-from mtran import Unscented
+from ssmtoybox.demo.icinco_demo import evaluate_performance
+from ssmtoybox.ssinf import ExtendedKalman, ExtendedKalmanGPQD
+from ssmtoybox.ssmod import UNGM
+from ssmtoybox.mtran import Unscented
 
 steps, mc = 50, 10  # time steps, mc simulations
 # initialize SSM and generate some data

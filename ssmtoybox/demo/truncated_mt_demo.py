@@ -1,12 +1,12 @@
-from mtran import MonteCarlo, Unscented, UnscentedTrunc
+from ssmtoybox.mtran import MonteCarlo, Unscented, UnscentedTrunc
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
-from mtran import MomentTransform
-from utils import ellipse_points, symmetrized_kl_divergence, squared_error, log_cred_ratio, mse_matrix
-from ssinf import UnscentedTruncKalman, UnscentedKalman
-from ssmod import ReentryRadar as ReentryRadarModel
-from dynsys import ReentryRadar as ReentryRadarSystem
+from ssmtoybox.mtran import MomentTransform
+from ssmtoybox.utils import ellipse_points, symmetrized_kl_divergence, squared_error, log_cred_ratio, mse_matrix
+from ssmtoybox.ssinf import UnscentedTruncKalman, UnscentedKalman
+from ssmtoybox.ssmod import ReentryRadar as ReentryRadarModel
+from ssmtoybox.dynsys import ReentryRadar as ReentryRadarSystem
 
 
 def cartesian2polar(x, pars, dx=False):

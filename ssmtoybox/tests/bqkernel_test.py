@@ -4,7 +4,7 @@ import numpy as np
 import numpy.linalg as la
 from numpy import newaxis as na
 
-from bq.bqkern import RBF, RBFStudent
+from ssmtoybox.bq.bqkern import RBF, RBFStudent
 
 
 class RBFKernelTest(TestCase):

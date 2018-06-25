@@ -4,9 +4,9 @@ from numpy import newaxis as na
 from scipy.stats import multivariate_normal
 from scipy.linalg import cho_factor, cho_solve
 from numpy.linalg import cholesky
-from ssinf import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GPQKalman
-from ssmod import UNGM
-from utils import bootstrap_var, squared_error, neg_log_likelihood, log_cred_ratio, mse_matrix
+from ssmtoybox.ssinf import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GPQKalman
+from ssmtoybox.ssmod import UNGM
+from ssmtoybox.utils import bootstrap_var, squared_error, neg_log_likelihood, log_cred_ratio, mse_matrix
 import matplotlib.pyplot as plt
 import time
 

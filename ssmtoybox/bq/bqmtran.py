@@ -4,7 +4,7 @@ import numpy as np
 from numpy import newaxis as na
 from numpy.linalg import cholesky
 
-from mtran import MomentTransform
+from ssmtoybox.mtran import MomentTransform
 
 
 class BQTransform(MomentTransform, metaclass=ABCMeta):
