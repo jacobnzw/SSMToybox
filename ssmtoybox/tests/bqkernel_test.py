@@ -121,7 +121,7 @@ class RBFStudentKernelTest(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from mtran import FullySymmetricStudent
+        from ssmtoybox.mtran import FullySymmetricStudent
         cls.points = FullySymmetricStudent.unit_sigma_points(2)
         cls.num_pts = cls.points.shape[1]
 
