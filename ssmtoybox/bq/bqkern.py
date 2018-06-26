@@ -419,6 +419,34 @@ class RBF(Kernel):
         inv_lam = sqrt_inv_lam ** 2
         return alpha ** 2 * la.det(2 * inv_lam + self.eye_d) ** -0.5
 
+    def exp_x_xpx(self, multi_ind):
+        """
+        Compute expectation
+
+        .. math::
+            \\mathbb{E}[xp(x)^T]_{iq} = \\prod_{d=1}^D \\alpha^q_d !!
+
+        Parameters
+        ----------
+        multi_ind : (D, Q) ndarray
+            Matrix of multi-indices. Each column is a multi-index :math:`\\alpha^q \\in \\mathbb{N}_0^D` defining one
+            of the Q multivariate polynomial basis functions.
+        Returns
+        -------
+        : (D, Q) ndarray
+
+        """
+        # if none of \alpha^j_q is even
+        # scipy.special.factorial2(5, exact=True)
+        a = np.prod(multi_ind, axis=0)
+        pass
+
+    def exp_x_pxpx(self, multi_ind):
+        pass
+
+    def exp_x_kxpx(self, par, mult_ind):
+        pass
+
     def der_par(self, par_0, x):  # K as kwarg would save computation (would have to be evaluated w/ par_0)
         # par_0: array_like [alpha, el_1, ..., el_D]
         # x: (D, N)
