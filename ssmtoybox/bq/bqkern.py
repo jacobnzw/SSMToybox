@@ -422,10 +422,13 @@ class RBF(Kernel):
 
     def exp_x_xpx(self, multi_ind):
         """
-        Compute expectation
+        Compute expectation \\mathbb{E}[xp(x)^T]_{iq} for all :math:`i` and :math`q`. The expectation is equal to
 
         .. math::
-            \\mathbb{E}[xp(x)^T]_{iq} = \\prod_{d=1}^D \\alpha^q_d !!
+             \\alpha^q_i\\prod_{d \neq i} (\\alpha^q_d - 1)!!
+
+        when :math:`\\alpha^q_i + 1` is even and :math:`\\alpha^q_d, \\forall d \neq i` are even.
+        Otherwise the expectation is zero.
 
         Parameters
         ----------
@@ -436,16 +439,13 @@ class RBF(Kernel):
         Returns
         -------
         : (D, Q) ndarray
-
+            Matrix of expectations.
         """
-        # np.any(multi_ind % 2 == 0, axis=0)  # none of alpha^j_q is even
-        # scipy.special.factorial2(5, exact=True)
-        # a = np.prod(multi_ind, axis=0)
-        D, Q = multi_ind.shape
-        d_ind = np.arange(D)
+        dim, num_bases = multi_ind.shape
+        d_ind = np.arange(dim)
         result = np.zeros(multi_ind.shape)
-        for d in range(D):
-            for q in range(Q):
+        for d in range(dim):
+            for q in range(num_bases):
                 # all remaining multi-indices even? # i.e. none are odd?
                 alpha_min_d = multi_ind[d_ind != d, q]
                 all_even = np.all(alpha_min_d % 2 == 0)
@@ -457,7 +457,37 @@ class RBF(Kernel):
         return result
 
     def exp_x_pxpx(self, multi_ind):
-        pass
+        """
+        Compute expectation \\mathbb{E}[p(x)p(x)^T]_{rq} for all :math:`r` and :math`q`. The expectation is equal to
+
+        .. math::
+             \\prod_{d = 1}^D (\\alpha^q_d + \\alpha^r_d - 1)!!
+
+        when :math:`\\forall d,\\quad \\alpha^q_d + \\alpha^r_d` are even (where :math:`r` and :math:`q` are fixed).
+        Otherwise the expectation is zero.
+
+        Parameters
+        ----------
+        multi_ind : (D, Q) ndarray
+            Matrix of multi-indices. Each column is a multi-index :math:`\\alpha^q \\in \\mathbb{N}_0^D` defining one
+            of the Q multivariate polynomial basis functions.
+
+        Returns
+        -------
+        : (Q, Q) ndarray
+            Matrix of expectations.
+        """
+        dim, num_bases = multi_ind.shape
+        result = np.zeros((num_bases, num_bases))
+        for r in range(num_bases):
+            for q in range(num_bases):
+                all_even = np.all((multi_ind[:, r] + multi_ind[:, q]) % 2 == 0)
+                if all_even:
+                    apa_fact2 = [factorial2(multi_ind[d, r] + multi_ind[d, q] - 1, exact=True) for d in range(dim)]
+                    result[r, q] = np.prod(apa_fact2)
+                else:
+                    result[r, q] = 0
+        return result
 
     def exp_x_kxpx(self, par, mult_ind):
         pass
