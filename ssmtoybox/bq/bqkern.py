@@ -4,6 +4,7 @@ import numpy as np
 import numpy.linalg as la
 from numpy import newaxis as na
 from scipy.linalg import cho_factor, cho_solve
+from scipy.special import factorial2
 
 from ssmtoybox.utils import maha, multivariate_t
 
@@ -431,15 +432,29 @@ class RBF(Kernel):
         multi_ind : (D, Q) ndarray
             Matrix of multi-indices. Each column is a multi-index :math:`\\alpha^q \\in \\mathbb{N}_0^D` defining one
             of the Q multivariate polynomial basis functions.
+
         Returns
         -------
         : (D, Q) ndarray
 
         """
-        # if none of \alpha^j_q is even
+        # np.any(multi_ind % 2 == 0, axis=0)  # none of alpha^j_q is even
         # scipy.special.factorial2(5, exact=True)
-        a = np.prod(multi_ind, axis=0)
-        pass
+        # a = np.prod(multi_ind, axis=0)
+        D, Q = multi_ind.shape
+        d_ind = np.arange(D)
+        result = np.zeros(multi_ind.shape)
+        for d in range(D):
+            for q in range(Q):
+                # all remaining multi-indices even? # i.e. none are odd?
+                alpha_min_d = multi_ind[d_ind != d, q]
+                all_even = np.all(alpha_min_d % 2 == 0)
+                if (multi_ind[d, q] + 1) % 2 == 0 and all_even:
+                    amd_fact2 = [factorial2(amd - 1, exact=True) for amd in alpha_min_d]
+                    result[d, q] = multi_ind[d, q]*np.prod(amd_fact2)
+                else:
+                    result[d, q] = 0
+        return result
 
     def exp_x_pxpx(self, multi_ind):
         pass
