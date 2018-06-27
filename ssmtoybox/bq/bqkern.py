@@ -536,7 +536,7 @@ class RBF(Kernel):
                 temp = dim_zeros.copy()
                 for d in range(dim):
                     # exponential part
-                    a = (1 + ell[d]**2)**multi_ind[d, q] * np.exp(-ell[d]**2/(2*(1 + ell[d]**2)))
+                    a = (1 + ell[d]**2)**multi_ind[d, q] * np.exp(-x[d, n]**2/(2*(1 + ell[d]**2)))
 
                     # binomial part
                     alpha = multi_ind[d, q]
