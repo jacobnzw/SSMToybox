@@ -4,9 +4,12 @@ import numpy as np
 import numpy.linalg as la
 from numpy import newaxis as na
 from scipy.linalg import cho_factor, cho_solve
-from scipy.special import factorial2
+from scipy.special import factorial, factorial2
 
 from ssmtoybox.utils import maha, multivariate_t
+
+
+factorial = lambda x: factorial(x, exact=True)
 
 
 class Kernel(object, metaclass=ABCMeta):
@@ -422,12 +425,12 @@ class RBF(Kernel):
 
     def exp_x_xpx(self, multi_ind):
         """
-        Compute expectation \\mathbb{E}[xp(x)^T]_{iq} for all :math:`i` and :math`q`. The expectation is equal to
+        Compute expectation \\mathbb{E}[xp(x)^T]_{eq} for all :math:`e` and :math`q`. The expectation is equal to
 
         .. math::
-             \\alpha^q_i\\prod_{d \neq i} (\\alpha^q_d - 1)!!
+             \\alpha^q_e\\prod_{d \neq e} (\\alpha^q_d - 1)!!
 
-        when :math:`\\alpha^q_i + 1` is even and :math:`\\alpha^q_d, \\forall d \neq i` are even.
+        when :math:`\\alpha^q_e + 1` is even and :math:`\\alpha^q_d, \\forall d \neq e` are even.
         Otherwise the expectation is zero.
 
         Parameters
@@ -489,8 +492,63 @@ class RBF(Kernel):
                     result[r, q] = 0
         return result
 
-    def exp_x_kxpx(self, par, mult_ind):
-        pass
+    def exp_x_kxpx(self, par, multi_ind, x):
+        """
+        Compute expectation :math:`\\mathbb{E}[k(x)p(x)^T]_{nq}`. For given :math:`n` and :math`q`, the expectation is
+        given by
+
+        .. math::
+            \\prod_{d=1}^D\left[(1+\ell^2_d)^{\\alpha_{dj}}\\exp\left(-\\frac{x_d^2}{2(1+\ell_d^2)}\right)b_{ijd}\right]
+
+        where
+
+        .. math::
+            b_{ijd} = \\sum_{m=0}^{\left\lfloor \\alpha_{dj}/2 \right\rfloor}
+            \\frac{\\alpha_{dj}!}{2^j j! (\\alpha_{dj} - 2m)!} \\ell_d^{4m}x_{di}^{\\alpha_{dj}-2m}
+
+        Parameters
+        ----------
+        par : (dim, ) ndarray
+            Kernel parameters.
+
+        multi_ind : (D, Q) ndarray
+            Matrix of multi-indices. Each column is a multi-index :math:`\\alpha^q \\in \\mathbb{N}_0^D` defining one
+            of the Q multivariate polynomial basis functions.
+
+        x : (dim, N) ndarray
+            Data points.
+
+        Returns
+        -------
+        : (N, Q) ndarray
+            Matrix of expectations.
+        """
+        dim, num_bases = multi_ind.shape
+        num_pts = x.shape[1]
+        scale, sqrt_inv_lam = RBF._unpack_parameters(par)
+        ell = sqrt_inv_lam ** -2
+        result = np.zeros((num_pts, num_bases))
+        dim_zeros = np.zeros((dim, ))
+        for n in range(num_pts):
+            for q in range(num_bases):
+
+                # compute each factor in the product
+                temp = dim_zeros.copy()
+                for d in range(dim):
+                    # exponential part
+                    a = (1 + ell[d]**2)**multi_ind[d, q] * np.exp(-ell[d]**2/(2*(1 + ell[d]**2)))
+
+                    # binomial part
+                    alpha = multi_ind[d, q]
+                    b = 0
+                    for m in range(np.floor(alpha/2)):
+                        b += factorial(alpha) / (2**q) * factorial(q) * (ell[d]**(4*m)) * (x[d, n]**(alpha - 2*m))
+                    temp[d] = a * b
+
+                # final result
+                result[n, q] = np.prod(temp)
+
+        return result
 
     def der_par(self, par_0, x):  # K as kwarg would save computation (would have to be evaluated w/ par_0)
         # par_0: array_like [alpha, el_1, ..., el_D]
