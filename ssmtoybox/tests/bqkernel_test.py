@@ -139,18 +139,31 @@ class RBFKernelTest(TestCase):
         Q = self.kern_rbf_2d.exp_x_kxkx(self.par_2d, self.par_2d, self.data_2d)
         R = self.kern_rbf_2d.exp_x_kx(self.par_2d, self.data_2d)
 
-        # approximate expectations using MC
-        num_samples = 10000
-        x_samples = np.random.multivariate_normal(np.zeros((dim, )), np.eye(dim), size=num_samples).T
-        k = self.kern_rbf_2d.eval(self.par_2d, x_samples, self.data_2d, scaling=False)
-        q_mc = (1/num_samples) * k.sum(axis=0)
-        Q_mc = (1/num_samples) * (k[:, na, :] * k[..., na]).sum(axis=0)
-        R_mc = (1/num_samples) * (x_samples[..., na] * k[na, ...]).sum(axis=1)
+        # approximate expectations using cumulative moving average MC
+        def cma_mc(new_samples, old_avg, old_avg_size, axis=0):
+            b_size = new_samples.shape[axis]
+            return (new_samples.sum(axis=axis) + old_avg_size * old_avg) / (old_avg_size + b_size)
+
+        batch_size = 100000
+        num_iter = 10
+        q_mc, Q_mc, R_mc = 0, 0, 0
+        for i in range(num_iter):
+            # sample from standard Gaussian
+            x_samples = np.random.multivariate_normal(np.zeros((dim, )), np.eye(dim), size=batch_size).T
+            k = self.kern_rbf_2d.eval(self.par_2d, x_samples, self.data_2d, scaling=False)
+            q_mc = cma_mc(k, q_mc, i*batch_size, axis=0)
+            Q_mc = cma_mc(k[:, na, :] * k[..., na], Q_mc, i*batch_size, axis=0)
+            R_mc = cma_mc(x_samples[..., na] * k[na, ...], R_mc, i*batch_size, axis=1)
 
         # compare MC approximates with analytic expressions
-        self.assertTrue(np.allclose(q, q_mc), 'q diff {:.4f}'.format(np.abs(q - q_mc).max()))
-        self.assertTrue(np.allclose(Q, Q_mc), 'Q diff {:.4f}'.format(np.abs(Q - Q_mc).max()))
-        self.assertTrue(np.allclose(R, R_mc), 'R diff {:.4f}'.format(np.abs(Q - Q_mc).max()))
+        tol = 5e-4
+        print('Maximum absolute difference using {:d} samples.'.format(batch_size*num_iter))
+        print('q {:.2e}'.format(np.abs(q - q_mc).max()))
+        print('Q {:.2e}'.format(np.abs(Q - Q_mc).max()))
+        print('R {:.2e}'.format(np.abs(Q - Q_mc).max()))
+        self.assertLessEqual(np.abs(q - q_mc).max(), tol)
+        self.assertLessEqual(np.abs(q - q_mc).max(), tol)
+        self.assertLessEqual(np.abs(q - q_mc).max(), tol)
 
     def test_par_gradient(self):
         dim = 2
