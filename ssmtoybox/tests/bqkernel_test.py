@@ -3,8 +3,20 @@ from unittest import TestCase
 import numpy as np
 import numpy.linalg as la
 from numpy import newaxis as na
+import numba as nb
 
 from ssmtoybox.bq.bqkern import RBF, RBFStudent
+
+
+@nb.jit(nopython=True)
+def multi_poly(x, alpha):
+    dim, num_basis = alpha.shape
+    dim, num_data = x.shape
+    polyval = np.zeros((num_data, num_basis))
+    for n in range(num_data):
+        for b in range(num_basis):
+            polyval[n, b] = np.prod(x[:, n] ** alpha[:, b])
+    return polyval
 
 
 class RBFKernelTest(TestCase):
@@ -145,7 +157,7 @@ class RBFKernelTest(TestCase):
             return (new_samples.sum(axis=axis) + old_avg_size * old_avg) / (old_avg_size + b_size)
 
         batch_size = 100000
-        num_iter = 10
+        num_iter = 100
         q_mc, Q_mc, R_mc = 0, 0, 0
         for i in range(num_iter):
             # sample from standard Gaussian
@@ -160,10 +172,46 @@ class RBFKernelTest(TestCase):
         print('Maximum absolute difference using {:d} samples.'.format(batch_size*num_iter))
         print('q {:.2e}'.format(np.abs(q - q_mc).max()))
         print('Q {:.2e}'.format(np.abs(Q - Q_mc).max()))
-        print('R {:.2e}'.format(np.abs(Q - Q_mc).max()))
+        print('R {:.2e}'.format(np.abs(R - R_mc).max()))
         self.assertLessEqual(np.abs(q - q_mc).max(), tol)
-        self.assertLessEqual(np.abs(q - q_mc).max(), tol)
-        self.assertLessEqual(np.abs(q - q_mc).max(), tol)
+        self.assertLessEqual(np.abs(Q - Q_mc).max(), tol)
+        self.assertLessEqual(np.abs(R - R_mc).max(), tol)
+
+    def test_mc_poly_verification(self):
+        dim = 1
+
+        alpha_1d = np.array([[0, 1, 2]])
+        par_1d = np.array([[1.0, 1.0]])
+        xpx = self.kern_rbf_1d.exp_x_xpx(alpha_1d)
+        pxpx = self.kern_rbf_1d.exp_x_pxpx(alpha_1d)
+        kxpx = self.kern_rbf_1d.exp_x_kxpx(par_1d, alpha_1d, self.data_1d)
+
+        # approximate expectations using cumulative moving average MC
+        def cma_mc(new_samples, old_avg, old_avg_size, axis=0):
+            b_size = new_samples.shape[axis]
+            return (new_samples.sum(axis=axis) + old_avg_size * old_avg) / (old_avg_size + b_size)
+
+        batch_size = 100000
+        num_iter = 100
+        xpx_mc, pxpx_mc, kxpx_mc = 0, 0, 0
+        for i in range(num_iter):
+            # sample from standard Gaussian
+            x_samples = np.random.multivariate_normal(np.zeros((dim, )), np.eye(dim), size=batch_size).T
+            p = multi_poly(x_samples, alpha_1d)  # (N, Q)
+            k = self.kern_rbf_1d.eval(self.par_1d, x_samples, self.data_1d, scaling=False)  # (N, M)
+            xpx_mc = cma_mc(x_samples[..., na] * p[na, ...], xpx_mc, i*batch_size, axis=1)
+            pxpx_mc = cma_mc(p[:, na, :] * p[..., na], pxpx_mc, i*batch_size, axis=0)
+            kxpx_mc = cma_mc(k[:, na, :] * p[..., na], kxpx_mc, i*batch_size, axis=0)
+
+        # compare MC approximates with analytic expressions
+        tol = 5e-4
+        print('Maximum absolute difference using {:d} samples.'.format(batch_size*num_iter))
+        print('q {:.2e}'.format(np.abs(xpx - xpx_mc).max()))
+        print('Q {:.2e}'.format(np.abs(pxpx - pxpx_mc).max()))
+        print('R {:.2e}'.format(np.abs(kxpx - kxpx_mc).max()))
+        self.assertLessEqual(np.abs(xpx - xpx_mc).max(), tol)
+        self.assertLessEqual(np.abs(xpx - xpx_mc).max(), tol)
+        self.assertLessEqual(np.abs(xpx - xpx_mc).max(), tol)
 
     def test_par_gradient(self):
         dim = 2
