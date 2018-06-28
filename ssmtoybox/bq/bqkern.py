@@ -9,9 +9,6 @@ from scipy.special import factorial, factorial2
 from ssmtoybox.utils import maha, multivariate_t
 
 
-factorial = lambda x: factorial(x, exact=True)
-
-
 class Kernel(object, metaclass=ABCMeta):
     """
     Kernel base class.
@@ -529,20 +526,24 @@ class RBF(Kernel):
         ell = sqrt_inv_lam ** -2
         result = np.zeros((num_pts, num_bases))
         dim_zeros = np.zeros((dim, ))
+
+        fact = lambda num: factorial(num, exact=True)
         for n in range(num_pts):
             for q in range(num_bases):
 
                 # compute each factor in the product
                 temp = dim_zeros.copy()
                 for d in range(dim):
+                    alpha = multi_ind[d, q]
                     # exponential part
-                    a = (1 + ell[d]**2)**multi_ind[d, q] * np.exp(-x[d, n]**2/(2*(1 + ell[d]**2)))
+                    a = (1 + ell[0, d]**2)**alpha * np.exp(-x[d, n]**2 / (2*(1 + ell[0, d]**2)))
 
                     # binomial part
-                    alpha = multi_ind[d, q]
                     b = 0
-                    for m in range(np.floor(alpha/2)):
-                        b += factorial(alpha) / (2**q) * factorial(q) * (ell[d]**(4*m)) * (x[d, n]**(alpha - 2*m))
+                    for m in range(int(np.floor(alpha/2))+1):
+                        part_1 = (fact(alpha) / ((2**(q+1)) * fact(q+1) * fact(alpha - 2*m)))
+                        part_2 = (ell[0, d]**(4*m)) * (x[d, n]**(alpha - 2*m))
+                        b += part_1 * part_2
                     temp[d] = a * b
 
                 # final result

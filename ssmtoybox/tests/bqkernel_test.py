@@ -126,24 +126,11 @@ class RBFKernelTest(TestCase):
         mi_1d = np.array([[0, 1, 2]])
         par_1d = np.array([[1.0, 1.0]])
         ke = self.kern_rbf_1d.exp_x_kxpx(par_1d, mi_1d, self.data_1d)
-        ke_true = np.array([[1, 0, 1],
-                            [0, 1, 0],
-                            [1, 0, 3]])
+        ke_true = np.array([[0.5*np.exp(-0.25), 0.25*np.exp(-0.25), 0.25*np.exp(-0.25)],
+                            [0.5*np.exp(-0.25), -0.25*np.exp(-0.25), 0.25*np.exp(-0.25)],
+                            [0.5, 0, 1/6]])
         self.assertTrue(ke.shape == (self.data_1d.shape[1], mi_1d.shape[1]))
-        # self.assertTrue(np.array_equal(ke, ke_true))
-
-        mi_2d = np.array([[0, 1, 0, 1, 0, 2],
-                          [0, 0, 1, 1, 2, 0]])
-        par_2d = np.array([[1.0, 1.0, 1.0]])
-        ke_true = np.array([[1, 0, 0, 0, 1, 1],
-                            [0, 1, 0, 0, 0, 0],
-                            [0, 0, 1, 0, 0, 0],
-                            [0, 0, 0, 1, 0, 0],
-                            [1, 0, 0, 0, 3, 1],
-                            [1, 0, 0, 0, 1, 3]])
-        ke = self.kern_rbf_2d.exp_x_kxpx(par_2d, mi_2d, self.data_2d)
-        self.assertTrue(ke.shape == (self.data_2d.shape[1], mi_2d.shape[1]))
-        # self.assertTrue(np.array_equal(ke, ke_true))
+        self.assertTrue(np.array_equal(ke, ke_true))
 
     def test_mc_verification(self):
         dim = 2
