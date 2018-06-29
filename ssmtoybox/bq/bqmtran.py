@@ -367,6 +367,81 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
         pass
 
 
+class BSQ(BQTransform):
+    """
+    Bayes-Sard quadrature moment transform.
+
+    Parameters
+    ----------
+    dim_in : int
+        Dimensionality of the input.
+
+    kern_par : ndarray
+        Kernel parameters.
+
+    kernel : str {'rbf'}
+        Kernel of the integrand model.
+
+    points : str {'ut', 'sr', 'gh', 'fs'}
+        Sigma-point set for representing the input probability density.
+
+    point_par : dict
+        Sigma-point set parameters.
+    """
+
+    # TODO: implement the transform
+    def __init__(self, dim_in, kern_par, kernel='rbf', points='ut', point_par=None):
+        super(BSQ, self).__init__(dim_in, 1, kern_par, 'gp', kernel, points, point_par)
+
+    def _fcn_eval(self, fcn, x, fcn_par):
+        """
+        Evaluate integrand at sigma-points.
+
+        Parameters
+        ----------
+        fcn : function
+            Random variable transforming function (integrand).
+
+        x : (dim, N) ndarray
+            Sigma-points.
+
+        fcn_par :
+            Parameters of the random variable transforming function (integrand).
+
+        Returns
+        -------
+        : ndarray
+            Integrand evaluations.
+        """
+        return np.apply_along_axis(fcn, 0, x, fcn_par)
+
+    def _covariance(self, weights, fcn_evals, mean_out):
+        """
+        GPQ transformed covariance.
+
+        Parameters
+        ----------
+        weights : ndarray
+            Quadrature weights.
+
+        fcn_evals : ndarray
+            Integrand evaluations.
+
+        mean_out : ndarray
+            Transformed mean.
+
+        Returns
+        -------
+        : ndarray
+            Transformed covariance.
+        """
+        expected_model_var = self.model.exp_model_variance(fcn_evals)
+        return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + expected_model_var
+
+    def _integral_variance(self, points, kern_par):
+        pass
+
+
 class TPQ(BQTransform):
     """
     Student's t-process quadrature moment transforms.
