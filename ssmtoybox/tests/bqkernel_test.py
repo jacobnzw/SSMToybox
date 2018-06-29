@@ -33,6 +33,19 @@ class RBFKernelTest(TestCase):
         cls.test_data_2d = np.random.multivariate_normal(np.zeros((2,)), np.eye(2), 50).T
 
     def test_eval(self):
+        def kern_eval(x1, x2, par):
+            # define straightforward implementation to check easily
+            dim, num_pts_1 = x1.shape
+            dim, num_pts_2 = x2.shape
+            assert dim == par.shape[1]-1
+            alpha = par[0, 0]
+            Li = np.linalg.inv(np.diag(par[0, 1:] ** 2))
+            K = np.zeros((num_pts_1, num_pts_2))
+            for i in range(num_pts_1):
+                for j in range(num_pts_2):
+                    dx = x1[:, i] - x2[:, j]
+                    K[i, j] = np.exp(-0.5 * (dx.T.dot(Li).dot(dx)))
+            return alpha**2 * K
 
         # check dimension, shape, symmetry and positive definiteness
         K = self.kern_rbf_1d.eval(self.par_1d, self.data_1d)
@@ -40,6 +53,9 @@ class RBFKernelTest(TestCase):
         self.assertTrue(K.shape == (3, 3))
         self.assertTrue(np.array_equal(K, K.T))
         la.cholesky(K)
+        # same result as the obvious implementation?
+        K_true = kern_eval(self.data_1d, self.data_1d, self.par_1d)
+        self.assertTrue(np.array_equal(K, K_true))
 
         # higher-dimensional inputs
         K = self.kern_rbf_2d.eval(self.par_2d, self.data_2d)
@@ -47,6 +63,9 @@ class RBFKernelTest(TestCase):
         self.assertTrue(K.shape == (5, 5))
         self.assertTrue(np.array_equal(K, K.T))
         la.cholesky(K)
+        # same result as the obvious implementation?
+        K_true = kern_eval(self.data_2d, self.data_2d, self.par_2d)
+        self.assertTrue(np.array_equal(K, K_true))
 
         # check computation of cross-covariances kx, kxx
         kx = self.kern_rbf_1d.eval(self.par_1d, self.test_data_1d, self.data_1d)
@@ -84,9 +103,13 @@ class RBFKernelTest(TestCase):
     def test_exp_x_xkx(self):
         r = self.kern_rbf_1d.exp_x_xkx(self.par_1d, self.data_1d)
         self.assertTrue(r.shape == (1, 3))
+        # self.assertTrue(np.array_equal(r, r_true))
 
         r = self.kern_rbf_2d.exp_x_xkx(self.par_2d, self.data_2d)
+        r_true = np.array([[0., 0.16546817, 0., -0.16546817, 0.],
+                           [0., 0., 0.16546817, 0., -0.16546817]])
         self.assertTrue(r.shape == (2, 5))
+        self.assertTrue(np.array_equal(r, r_true))
 
     def test_exp_x_kxkx(self):
         q = self.kern_rbf_1d.exp_x_kxkx(self.par_1d, self.par_1d, self.data_1d)
