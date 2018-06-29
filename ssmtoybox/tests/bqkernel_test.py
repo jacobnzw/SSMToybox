@@ -215,7 +215,7 @@ class RBFKernelTest(TestCase):
 
         q = self.kern_rbf_2d.exp_x_kx(self.par_2d, self.data_2d)
         Q = self.kern_rbf_2d.exp_x_kxkx(self.par_2d, self.par_2d, self.data_2d)
-        R = self.kern_rbf_2d.exp_x_kx(self.par_2d, self.data_2d)
+        R = self.kern_rbf_2d.exp_x_xkx(self.par_2d, self.data_2d)
 
         # approximate expectations using cumulative moving average MC
         def cma_mc(new_samples, old_avg, old_avg_size, axis=0):
@@ -234,14 +234,14 @@ class RBFKernelTest(TestCase):
             R_mc = cma_mc(x_samples[..., na] * k[na, ...], R_mc, i*batch_size, axis=1)
 
         # compare MC approximates with analytic expressions
-        tol = 5e-4
-        print('Maximum absolute difference using {:d} samples.'.format(batch_size*num_iter))
-        print('q {:.2e}'.format(np.abs(q - q_mc).max()))
-        print('Q {:.2e}'.format(np.abs(Q - Q_mc).max()))
-        print('R {:.2e}'.format(np.abs(R - R_mc).max()))
-        self.assertLessEqual(np.abs(q - q_mc).max(), tol)
-        self.assertLessEqual(np.abs(Q - Q_mc).max(), tol)
-        self.assertLessEqual(np.abs(R - R_mc).max(), tol)
+        tol = 2e-3
+        print('Norm of the difference using {:d} samples.'.format(batch_size*num_iter))
+        print('q {:.2e}'.format(np.linalg.norm(q - q_mc)))
+        print('Q {:.2e}'.format(np.linalg.norm(Q - Q_mc)))
+        print('R {:.2e}'.format(np.linalg.norm(R - R_mc)))
+        self.assertLessEqual(np.linalg.norm(q - q_mc), tol)
+        self.assertLessEqual(np.linalg.norm(Q - Q_mc), tol)
+        self.assertLessEqual(np.linalg.norm(R - R_mc), tol)
 
     def test_mc_poly_verification(self):
         dim = 1
@@ -272,12 +272,12 @@ class RBFKernelTest(TestCase):
         # compare MC approximates with analytic expressions
         tol = 5e-4
         print('Maximum absolute difference using {:d} samples.'.format(batch_size*num_iter))
-        print('q {:.2e}'.format(np.abs(xpx - xpx_mc).max()))
-        print('Q {:.2e}'.format(np.abs(pxpx - pxpx_mc).max()))
-        print('R {:.2e}'.format(np.abs(kxpx - kxpx_mc).max()))
+        print('xpx {:.2e}'.format(np.abs(xpx - xpx_mc).max()))
+        print('pxpx {:.2e}'.format(np.abs(pxpx - pxpx_mc).max()))
+        print('kxpx {:.2e}'.format(np.abs(kxpx - kxpx_mc).max()))
         self.assertLessEqual(np.abs(xpx - xpx_mc).max(), tol)
-        self.assertLessEqual(np.abs(xpx - xpx_mc).max(), tol)
-        self.assertLessEqual(np.abs(xpx - xpx_mc).max(), tol)
+        self.assertLessEqual(np.abs(pxpx - pxpx_mc).max(), tol)
+        self.assertLessEqual(np.abs(kxpx - kxpx_mc).max(), tol)
 
     def test_par_gradient(self):
         dim = 2
