@@ -99,6 +99,21 @@ class RBFKernelTest(TestCase):
         self.assertTrue(np.array_equal(q, q.T), 'Result not symmetric.')
         la.cholesky(q)
 
+    def test_x_px(self):
+        mi_1d = np.array([[0, 1, 2]])
+        ke = self.kern_rbf_1d.exp_x_px(mi_1d)
+        self.assertTrue(ke.shape == (mi_1d.shape[1], ))
+        # self.assertTrue(np.array_equal(ke, np.array([[0, 1, 0]])))
+
+        mi_2d = np.array([[0, 1, 0, 1, 0, 2],
+                          [0, 0, 1, 1, 2, 0]])
+        # ke_true = np.array([[0, 1, 0, 0, 0, 0],
+        #                     [0, 0, 1, 0, 0, 0]])
+        ke = self.kern_rbf_2d.exp_x_xpx(mi_2d)
+        self.assertTrue(ke.shape == (mi_2d.shape[1], ))
+        # self.assertTrue(np.array_equal(ke, ke_true))
+
+
     def test_exp_x_xpx(self):
         mi_1d = np.array([[0, 1, 2]])
         ke = self.kern_rbf_1d.exp_x_xpx(mi_1d)

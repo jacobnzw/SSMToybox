@@ -420,6 +420,29 @@ class RBF(Kernel):
         inv_lam = sqrt_inv_lam ** 2
         return alpha ** 2 * la.det(2 * inv_lam + self.eye_d) ** -0.5
 
+    def exp_x_px(self, multi_ind):
+        """
+        Compute expectation \\mathbb{E}[p(x)^T]_{q} for all :math`q`. The expectation is equal to
+
+        .. math::
+             # TODO: Toni should derive
+
+        when :math:`\\alpha^q_e + 1` is even and :math:`\\alpha^q_d, \\forall d \neq e` are even.
+        Otherwise the expectation is zero.
+
+        Parameters
+        ----------
+        multi_ind : (D, Q) ndarray
+            Matrix of multi-indices. Each column is a multi-index :math:`\\alpha^q \\in \\mathbb{N}_0^D` defining one
+            of the Q multivariate polynomial basis functions.
+
+        Returns
+        -------
+        : (Q, ) ndarray
+            Vector of expectations.
+        """
+        pass
+
     def exp_x_xpx(self, multi_ind):
         """
         Compute expectation \\mathbb{E}[xp(x)^T]_{eq} for all :math:`e` and :math`q`. The expectation is equal to
