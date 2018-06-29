@@ -83,14 +83,30 @@ class RBFKernelTest(TestCase):
         self.assertTrue(kxx_diag.shape == (50,))
 
     def test_exp_x_kx(self):
+        def kx_eval(x, par):
+            # simple straightforward easy to check implementation
+            dim, num_pts = x.shape
+            assert dim == par.shape[1]-1
+            alpha = par[0, 0]
+            L = np.diag(par[0, 1:] ** 2)
+            A = np.linalg.inv(L + np.eye(dim))
+            c = alpha**2 * np.linalg.det(np.linalg.inv(L) + np.eye(dim)) ** (-0.5)
+            q = np.zeros((num_pts, ))
+            for i in range(num_pts):
+                q[i] = c * np.exp(-0.5*(x[:, i].T.dot(A).dot(x[:, i])))
+            return q
 
         q = self.kern_rbf_1d.exp_x_kx(self.par_1d, self.data_1d)
+        q_true = kx_eval(self.data_1d, self.par_1d)
         self.assertTrue(q.shape == (3,))
         self.assertTrue(np.alltrue(q >= 0))
+        self.assertTrue(np.array_equal(q, q_true))
 
         q = self.kern_rbf_2d.exp_x_kx(self.par_2d, self.data_2d)
+        q_true = kx_eval(self.data_2d, self.par_2d)
         self.assertTrue(q.shape == (5,))
         self.assertTrue(np.alltrue(q >= 0))
+        self.assertTrue(np.array_equal(q, q_true))
 
     def test_exp_x_kxx(self):
         self.kern_rbf_1d.exp_x_kxx(self.par_1d)
@@ -101,15 +117,28 @@ class RBFKernelTest(TestCase):
         self.kern_rbf_2d.exp_xy_kxy(self.par_2d)
 
     def test_exp_x_xkx(self):
+        def xkx_eval(x, par):
+            # simple straightforward easy to check implementation
+            dim, num_pts = x.shape
+            assert dim == par.shape[1]-1
+            alpha = par[0, 0]
+            L = np.diag(par[0, 1:] ** 2)
+            A = np.linalg.inv(L + np.eye(dim))
+            c = alpha**2 * np.linalg.det(np.linalg.inv(L) + np.eye(dim)) ** (-0.5)
+            R = np.zeros(x.shape)
+            for i in range(num_pts):
+                R[:, i] = c * np.exp(-0.5*(x[:, i].T.dot(A).dot(x[:, i]))) * (A.dot(x[:, i]))
+            return R
+
         r = self.kern_rbf_1d.exp_x_xkx(self.par_1d, self.data_1d)
         self.assertTrue(r.shape == (1, 3))
-        # self.assertTrue(np.array_equal(r, r_true))
+        r_true = xkx_eval(self.data_1d, self.par_1d)
+        self.assertTrue(np.allclose(r, r_true))
 
         r = self.kern_rbf_2d.exp_x_xkx(self.par_2d, self.data_2d)
-        r_true = np.array([[0., 0.16546817, 0., -0.16546817, 0.],
-                           [0., 0., 0.16546817, 0., -0.16546817]])
+        r_true = xkx_eval(self.data_2d, self.par_2d)
         self.assertTrue(r.shape == (2, 5))
-        self.assertTrue(np.array_equal(r, r_true))
+        self.assertTrue(np.allclose(r, r_true))
 
     def test_exp_x_kxkx(self):
         q = self.kern_rbf_1d.exp_x_kxkx(self.par_1d, self.par_1d, self.data_1d)
@@ -135,7 +164,6 @@ class RBFKernelTest(TestCase):
         ke = self.kern_rbf_2d.exp_x_xpx(mi_2d)
         self.assertTrue(ke.shape == (mi_2d.shape[1], ))
         # self.assertTrue(np.array_equal(ke, ke_true))
-
 
     def test_exp_x_xpx(self):
         mi_1d = np.array([[0, 1, 2]])
