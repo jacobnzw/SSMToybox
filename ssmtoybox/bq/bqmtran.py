@@ -389,7 +389,6 @@ class BSQ(BQTransform):
         Sigma-point set parameters.
     """
 
-    # TODO: implement the transform
     def __init__(self, dim_in, kern_par, kernel='rbf', points='ut', point_par=None):
         super(BSQ, self).__init__(dim_in, 1, kern_par, 'gp', kernel, points, point_par)
 

@@ -676,6 +676,117 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         return nlml, dnlml_dtheta
 
 
+class BayesSardModel(Model):
+    """
+    Gaussian process model for Bayes-Sard quadrature. The model has multivariate polynomial prior mean.
+
+    Parameters
+    ----------
+    dim : int
+        Dimension of the points (integration domain).
+
+    kern_par : ndarray
+        Kernel parameters in a vector.
+
+    points : str
+        String abbreviation for the point-set.
+
+    point_par : dict
+        Any parameters for constructing desired point-set.
+    """
+
+    def __init__(self, dim, kern_par, points='ut', point_par=None):
+        super(BayesSardModel, self).__init__(dim, kern_par, 'rbf', points, point_par)
+
+    @staticmethod
+    def vandermonde(mul_ind, x):
+        """
+        Vandermonde matrix with multivariate polynomial basis.
+
+        Parameters
+        ----------
+        mul_ind : (dim, num_basis) ndarray
+            Matrix where each column is a multi-index which specifies a multivariate monomial.
+
+        x : (dim, num_points) ndarray
+            Sigma-points.
+
+        Returns
+        -------
+        : (num_points, num_basis) ndarray
+            Vandermonde matrix evaluated for all sigma-points.
+        """
+        dim, num_pts = x.shape
+        num_basis = mul_ind.shape[0]
+        vdm = np.zeros((num_pts, num_basis))
+        pass
+
+    # TODO: move the polynomial expectations from RBFKernel
+
+    def bq_weights(self, par):
+        """
+        Weights for the Bayes-Sard quadrature.
+
+        Parameters
+        ----------
+        par : ndarray
+            Kernel parameters.
+
+        Returns
+        -------
+        wm : ndarray
+            Weights for computation of the transformed mean.
+
+        Wc : ndarray
+            Weights for computation of the transformed covariance.
+
+        Wcc : ndarray
+            Weights for computation of the transformed cross-covariance.
+        """
+        par = self.kernel.get_parameters(par)
+        x = self.points
+
+        # inverse kernel matrix
+        iK = self.kernel.eval_inv_dot(par, x, scaling=False)
+
+        # Kernel expectations
+        q = self.kernel.exp_x_kx(par, x)
+        Q = self.kernel.exp_x_kxkx(par, par, x)
+        R = self.kernel.exp_x_xkx(par, x)
+        px = self.kernel.exp_x_px(mulind)
+        xpx = self.kernel.exp_x_xpx(mulind)
+        pxpx = self.kernel.exp_x_pxpx(mulind)
+        kxpx = self.kernel.exp_x_kxpx(par, mulind, x)
+
+        V = self.vandermonde(mulind, x)
+        A = V.T.dot(iK).dot(V)
+
+        # save for EMV and IVAR computation
+        self.q, self.Q, self.R, self.iK = q, Q, R, iK
+
+        # BQ weights in terms of kernel expectations
+        w_m = q.dot(iK)
+        w_c = iK.dot(Q).dot(iK)
+        w_cc = R.dot(iK)
+
+        # covariance weights should be symmetric
+        w_c = 0.5 * (w_c + w_c.T)
+
+        return w_m, w_c, w_cc
+
+    def predict(self, test_data, fcn_obs, par=None):
+        pass
+
+    def exp_model_variance(self, fcn_obs):
+        pass
+
+    def integral_variance(self, fcn_obs, par=None):
+        pass
+
+    def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
+        pass
+
+
 class StudentTProcess(Model):
     """
     Student t process regression model of the integrand in the Bayesian quadrature.
