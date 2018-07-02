@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 
 import matplotlib.pyplot as plt
 import numpy as np
+import numba as nb
 import scipy.linalg as la
 from scipy.optimize import minimize
 
@@ -699,7 +700,8 @@ class BayesSardModel(Model):
         super(BayesSardModel, self).__init__(dim, kern_par, 'rbf', points, point_par)
 
     @staticmethod
-    def vandermonde(mul_ind, x):
+    @nb.jit(nopython=True)
+    def _vandermonde(mul_ind, x):
         """
         Vandermonde matrix with multivariate polynomial basis.
 
@@ -717,20 +719,26 @@ class BayesSardModel(Model):
             Vandermonde matrix evaluated for all sigma-points.
         """
         dim, num_pts = x.shape
-        num_basis = mul_ind.shape[0]
+        num_basis = mul_ind.shape[1]
         vdm = np.zeros((num_pts, num_basis))
-        pass
+        for n in range(num_pts):
+            for b in range(num_basis):
+                vdm[n, b] = np.prod(x[:, n] ** mul_ind[:, b])
+        return vdm
 
-    # TODO: move the polynomial expectations from RBFKernel
+    # TODO: move the polynomial expectations from RBFKernel; move tests
 
-    def bq_weights(self, par):
+    def bq_weights(self, par, mulind):
         """
         Weights for the Bayes-Sard quadrature.
 
         Parameters
         ----------
-        par : ndarray
+        par : (1, num_par) ndarray
             Kernel parameters.
+
+        mulind : (dim, num_basis) ndarray
+            Matrix, where each column is a multi-index defining a multivariate monomial.
 
         Returns
         -------
@@ -745,6 +753,7 @@ class BayesSardModel(Model):
         """
         par = self.kernel.get_parameters(par)
         x = self.points
+        num_basis = mulind.shape[1]
 
         # inverse kernel matrix
         iK = self.kernel.eval_inv_dot(par, x, scaling=False)
@@ -753,34 +762,65 @@ class BayesSardModel(Model):
         q = self.kernel.exp_x_kx(par, x)
         Q = self.kernel.exp_x_kxkx(par, par, x)
         R = self.kernel.exp_x_xkx(par, x)
-        px = self.kernel.exp_x_px(mulind)
-        xpx = self.kernel.exp_x_xpx(mulind)
-        pxpx = self.kernel.exp_x_pxpx(mulind)
-        kxpx = self.kernel.exp_x_kxpx(par, mulind, x)
+        # expectations of multivariate polynomials
+        px = self.exp_x_px(mulind)
+        xpx = self.exp_x_xpx(mulind)
+        pxpx = self.exp_x_pxpx(mulind)
+        kxpx = self.exp_x_kxpx(par, mulind, x)
 
-        V = self.vandermonde(mulind, x)
-        A = V.T.dot(iK).dot(V)
+        V = self._vandermonde(mulind, x)
+        iViKV = la.cho_solve(la.cho_factor(V.T.dot(iK).dot(V)), np.eye(num_basis))
+        A = V.dot(iViKV)
+        b = V.T.dot(iK).dot(q) - px
+        B = V.T.dot(iK).dot(Q).dot(iK).dot(V) + pxpx - V.T.dot(iK).dot(kxpx) - kxpx.T.dot(iK).dot(V)
+        D = R.dot(iK).dot(V) - xpx
 
         # save for EMV and IVAR computation
         self.q, self.Q, self.R, self.iK = q, Q, R, iK
+        self.B, self.iViKV = B, iViKV
 
-        # BQ weights in terms of kernel expectations
-        w_m = q.dot(iK)
-        w_c = iK.dot(Q).dot(iK)
-        w_cc = R.dot(iK)
+        # BSQ weights in terms of kernel expectations
+        w_m = (q - A.dot(b)).dot(iK)
+        w_c = iK.dot(Q - A.T.dot(B).dot(A)).dot(iK)
+        w_cc = (R - D.dot(A.T)).dot(iK)
 
         # covariance weights should be symmetric
-        w_c = 0.5 * (w_c + w_c.T)
+        if not np.array_equal(w_c, w_c.T):
+            w_c = 0.5 * (w_c + w_c.T)
 
         return w_m, w_c, w_cc
 
-    def predict(self, test_data, fcn_obs, par=None):
-        pass
-
     def exp_model_variance(self, fcn_obs):
-        pass
+        return self.kernel.scale.squeeze() ** 2 * (1 - np.trace(self.Q.dot(self.iK)) + np.trace(self.B.dot(self.iViKV)))
 
-    def integral_variance(self, fcn_obs, par=None):
+    def integral_variance(self, fcn_obs, mulind, par=None):
+        """
+        Variance of the integral.
+
+        Parameters
+        ----------
+        fcn_obs : ndarray
+            Function evaluations.
+
+        par : ndarray
+            Kernel parameters.
+
+        Returns
+        -------
+        : float
+
+        """
+        par = self.kernel.get_parameters(par)
+        q = self.kernel.exp_x_kx(par, self.points)
+        iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
+        kbar = self.kernel.exp_xy_kxy(par)
+        V = self._vandermonde(mulind, self.points)
+        px = self.exp_x_px(mulind)
+        b = V.T.dot(iK).dot(q) - px
+        iViKV = la.cho_solve(la.cho_factor(V.T.dot(iK).dot(V)), np.eye(mulind.shape[1]))
+        return kbar - q.T.dot(iK).dot(q) + b.T.dot(iViKV).dot(b)
+
+    def predict(self, test_data, fcn_obs, par=None):
         pass
 
     def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
