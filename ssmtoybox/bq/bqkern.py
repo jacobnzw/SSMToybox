@@ -425,10 +425,9 @@ class RBF(Kernel):
         Compute expectation \\mathbb{E}[p(x)^T]_{q} for all :math`q`. The expectation is equal to
 
         .. math::
-             # TODO: Toni should derive
+             \\prod_{d=1}^D (\\alpha_d^q - 1)!!
 
-        when :math:`\\alpha^q_e + 1` is even and :math:`\\alpha^q_d, \\forall d \neq e` are even.
-        Otherwise the expectation is zero.
+        when :math:`\\alpha^q_d` is even :math:`\\forall q`. Otherwise the expectation is zero.
 
         Parameters
         ----------
@@ -441,7 +440,14 @@ class RBF(Kernel):
         : (Q, ) ndarray
             Vector of expectations.
         """
-        pass
+        dim, num_basis = multi_ind.shape
+        alpha = multi_ind - 1
+        result = np.zeros((num_basis, ))
+        for q in range(num_basis):
+            all_even = np.all(multi_ind[:, q] % 2 == 0)
+            if all_even:
+                result[q] = np.prod([factorial2(alpha[d, q], exact=True) for d in range(dim)])
+        return result
 
     def exp_x_xpx(self, multi_ind):
         """
