@@ -769,11 +769,12 @@ class BayesSardModel(Model):
         kxpx = self.exp_x_kxpx(par, mulind, x)
 
         V = self._vandermonde(mulind, x)
-        iViKV = la.cho_solve(la.cho_factor(V.T.dot(iK).dot(V)), np.eye(num_basis))
+        Z = V.T.dot(iK)
+        iViKV = la.cho_solve(la.cho_factor(Z.dot(V)), np.eye(num_basis))
         A = V.dot(iViKV)
-        b = V.T.dot(iK).dot(q) - px
-        B = V.T.dot(iK).dot(Q).dot(iK).dot(V) + pxpx - V.T.dot(iK).dot(kxpx) - kxpx.T.dot(iK).dot(V)
-        D = R.dot(iK).dot(V) - xpx
+        b = Z.dot(q) - px
+        B = Z.dot(Q).dot(Z.T) + pxpx - Z.dot(kxpx) - kxpx.T.dot(Z.T)
+        D = R.dot(Z.T) - xpx
 
         # save for EMV and IVAR computation
         self.q, self.Q, self.R, self.iK = q, Q, R, iK
