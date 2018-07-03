@@ -253,6 +253,11 @@ class BayesSardModelTest(TestCase):
             plt.plot(xtest, np.squeeze(f), lw=2, ls='--', color='tomato')
         plt.show()
 
+    def test_weights(self):
+        model = BayesSardModel(1, self.ker_par_1d, 'ut', self.pt_par_ut)
+        alpha = np.array([[0, 1, 2]])
+        w, wc, wcc = model.bq_weights(self.ker_par_1d, alpha)
+
 
 class TPModelTest(TestCase):
 
