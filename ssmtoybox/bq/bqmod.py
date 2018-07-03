@@ -5,6 +5,7 @@ import numpy as np
 import numba as nb
 import scipy.linalg as la
 from scipy.optimize import minimize
+from scipy.special import factorial, factorial2
 
 from .bqkern import RBF, RQ, RBFStudent
 from ssmtoybox.mtran import SphericalRadial, Unscented, GaussHermite, FullySymmetricStudent
@@ -726,7 +727,165 @@ class BayesSardModel(Model):
                 vdm[n, b] = np.prod(x[:, n] ** mul_ind[:, b])
         return vdm
 
-    # TODO: move the polynomial expectations from RBFKernel; move tests
+    def _exp_x_px(self, multi_ind):
+        """
+        Compute expectation \\mathbb{E}[p(x)^T]_{q} for all :math`q`. The expectation is equal to
+
+        .. math::
+             \\prod_{d=1}^D (\\alpha_d^q - 1)!!
+
+        when :math:`\\alpha^q_d` is even :math:`\\forall q`. Otherwise the expectation is zero.
+
+        Parameters
+        ----------
+        multi_ind : (D, Q) ndarray
+            Matrix of multi-indices. Each column is a multi-index :math:`\\alpha^q \\in \\mathbb{N}_0^D` defining one
+            of the Q multivariate polynomial basis functions.
+
+        Returns
+        -------
+        : (Q, ) ndarray
+            Vector of expectations.
+        """
+        dim, num_basis = multi_ind.shape
+        alpha = multi_ind - 1
+        result = np.zeros((num_basis, ))
+        for q in range(num_basis):
+            all_even = np.all(multi_ind[:, q] % 2 == 0)
+            if all_even:
+                result[q] = np.prod([factorial2(alpha[d, q], exact=True) for d in range(dim)])
+        return result
+
+    def _exp_x_xpx(self, multi_ind):
+        """
+        Compute expectation \\mathbb{E}[xp(x)^T]_{eq} for all :math:`e` and :math`q`. The expectation is equal to
+
+        .. math::
+             \\alpha^q_e\\prod_{d \neq e} (\\alpha^q_d - 1)!!
+
+        when :math:`\\alpha^q_e + 1` is even and :math:`\\alpha^q_d, \\forall d \neq e` are even.
+        Otherwise the expectation is zero.
+
+        Parameters
+        ----------
+        multi_ind : (D, Q) ndarray
+            Matrix of multi-indices. Each column is a multi-index :math:`\\alpha^q \\in \\mathbb{N}_0^D` defining one
+            of the Q multivariate polynomial basis functions.
+
+        Returns
+        -------
+        : (D, Q) ndarray
+            Matrix of expectations.
+        """
+        dim, num_bases = multi_ind.shape
+        d_ind = np.arange(dim)
+        result = np.zeros(multi_ind.shape)
+        for d in range(dim):
+            for q in range(num_bases):
+                # all remaining multi-indices even? # i.e. none are odd?
+                alpha_min_d = multi_ind[d_ind != d, q]
+                all_even = np.all(alpha_min_d % 2 == 0)
+                if (multi_ind[d, q] + 1) % 2 == 0 and all_even:
+                    amd_fact2 = [factorial2(amd - 1, exact=True) for amd in alpha_min_d]
+                    result[d, q] = multi_ind[d, q]*np.prod(amd_fact2)
+                else:
+                    result[d, q] = 0
+        return result
+
+    def _exp_x_pxpx(self, multi_ind):
+        """
+        Compute expectation \\mathbb{E}[p(x)p(x)^T]_{rq} for all :math:`r` and :math`q`. The expectation is equal to
+
+        .. math::
+             \\prod_{d = 1}^D (\\alpha^q_d + \\alpha^r_d - 1)!!
+
+        when :math:`\\forall d,\\quad \\alpha^q_d + \\alpha^r_d` are even (where :math:`r` and :math:`q` are fixed).
+        Otherwise the expectation is zero.
+
+        Parameters
+        ----------
+        multi_ind : (D, Q) ndarray
+            Matrix of multi-indices. Each column is a multi-index :math:`\\alpha^q \\in \\mathbb{N}_0^D` defining one
+            of the Q multivariate polynomial basis functions.
+
+        Returns
+        -------
+        : (Q, Q) ndarray
+            Matrix of expectations.
+        """
+        dim, num_bases = multi_ind.shape
+        result = np.zeros((num_bases, num_bases))
+        for r in range(num_bases):
+            for q in range(num_bases):
+                all_even = np.all((multi_ind[:, r] + multi_ind[:, q]) % 2 == 0)
+                if all_even:
+                    apa_fact2 = [factorial2(multi_ind[d, r] + multi_ind[d, q] - 1, exact=True) for d in range(dim)]
+                    result[r, q] = np.prod(apa_fact2)
+                else:
+                    result[r, q] = 0
+        return result
+
+    def _exp_x_kxpx(self, par, multi_ind, x):
+        """
+        Compute expectation :math:`\\mathbb{E}[k(x)p(x)^T]_{nq}`. For given :math:`n` and :math`q`, the expectation is
+        given by
+
+        .. math::
+            \\prod_{d=1}^D\left[(1+\ell^2_d)^{\\alpha_{dj}}\\exp\left(-\\frac{x_d^2}{2(1+\ell_d^2)}\right)b_{ijd}\right]
+
+        where
+
+        .. math::
+            b_{ijd} = \\sum_{m=0}^{\left\lfloor \\alpha_{dj}/2 \right\rfloor}
+            \\frac{\\alpha_{dj}!}{2^j j! (\\alpha_{dj} - 2m)!} \\ell_d^{4m}x_{di}^{\\alpha_{dj}-2m}
+
+        Parameters
+        ----------
+        par : (dim, ) ndarray
+            Kernel parameters.
+
+        multi_ind : (D, Q) ndarray
+            Matrix of multi-indices. Each column is a multi-index :math:`\\alpha^q \\in \\mathbb{N}_0^D` defining one
+            of the Q multivariate polynomial basis functions.
+
+        x : (dim, N) ndarray
+            Data points.
+
+        Returns
+        -------
+        : (N, Q) ndarray
+            Matrix of expectations.
+        """
+        dim, num_bases = multi_ind.shape
+        num_pts = x.shape[1]
+        scale, sqrt_inv_lam = self.kernel._unpack_parameters(par)
+        ell = sqrt_inv_lam ** -2
+        result = np.zeros((num_pts, num_bases))
+        dim_zeros = np.zeros((dim, ))
+
+        fact = lambda num: factorial(num, exact=True)
+        for n in range(num_pts):
+            for q in range(num_bases):
+
+                # compute each factor in the product
+                temp = dim_zeros.copy()
+                for d in range(dim):
+                    alpha = multi_ind[d, q]
+                    # exponential part
+                    a = (1 + ell[0, d]**2)**alpha * np.exp(-x[d, n]**2 / (2*(1 + ell[0, d]**2)))
+
+                    # binomial part
+                    b = 0
+                    for m in range(int(np.floor(alpha/2))+1):
+                        part_1 = (fact(alpha) / ((2**(q+1)) * fact(q+1) * fact(alpha - 2*m)))
+                        part_2 = (ell[0, d]**(4*m)) * (x[d, n]**(alpha - 2*m))
+                        b += part_1 * part_2
+                    temp[d] = a * b
+
+                # final result
+                result[n, q] = np.prod(temp)
+
+        return result
 
     def bq_weights(self, par, mulind):
         """
@@ -763,10 +922,10 @@ class BayesSardModel(Model):
         Q = self.kernel.exp_x_kxkx(par, par, x)
         R = self.kernel.exp_x_xkx(par, x)
         # expectations of multivariate polynomials
-        px = self.exp_x_px(mulind)
-        xpx = self.exp_x_xpx(mulind)
-        pxpx = self.exp_x_pxpx(mulind)
-        kxpx = self.exp_x_kxpx(par, mulind, x)
+        px = self._exp_x_px(mulind)
+        xpx = self._exp_x_xpx(mulind)
+        pxpx = self._exp_x_pxpx(mulind)
+        kxpx = self._exp_x_kxpx(par, mulind, x)
 
         V = self._vandermonde(mulind, x)
         Z = V.T.dot(iK)
@@ -816,7 +975,7 @@ class BayesSardModel(Model):
         iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
         kbar = self.kernel.exp_xy_kxy(par)
         V = self._vandermonde(mulind, self.points)
-        px = self.exp_x_px(mulind)
+        px = self._exp_x_px(mulind)
         b = V.T.dot(iK).dot(q) - px
         iViKV = la.cho_solve(la.cho_factor(V.T.dot(iK).dot(V)), np.eye(mulind.shape[1]))
         return kbar - q.T.dot(iK).dot(q) + b.T.dot(iViKV).dot(b)

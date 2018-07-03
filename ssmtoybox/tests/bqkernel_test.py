@@ -8,17 +8,6 @@ import numba as nb
 from ssmtoybox.bq.bqkern import RBF, RBFStudent
 
 
-@nb.jit(nopython=True)
-def multi_poly(x, alpha):
-    dim, num_basis = alpha.shape
-    dim, num_data = x.shape
-    polyval = np.zeros((num_data, num_basis))
-    for n in range(num_data):
-        for b in range(num_basis):
-            polyval[n, b] = np.prod(x[:, n] ** alpha[:, b])
-    return polyval
-
-
 class RBFKernelTest(TestCase):
 
     @classmethod
@@ -151,64 +140,6 @@ class RBFKernelTest(TestCase):
         self.assertTrue(np.array_equal(q, q.T), 'Result not symmetric.')
         la.cholesky(q)
 
-    def test_x_px(self):
-        mi_1d = np.array([[0, 1, 2]])
-        ke = self.kern_rbf_1d.exp_x_px(mi_1d)
-        self.assertTrue(ke.shape == (mi_1d.shape[1], ))
-        self.assertTrue(np.array_equal(ke, np.array([1, 0, 1])))
-
-        mi_2d = np.array([[0, 1, 0, 1, 0, 2],
-                          [0, 0, 1, 1, 2, 0]])
-        ke = self.kern_rbf_2d.exp_x_px(mi_2d)
-        ke_true = np.array([1, 0, 0, 0, 1, 1])
-        self.assertTrue(ke.shape == (mi_2d.shape[1], ))
-        self.assertTrue(np.array_equal(ke, ke_true))
-
-    def test_exp_x_xpx(self):
-        mi_1d = np.array([[0, 1, 2]])
-        ke = self.kern_rbf_1d.exp_x_xpx(mi_1d)
-        self.assertTrue(ke.shape == mi_1d.shape)
-        self.assertTrue(np.array_equal(ke, np.array([[0, 1, 0]])))
-
-        mi_2d = np.array([[0, 1, 0, 1, 0, 2],
-                          [0, 0, 1, 1, 2, 0]])
-        ke_true = np.array([[0, 1, 0, 0, 0, 0],
-                            [0, 0, 1, 0, 0, 0]])
-        ke = self.kern_rbf_2d.exp_x_xpx(mi_2d)
-        self.assertTrue(ke.shape == mi_2d.shape)
-        self.assertTrue(np.array_equal(ke, ke_true))
-
-    def test_exp_x_pxpx(self):
-        mi_1d = np.array([[0, 1, 2]])
-        ke = self.kern_rbf_1d.exp_x_pxpx(mi_1d)
-        ke_true = np.array([[1, 0, 1],
-                            [0, 1, 0],
-                            [1, 0, 3]])
-        self.assertTrue(ke.shape == (mi_1d.shape[1], mi_1d.shape[1]))
-        self.assertTrue(np.array_equal(ke, ke_true))
-
-        mi_2d = np.array([[0, 1, 0, 1, 0, 2],
-                          [0, 0, 1, 1, 2, 0]])
-        ke_true = np.array([[1, 0, 0, 0, 1, 1],
-                            [0, 1, 0, 0, 0, 0],
-                            [0, 0, 1, 0, 0, 0],
-                            [0, 0, 0, 1, 0, 0],
-                            [1, 0, 0, 0, 3, 1],
-                            [1, 0, 0, 0, 1, 3]])
-        ke = self.kern_rbf_2d.exp_x_pxpx(mi_2d)
-        self.assertTrue(ke.shape == (mi_2d.shape[1], mi_2d.shape[1]))
-        self.assertTrue(np.array_equal(ke, ke_true))
-
-    def test_exp_x_kxpx(self):
-        mi_1d = np.array([[0, 1, 2]])
-        par_1d = np.array([[1.0, 1.0]])
-        ke = self.kern_rbf_1d.exp_x_kxpx(par_1d, mi_1d, self.data_1d)
-        ke_true = np.array([[0.5*np.exp(-0.25), 0.25*np.exp(-0.25), 0.25*np.exp(-0.25)],
-                            [0.5*np.exp(-0.25), -0.25*np.exp(-0.25), 0.25*np.exp(-0.25)],
-                            [0.5, 0, 1/6]])
-        self.assertTrue(ke.shape == (self.data_1d.shape[1], mi_1d.shape[1]))
-        self.assertTrue(np.array_equal(ke, ke_true))
-
     def test_mc_verification(self):
         dim = 2
 
@@ -241,42 +172,6 @@ class RBFKernelTest(TestCase):
         self.assertLessEqual(np.linalg.norm(q - q_mc), tol)
         self.assertLessEqual(np.linalg.norm(Q - Q_mc), tol)
         self.assertLessEqual(np.linalg.norm(R - R_mc), tol)
-
-    def test_mc_poly_verification(self):
-        dim = 1
-
-        alpha_1d = np.array([[0, 1, 2]])
-        par_1d = np.array([[1.0, 1.0]])
-        xpx = self.kern_rbf_1d.exp_x_xpx(alpha_1d)
-        pxpx = self.kern_rbf_1d.exp_x_pxpx(alpha_1d)
-        kxpx = self.kern_rbf_1d.exp_x_kxpx(par_1d, alpha_1d, self.data_1d)
-
-        # approximate expectations using cumulative moving average MC
-        def cma_mc(new_samples, old_avg, old_avg_size, axis=0):
-            b_size = new_samples.shape[axis]
-            return (new_samples.sum(axis=axis) + old_avg_size * old_avg) / (old_avg_size + b_size)
-
-        batch_size = 100000
-        num_iter = 100
-        xpx_mc, pxpx_mc, kxpx_mc = 0, 0, 0
-        for i in range(num_iter):
-            # sample from standard Gaussian
-            x_samples = np.random.multivariate_normal(np.zeros((dim, )), np.eye(dim), size=batch_size).T
-            p = multi_poly(x_samples, alpha_1d)  # (N, Q)
-            k = self.kern_rbf_1d.eval(self.par_1d, x_samples, self.data_1d, scaling=False)  # (N, M)
-            xpx_mc = cma_mc(x_samples[..., na] * p[na, ...], xpx_mc, i*batch_size, axis=1)
-            pxpx_mc = cma_mc(p[:, na, :] * p[..., na], pxpx_mc, i*batch_size, axis=0)
-            kxpx_mc = cma_mc(k[:, na, :] * p[..., na], kxpx_mc, i*batch_size, axis=0)
-
-        # compare MC approximates with analytic expressions
-        tol = 5e-4
-        print('Maximum absolute difference using {:d} samples.'.format(batch_size*num_iter))
-        print('xpx {:.2e}'.format(np.abs(xpx - xpx_mc).max()))
-        print('pxpx {:.2e}'.format(np.abs(pxpx - pxpx_mc).max()))
-        print('kxpx {:.2e}'.format(np.abs(kxpx - kxpx_mc).max()))
-        self.assertLessEqual(np.abs(xpx - xpx_mc).max(), tol)
-        self.assertLessEqual(np.abs(pxpx - pxpx_mc).max(), tol)
-        self.assertLessEqual(np.abs(kxpx - kxpx_mc).max(), tol)
 
     def test_par_gradient(self):
         dim = 2
