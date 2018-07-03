@@ -781,7 +781,7 @@ class BayesSardModel(Model):
         self.B, self.iViKV = B, iViKV
 
         # BSQ weights in terms of kernel expectations
-        w_m = (q - A.dot(b)).dot(iK)
+        w_m = iK.dot(q - A.dot(b))
         w_c = iK.dot(Q - A.T.dot(B).dot(A)).dot(iK)
         w_cc = (R - D.dot(A.T)).dot(iK)
 
@@ -821,8 +821,55 @@ class BayesSardModel(Model):
         iViKV = la.cho_solve(la.cho_factor(V.T.dot(iK).dot(V)), np.eye(mulind.shape[1]))
         return kbar - q.T.dot(iK).dot(q) + b.T.dot(iViKV).dot(b)
 
-    def predict(self, test_data, fcn_obs, par=None):
-        pass
+    def predict(self, test_data, fcn_obs, x_obs=None, par=None, mulind=None):
+        """
+        Gaussian process predictions with polynomial prior mean.
+
+        Parameters
+        ----------
+        test_data : ndarray
+            Test data, shape (D, M).
+
+        fcn_obs : ndarray
+            Observations of the integrand at sigma-points.
+
+        x_obs : ndarray
+            Training inputs.
+
+        par : ndarray
+            Kernel parameters.
+
+        Returns
+        -------
+        mean : ndarray
+            Predictive mean.
+
+        var : ndarray
+            Predictive variance.
+        """
+        if x_obs is None:
+            x_obs = self.points
+        # if multi-index unspecified, revert to default degree multivariate polynomial
+        if mulind is None:
+            pass
+        num_basis = mulind.shape[1]
+        par = self.kernel.get_parameters(par)
+
+        iK = self.kernel.eval_inv_dot(par, x_obs)
+        kx = self.kernel.eval(par, test_data, x_obs)
+        kxx = self.kernel.eval(par, test_data, test_data, diag=True)
+
+        V = self._vandermonde(mulind, x_obs)
+        Z = V.T.dot(iK)
+        iViKV = la.cho_solve(la.cho_factor(Z.dot(V)), np.eye(num_basis))
+        A = iViKV.dot(V.T)
+        vx = self._vandermonde(mulind, test_data)
+        b = Z.dot(kx) - vx
+
+        # GP mean and predictive variance
+        mean = np.squeeze((kx - b.dot(A.T)).dot(iK).dot(fcn_obs.T))
+        var = np.squeeze(kxx - np.einsum('im,mn,ni->i', kx, iK, kx.T) + np.einsum('im,mn,ni->i', b, iViKV, b.T))
+        return mean, var
 
     def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
         pass
