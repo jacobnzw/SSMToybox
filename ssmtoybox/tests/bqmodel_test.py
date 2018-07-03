@@ -324,12 +324,11 @@ class BayesSardModelTest(TestCase):
     def test_mc_poly_verification(self):
         dim = 1
         alpha_1d = np.array([[0, 1, 2]])
-        par_1d = np.array([[1.0, 1.0]])
         model = BayesSardModel(1, self.ker_par_1d, 'ut', self.pt_par_ut)
         px = model._exp_x_px(alpha_1d)
         xpx = model._exp_x_xpx(alpha_1d)
         pxpx = model._exp_x_pxpx(alpha_1d)
-        kxpx = model._exp_x_kxpx(par_1d, alpha_1d, self.data_1d)
+        kxpx = model._exp_x_kxpx(self.ker_par_1d, alpha_1d, self.data_1d)
 
         # approximate expectations using cumulative moving average MC
         def cma_mc(new_samples, old_avg, old_avg_size, axis=0):
