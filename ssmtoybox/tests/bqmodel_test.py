@@ -3,14 +3,15 @@ from unittest import TestCase
 import numpy as np
 import scipy.linalg as la
 from numpy import newaxis as na
-from ssmtoybox.bq.bqmod import GaussianProcess, StudentTProcess
+from ssmtoybox.bq.bqmod import GaussianProcess, StudentTProcess, BayesSardModel
+import matplotlib.pyplot as plt
 
-# fcn = lambda x: np.sin((x + 1) ** -1)
-fcn = lambda x: 0.5 * x + 25 * x / (1 + x ** 2)
+fcn = lambda x: np.sin((x + 1) ** -1)
+# fcn = lambda x: 0.5 * x + 25 * x / (1 + x ** 2)
 
 
 # fcn = lambda x: np.sin(x)
-# fcn = lambda x: 0.05*x ** 2
+fcn = lambda x: 0.05*x ** 2
 # fcn = lambda x: x
 
 
@@ -217,6 +218,40 @@ class GPModelTest(TestCase):
         print(res_ml2)
         np.set_printoptions(precision=4)
         print('ML-II({:.4f}) @ alpha: {:.4f}, el: {}'.format(res_ml2.fun, hyp_ml2[0], hyp_ml2[1:]))
+
+
+class BayesSardModelTest(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.ker_par_1d = np.array([[1, 1]])
+        cls.ker_par_5d = np.array([[1, 3, 3, 3, 3, 3]])
+        cls.pt_par_ut = {'alpha': 1.0}
+
+    def test_init(self):
+        BayesSardModel(1, self.ker_par_1d, 'ut', self.pt_par_ut)
+
+    def test_prediction(self):
+        model = BayesSardModel(1, self.ker_par_1d, 'gh', {'degree': 5})
+        xtest = np.linspace(-5, 5, 100)[na, :]
+        y = fcn(model.points)
+        f = fcn(xtest)
+        alpha = np.array([[0, 1, 2]])
+        mean, var = model.predict(xtest, y, mulind=alpha)
+        std = np.sqrt(var)
+
+        # plot training data, predictive mean and variance
+        fig_title = 'BSQ model predictions'
+        fig = plt.figure(fig_title)
+        xtest = np.squeeze(xtest)
+        plt.fill_between(xtest, mean - 2 * std, mean + 2 * std, color='0.1', alpha=0.15)
+        plt.plot(xtest, mean, color='k', lw=2)
+        plt.plot(model.points, y, 'ko', ms=8)
+
+        # true function values at test points if provided
+        if f is not None:
+            plt.plot(xtest, np.squeeze(f), lw=2, ls='--', color='tomato')
+        plt.show()
 
 
 class TPModelTest(TestCase):

@@ -855,20 +855,20 @@ class BayesSardModel(Model):
         num_basis = mulind.shape[1]
         par = self.kernel.get_parameters(par)
 
-        iK = self.kernel.eval_inv_dot(par, x_obs)
-        kx = self.kernel.eval(par, test_data, x_obs)
-        kxx = self.kernel.eval(par, test_data, test_data, diag=True)
+        iK = self.kernel.eval_inv_dot(par, x_obs)  # (num_train, num_train)
+        kx = self.kernel.eval(par, test_data, x_obs)  # (num_test, num_train)
+        kxx = self.kernel.eval(par, test_data, test_data, diag=True)  # (num_test, num_test)
 
-        V = self._vandermonde(mulind, x_obs)
-        Z = V.T.dot(iK)
-        iViKV = la.cho_solve(la.cho_factor(Z.dot(V)), np.eye(num_basis))
-        A = iViKV.dot(V.T)
-        vx = self._vandermonde(mulind, test_data)
-        b = Z.dot(kx) - vx
+        V = self._vandermonde(mulind, x_obs)  # (num_train, num_basis)
+        Z = V.T.dot(iK)  # (num_basis, num_train)
+        iViKV = la.cho_solve(la.cho_factor(Z.dot(V)), np.eye(num_basis))  # (num_basis, num_basis)
+        A = iViKV.dot(V.T)  # (num_basis, num_train)
+        vx = self._vandermonde(mulind, test_data)  # (num_test, num_basis)
+        b = Z.dot(kx.T) - vx.T  # (num_basis, num_test)
 
         # GP mean and predictive variance
-        mean = np.squeeze((kx - b.dot(A.T)).dot(iK).dot(fcn_obs.T))
-        var = np.squeeze(kxx - np.einsum('im,mn,ni->i', kx, iK, kx.T) + np.einsum('im,mn,ni->i', b, iViKV, b.T))
+        mean = np.squeeze((kx - b.T.dot(A)).dot(iK).dot(fcn_obs.T))
+        var = np.squeeze(kxx - np.einsum('im,mn,ni->i', kx, iK, kx.T) + np.einsum('im,mn,ni->i', b.T, iViKV, b))
         return mean, var
 
     def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
