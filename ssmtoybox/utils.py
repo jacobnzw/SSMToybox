@@ -1,4 +1,5 @@
 import numpy as np
+import numba as nb
 import scipy as sp
 from numpy import newaxis as na, linalg as la
 import pandas as pd
@@ -401,3 +402,49 @@ def ellipse_points(pos, mat):
     theta = np.linspace(0, 2 * np.pi)
     t = np.asarray((np.cos(theta), np.sin(theta)))
     return pos[:, na] + np.dot(v, np.sqrt(w[:, na]) * t)
+
+
+def n_sum_k(n, k):
+    """Generates all n-tuples summing to k."""
+    assert k >= 0
+    if k == 0:
+        return np.zeros((n, 1), dtype=np.int)
+    if k == 1:
+        return np.eye(n, dtype=np.int)
+    else:
+        a = n_sum_k(n, k - 1)
+        I = np.eye(n, dtype=np.int)
+        temp = np.zeros((n, (n * (1 + n) // 2) - 1), dtype=np.int)
+        tind = 0
+        for i in range(n - 1):
+            for j in range(i, n):
+                temp[:, tind] = a[:, i] + I[:, j]
+                tind = tind + 1
+        return np.hstack((temp, a[:, n - 1:] + I[:, -1, None]))
+
+
+@nb.jit(nopython=True)
+def vandermonde(mul_ind, x):
+    """
+    Vandermonde matrix with multivariate polynomial basis.
+
+    Parameters
+    ----------
+    mul_ind : (dim, num_basis) ndarray
+        Matrix where each column is a multi-index which specifies a multivariate monomial.
+
+    x : (dim, num_points) ndarray
+        Sigma-points.
+
+    Returns
+    -------
+    : (num_points, num_basis) ndarray
+        Vandermonde matrix evaluated for all sigma-points.
+    """
+    dim, num_pts = x.shape
+    num_basis = mul_ind.shape[1]
+    vdm = np.zeros((num_pts, num_basis))
+    for n in range(num_pts):
+        for b in range(num_basis):
+            vdm[n, b] = np.prod(x[:, n] ** mul_ind[:, b])
+    return vdm
