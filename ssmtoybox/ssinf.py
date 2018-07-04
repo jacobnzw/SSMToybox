@@ -978,8 +978,8 @@ class BSQKalman(GaussianInference):
         assert isinstance(ssm, StateSpaceModel)
         nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
         nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
-        t_dyn = BSQ(nq, kern_par_dyn, tdeg_dyn, points=points, point_par=point_hyp)
-        t_obs = GPQ(nr, kern_par_obs, tdeg_obs, points=points, point_par=point_hyp)
+        t_dyn = BSQ(nq, kern_par_dyn, tdeg_dyn, points, point_hyp)
+        t_obs = BSQ(nr, kern_par_obs, tdeg_obs, points, point_hyp)
         super(BSQKalman, self).__init__(ssm, t_dyn, t_obs)
 
 

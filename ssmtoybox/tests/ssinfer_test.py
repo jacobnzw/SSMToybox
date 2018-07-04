@@ -3,8 +3,25 @@ from unittest import TestCase
 import numpy as np
 import numpy.linalg as la
 
-from ssmtoybox.ssinf import GPQMKalman
+from ssmtoybox.ssinf import GPQMKalman, BSQKalman
 from ssmtoybox.ssmod import Pendulum, UNGM
+
+
+class BSQKalmanTest(TestCase):
+    def test_init(self):
+        ssm = UNGM()
+        kpar = np.array([[1, 1]], dtype=np.float)
+        alg = BSQKalman(ssm, kpar, kpar)
+
+    def test_filtering_ungm(self):
+        ssm = UNGM()
+        kpar = np.array([[1, 1]], dtype=np.float)
+        alg = BSQKalman(ssm, kpar, kpar)
+        x, y = ssm.simulate(100)
+        alg.forward_pass(y[..., 0])
+
+    def test_filtering_pendulum(self):
+        pass
 
 
 class GPQMarginalizedTest(TestCase):
