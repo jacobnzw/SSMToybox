@@ -34,7 +34,7 @@ class Kernel(object, metaclass=ABCMeta):
         self.eye_d = np.eye(dim)  # pre-allocation for convenience
 
     @staticmethod
-    def _cho_inv(A, b=None):
+    def _cho_inv(A, b=None):  # TODO: could be moved to utils, rename to cho_dot()
         """
         Solution of a linear system :math:`Ax = b`, where :math:`A` is a symmetric positive definite matrix.
 
