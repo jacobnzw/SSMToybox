@@ -3,7 +3,7 @@ from unittest import TestCase
 import numpy as np
 import numpy.linalg as la
 
-from ssmtoybox.bq.bqmtran import GPQ, GPQMO
+from ssmtoybox.bq.bqmtran import GPQ, GPQMO, BSQ
 from ssmtoybox.ssmod import Pendulum, CoordinatedTurnBOT, ReentryRadar, UNGM
 
 np.set_printoptions(precision=4)
@@ -75,6 +75,17 @@ class GPQuadTest(TestCase):
             # test symmetry
             self.assertTrue(np.allclose(tcov, tcov.T), "Output covariance not closely symmetric.")
             # self.assertTrue(np.array_equal(tcov, tcov.T), "Output covariance not exactly symmetric.")
+
+
+class BSQTransformTest(TestCase):
+    def test_polar2cartesian(self):
+        def polar2cartesian(x, pars):
+            return x[0] * np.array([np.cos(x[1]), np.sin(x[1])])
+
+        mean_in = np.array([1, np.pi / 2])
+        cov_in = np.diag([0.05 ** 2, (np.pi / 10) ** 2])
+        mt = BSQ(2, np.array([[1.0, 1, 1]]), tdeg=2)
+        mean_out, cov_out, cc = mt.apply(polar2cartesian, mean_in, cov_in, None)
 
 
 class GPQMOTest(TestCase):
