@@ -389,8 +389,25 @@ class BSQ(BQTransform):
         Sigma-point set parameters.
     """
 
-    def __init__(self, dim_in, kern_par, kernel='rbf', points='ut', point_par=None):
-        super(BSQ, self).__init__(dim_in, 1, kern_par, 'gp', kernel, points, point_par)
+    def __init__(self, dim_in, kern_par, points='ut', point_par=None):
+        super(BSQ, self).__init__(dim_in, 1, kern_par, 'gp', 'rbf', points, point_par)
+
+    def _weights(self, kern_par=None, multi_ind=None):
+        """
+        Bayesian quadrature weights.
+
+        Parameters
+        ----------
+        kern_par : ndarray
+            Kernel parameters to use in computation of the weights.
+
+        Returns
+        -------
+        : tuple
+            Weights for the mean, covariance and cross-covariance quadrature approximations.
+
+        """
+        return self.model.bq_weights(kern_par, multi_ind)
 
     def _fcn_eval(self, fcn, x, fcn_par):
         """

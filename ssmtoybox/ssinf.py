@@ -5,7 +5,7 @@ from scipy.linalg import cho_factor, cho_solve, block_diag
 from scipy.stats import multivariate_normal
 from numpy import newaxis as na
 from ssmtoybox.ssmod import StateSpaceModel, StudentStateSpaceModel
-from ssmtoybox.bq.bqmtran import GPQ, GPQMO, TPQ, TPQMO
+from ssmtoybox.bq.bqmtran import GPQ, GPQMO, TPQ, TPQMO, BSQ
 from ssmtoybox.mtran import MomentTransform, Taylor1stOrder, TaylorGPQD, SphericalRadial, SphericalRadialTrunc, \
     Unscented, UnscentedTrunc, GaussHermite, GaussHermiteTrunc
 
@@ -968,6 +968,19 @@ class GPQKalman(GaussianInference):
         t_dyn = GPQ(nq, kern_par_dyn, kernel, points, point_hyp)
         t_obs = GPQ(nr, kern_par_obs, kernel, points, point_hyp)
         super(GPQKalman, self).__init__(ssm, t_dyn, t_obs)
+
+
+class BSQKalman(GaussianInference):
+    """
+    Bayes-Sard quadrature Kalman filter (BSQKF) and smoother.
+    """
+    def __init__(self, ssm, kern_par_dyn, kern_par_obs, tdeg_dyn=2, tdeg_obs=2, points='ut', point_hyp=None):
+        assert isinstance(ssm, StateSpaceModel)
+        nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
+        nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
+        t_dyn = BSQ(nq, kern_par_dyn, tdeg_dyn, points=points, point_par=point_hyp)
+        t_obs = GPQ(nr, kern_par_obs, tdeg_obs, points=points, point_par=point_hyp)
+        super(BSQKalman, self).__init__(ssm, t_dyn, t_obs)
 
 
 class GPQMOKalman(GaussianInference):

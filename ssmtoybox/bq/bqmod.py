@@ -690,15 +690,43 @@ class BayesSardModel(Model):
     kern_par : ndarray
         Kernel parameters in a vector.
 
-    points : str
+    tdeg : int, optional
+        Total degree of the multivariate polynomial GP prior mean.
+
+    points : str, optional
         String abbreviation for the point-set.
 
-    point_par : dict
+    point_par : dict, optional
         Any parameters for constructing desired point-set.
     """
 
-    def __init__(self, dim, kern_par, points='ut', point_par=None):
+    def __init__(self, dim, kern_par, tdeg=2, points='ut', point_par=None):
         super(BayesSardModel, self).__init__(dim, kern_par, 'rbf', points, point_par)
+        # initialize multi-index (defines multi-variate polynomial GP prior mean)
+        self.mulind = []
+        for td in range(tdeg+1):
+            self.mulind.append(self.n_sum_k(dim, td))
+        self.mulind = np.hstack(self.mulind)
+
+    @staticmethod
+    @nb.jit(nopython=True)
+    def n_sum_k(n, k):
+        """Generates all n-tuples summing to k."""
+        assert k >= 0
+        if k == 0:
+            return np.zeros((n, 1))
+        if k == 1:
+            return np.eye(n)
+        else:
+            a = BayesSardModel.n_sum_k(n, k - 1)
+            I = np.eye(n)
+            temp = np.zeros((n, (n * (1 + n) // 2) - 1))
+            tind = 0
+            for i in range(n - 1):
+                for j in range(i, n):
+                    temp[:, tind] = a[:, i] + I[:, j]
+                    tind = tind + 1
+            return np.hstack((temp, a[:, n - 1:] + I[:, -1, None]))
 
     @staticmethod
     @nb.jit(nopython=True)
@@ -887,7 +915,7 @@ class BayesSardModel(Model):
 
         return result
 
-    def bq_weights(self, par, mulind):
+    def bq_weights(self, par, multi_ind=None):
         """
         Weights for the Bayes-Sard quadrature.
 
@@ -896,7 +924,7 @@ class BayesSardModel(Model):
         par : (1, num_par) ndarray
             Kernel parameters.
 
-        mulind : (dim, num_basis) ndarray
+        multi_ind : (dim, num_basis) ndarray
             Matrix, where each column is a multi-index defining a multivariate monomial.
 
         Returns
@@ -910,9 +938,11 @@ class BayesSardModel(Model):
         Wcc : ndarray
             Weights for computation of the transformed cross-covariance.
         """
+        if multi_ind is None:
+            multi_ind = self.mulind
         par = self.kernel.get_parameters(par)
         x = self.points
-        num_basis = mulind.shape[1]
+        num_basis = multi_ind.shape[1]
 
         # inverse kernel matrix
         iK = self.kernel.eval_inv_dot(par, x, scaling=False)
@@ -922,12 +952,12 @@ class BayesSardModel(Model):
         Q = self.kernel.exp_x_kxkx(par, par, x)
         R = self.kernel.exp_x_xkx(par, x)
         # expectations of multivariate polynomials
-        px = self._exp_x_px(mulind)
-        xpx = self._exp_x_xpx(mulind)
-        pxpx = self._exp_x_pxpx(mulind)
-        kxpx = self._exp_x_kxpx(par, mulind, x)
+        px = self._exp_x_px(multi_ind)
+        xpx = self._exp_x_xpx(multi_ind)
+        pxpx = self._exp_x_pxpx(multi_ind)
+        kxpx = self._exp_x_kxpx(par, multi_ind, x)
 
-        V = self._vandermonde(mulind, x)
+        V = self._vandermonde(multi_ind, x)
         Z = V.T.dot(iK)
         iViKV = la.cho_solve(la.cho_factor(Z.dot(V)), np.eye(num_basis))
         A = V.dot(iViKV)
@@ -953,7 +983,7 @@ class BayesSardModel(Model):
     def exp_model_variance(self, fcn_obs):
         return self.kernel.scale.squeeze() ** 2 * (1 - np.trace(self.Q.dot(self.iK)) + np.trace(self.B.dot(self.iViKV)))
 
-    def integral_variance(self, fcn_obs, mulind, par=None):
+    def integral_variance(self, fcn_obs, mulind=None, par=None):
         """
         Variance of the integral.
 
@@ -970,6 +1000,8 @@ class BayesSardModel(Model):
         : float
 
         """
+        if mulind is None:
+            mulind = self.mulind
         par = self.kernel.get_parameters(par)
         q = self.kernel.exp_x_kx(par, self.points)
         iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
@@ -1010,7 +1042,7 @@ class BayesSardModel(Model):
             x_obs = self.points
         # if multi-index unspecified, revert to default degree multivariate polynomial
         if mulind is None:
-            pass
+            mulind = self.mulind
         num_basis = mulind.shape[1]
         par = self.kernel.get_parameters(par)
 
