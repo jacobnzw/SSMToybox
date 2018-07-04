@@ -49,7 +49,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
     """
 
     # list of supported models for the integrand
-    _supported_models_ = ['gp', 'gp-mo', 'tp', 'tp-mo']  # mgp, gpder, ...
+    _supported_models_ = ['gp', 'gp-mo', 'tp', 'tp-mo', 'bs']
 
     def __init__(self, dim_in, dim_out, kern_par, model, kernel, points, point_par, **kwargs):
         self.model = BQTransform._get_model(dim_in, dim_out, model, kernel, points, kern_par, point_par, **kwargs)
@@ -149,7 +149,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         """
 
         # import must be after SigmaPointTransform
-        from .bqmod import GaussianProcess, StudentTProcess, GaussianProcessMO, StudentTProcessMO
+        from .bqmod import GaussianProcess, StudentTProcess, GaussianProcessMO, StudentTProcessMO, BayesSardModel
         model = model.lower()
 
         # make sure kernel is supported
@@ -166,6 +166,8 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
             return GaussianProcessMO(dim_in, dim_out, kern_par, kernel, points, point_par)
         elif model == 'tp-mo':
             return StudentTProcessMO(dim_in, dim_out, kern_par, kernel, points, point_par, **kwargs)
+        elif model == 'bs':
+            return BayesSardModel(dim_in, kern_par, points=points, point_par=point_par, **kwargs)
 
     def minimum_variance_points(self, x0, kern_par):
         # run optimizer to find minvar point sets using initial guess x0; requires implemented _integral_variance()
@@ -389,8 +391,8 @@ class BSQ(BQTransform):
         Sigma-point set parameters.
     """
 
-    def __init__(self, dim_in, kern_par, points='ut', point_par=None):
-        super(BSQ, self).__init__(dim_in, 1, kern_par, 'gp', 'rbf', points, point_par)
+    def __init__(self, dim_in, kern_par, tdeg=2, points='ut', point_par=None):
+        super(BSQ, self).__init__(dim_in, 1, kern_par, 'bs', 'rbf', points, point_par, tdeg=tdeg)
 
     def _weights(self, kern_par=None, multi_ind=None):
         """
