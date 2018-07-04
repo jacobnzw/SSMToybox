@@ -2,13 +2,13 @@ from abc import ABCMeta, abstractmethod
 
 import matplotlib.pyplot as plt
 import numpy as np
-import numba as nb
 import scipy.linalg as la
 from scipy.optimize import minimize
 from scipy.special import factorial, factorial2
 
 from .bqkern import RBF, RQ, RBFStudent
 from ssmtoybox.mtran import SphericalRadial, Unscented, GaussHermite, FullySymmetricStudent
+from ssmtoybox.utils import vandermonde, n_sum_k
 
 
 class Model(object, metaclass=ABCMeta):
@@ -705,55 +705,8 @@ class BayesSardModel(Model):
         # initialize multi-index (defines multi-variate polynomial GP prior mean)
         self.mulind = []
         for td in range(tdeg+1):
-            self.mulind.append(self.n_sum_k(dim, td))
+            self.mulind.append(n_sum_k(dim, td))
         self.mulind = np.hstack(self.mulind)
-
-    @staticmethod
-    @nb.jit(nopython=True)
-    def n_sum_k(n, k):
-        """Generates all n-tuples summing to k."""
-        assert k >= 0
-        if k == 0:
-            return np.zeros((n, 1))
-        if k == 1:
-            return np.eye(n)
-        else:
-            a = BayesSardModel.n_sum_k(n, k - 1)
-            I = np.eye(n)
-            temp = np.zeros((n, (n * (1 + n) // 2) - 1))
-            tind = 0
-            for i in range(n - 1):
-                for j in range(i, n):
-                    temp[:, tind] = a[:, i] + I[:, j]
-                    tind = tind + 1
-            return np.hstack((temp, a[:, n - 1:] + I[:, -1, None]))
-
-    @staticmethod
-    @nb.jit(nopython=True)
-    def _vandermonde(mul_ind, x):
-        """
-        Vandermonde matrix with multivariate polynomial basis.
-
-        Parameters
-        ----------
-        mul_ind : (dim, num_basis) ndarray
-            Matrix where each column is a multi-index which specifies a multivariate monomial.
-
-        x : (dim, num_points) ndarray
-            Sigma-points.
-
-        Returns
-        -------
-        : (num_points, num_basis) ndarray
-            Vandermonde matrix evaluated for all sigma-points.
-        """
-        dim, num_pts = x.shape
-        num_basis = mul_ind.shape[1]
-        vdm = np.zeros((num_pts, num_basis))
-        for n in range(num_pts):
-            for b in range(num_basis):
-                vdm[n, b] = np.prod(x[:, n] ** mul_ind[:, b])
-        return vdm
 
     def _exp_x_px(self, multi_ind):
         """
@@ -887,7 +840,7 @@ class BayesSardModel(Model):
         dim, num_bases = multi_ind.shape
         num_pts = x.shape[1]
         scale, sqrt_inv_lam = self.kernel._unpack_parameters(par)
-        ell = sqrt_inv_lam ** -2
+        ell = np.diag(sqrt_inv_lam) ** -2
         result = np.zeros((num_pts, num_bases))
         dim_zeros = np.zeros((dim, ))
 
@@ -900,13 +853,13 @@ class BayesSardModel(Model):
                 for d in range(dim):
                     alpha = multi_ind[d, q]
                     # exponential part
-                    a = (1 + ell[0, d]**2)**alpha * np.exp(-x[d, n]**2 / (2*(1 + ell[0, d]**2)))
+                    a = (1 + ell[d]**2)**alpha * np.exp(-x[d, n]**2 / (2*(1 + ell[d]**2)))
 
                     # binomial part
                     b = 0
                     for m in range(int(np.floor(alpha/2))+1):
                         part_1 = (fact(alpha) / ((2**(q+1)) * fact(q+1) * fact(alpha - 2*m)))
-                        part_2 = (ell[0, d]**(4*m)) * (x[d, n]**(alpha - 2*m))
+                        part_2 = (ell[d]**(4*m)) * (x[d, n]**(alpha - 2*m))
                         b += part_1 * part_2
                     temp[d] = a * b
 
@@ -957,7 +910,7 @@ class BayesSardModel(Model):
         pxpx = self._exp_x_pxpx(multi_ind)
         kxpx = self._exp_x_kxpx(par, multi_ind, x)
 
-        V = self._vandermonde(multi_ind, x)
+        V = vandermonde(multi_ind, x)
         Z = V.T.dot(iK)
         iViKV = la.cho_solve(la.cho_factor(Z.dot(V)), np.eye(num_basis))
         A = V.dot(iViKV)
@@ -971,7 +924,7 @@ class BayesSardModel(Model):
 
         # BSQ weights in terms of kernel expectations
         w_m = iK.dot(q - A.dot(b))
-        w_c = iK.dot(Q - A.T.dot(B).dot(A)).dot(iK)
+        w_c = iK.dot(Q - A.dot(B).dot(A.T)).dot(iK)
         w_cc = (R - D.dot(A.T)).dot(iK)
 
         # covariance weights should be symmetric
@@ -1006,7 +959,7 @@ class BayesSardModel(Model):
         q = self.kernel.exp_x_kx(par, self.points)
         iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
         kbar = self.kernel.exp_xy_kxy(par)
-        V = self._vandermonde(mulind, self.points)
+        V = vandermonde(mulind, self.points)
         px = self._exp_x_px(mulind)
         b = V.T.dot(iK).dot(q) - px
         iViKV = la.cho_solve(la.cho_factor(V.T.dot(iK).dot(V)), np.eye(mulind.shape[1]))
@@ -1050,11 +1003,11 @@ class BayesSardModel(Model):
         kx = self.kernel.eval(par, test_data, x_obs)  # (num_test, num_train)
         kxx = self.kernel.eval(par, test_data, test_data, diag=True)  # (num_test, num_test)
 
-        V = self._vandermonde(mulind, x_obs)  # (num_train, num_basis)
+        V = vandermonde(mulind, x_obs)  # (num_train, num_basis)
         Z = V.T.dot(iK)  # (num_basis, num_train)
         iViKV = la.cho_solve(la.cho_factor(Z.dot(V)), np.eye(num_basis))  # (num_basis, num_basis)
         A = iViKV.dot(V.T)  # (num_basis, num_train)
-        vx = self._vandermonde(mulind, test_data)  # (num_test, num_basis)
+        vx = vandermonde(mulind, test_data)  # (num_test, num_basis)
         b = Z.dot(kx.T) - vx.T  # (num_basis, num_test)
 
         # GP mean and predictive variance

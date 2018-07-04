@@ -2,9 +2,12 @@ from unittest import TestCase
 
 import numpy as np
 import scipy.linalg as la
-from numpy import newaxis as na
-from ssmtoybox.bq.bqmod import GaussianProcess, StudentTProcess, BayesSardModel
 import matplotlib.pyplot as plt
+from numpy import newaxis as na
+
+from ssmtoybox.bq.bqmod import GaussianProcess, StudentTProcess, BayesSardModel
+from ssmtoybox.utils import vandermonde
+
 
 fcn = lambda x: np.sin((x + 1) ** -1)
 # fcn = lambda x: 0.5 * x + 25 * x / (1 + x ** 2)
@@ -341,7 +344,7 @@ class BayesSardModelTest(TestCase):
         for i in range(num_iter):
             # sample from standard Gaussian
             x_samples = np.random.multivariate_normal(np.zeros((dim, )), np.eye(dim), size=batch_size).T
-            p = model._vandermonde(alpha_1d, x_samples)  # (N, Q)
+            p = vandermonde(alpha_1d, x_samples)  # (N, Q)
             k = model.kernel.eval(self.ker_par_1d, x_samples, self.data_1d, scaling=False)  # (N, M)
             px_mc = cma_mc(p, px_mc, i*batch_size, axis=0)
             xpx_mc = cma_mc(x_samples[..., na] * p[na, ...], xpx_mc, i*batch_size, axis=1)
@@ -361,9 +364,16 @@ class BayesSardModelTest(TestCase):
         self.assertLessEqual(np.abs(kxpx - kxpx_mc).max(), tol)
 
     def test_weights(self):
-        model = BayesSardModel(1, self.ker_par_1d, 'ut', self.pt_par_ut)
+        model = BayesSardModel(1, self.ker_par_1d, tdeg=2, points='ut', point_par=self.pt_par_ut)
         alpha = np.array([[0, 1, 2]])
         w, wc, wcc = model.bq_weights(self.ker_par_1d, alpha)
+
+        model = BayesSardModel(2, self.ker_par_2d, tdeg=1, points='ut', point_par=self.pt_par_ut)
+        w, wc, wcc = model.bq_weights(self.ker_par_2d)
+
+        # FIXME: fails with posdef error, might be _exp_x_kxpx() implements wrong expression (Toni)
+        # model = BayesSardModel(2, self.ker_par_2d, tdeg=2, points='ut', point_par=self.pt_par_ut)
+        # w, wc, wcc = model.bq_weights(self.ker_par_2d)
 
 
 class TPModelTest(TestCase):
