@@ -363,6 +363,15 @@ class BayesSardModelTest(TestCase):
         self.assertLessEqual(np.abs(pxpx - pxpx_mc).max(), tol)
         self.assertLessEqual(np.abs(kxpx - kxpx_mc).max(), tol)
 
+    def test_mc_kxpx(self):
+        model = BayesSardModel(1, self.ker_par_1d, tdeg=2, points='ut', point_par=self.pt_par_ut)
+        par = np.array([[1.0, 1]])
+        alpha = np.array([[0, 1, 2]])
+        mc_kxpx = model._mc_exp_x_kxpx(par, alpha, model.points)
+        kxpx = model._exp_x_kxpx(par, alpha, model.points)
+        self.assertLessEqual(np.abs(mc_kxpx - kxpx).max(), 5e-4,
+                             'Error kxpx: {:.2e}'.format(np.abs(mc_kxpx - kxpx).max()))
+
     def test_weights(self):
         model = BayesSardModel(1, self.ker_par_1d, tdeg=2, points='ut', point_par=self.pt_par_ut)
         alpha = np.array([[0, 1, 2]])
