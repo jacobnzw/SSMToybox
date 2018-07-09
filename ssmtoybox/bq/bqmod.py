@@ -868,6 +868,25 @@ class BayesSardModel(Model):
 
         return result
 
+    def _mc_exp_x_kxpx(self, par, multind, x):
+        # approximate expectations using cumulative moving average MC
+        def cma_mc(new_samples, old_avg, old_avg_size, axis=0):
+            b_size = new_samples.shape[axis]
+            return (new_samples.sum(axis=axis) + old_avg_size * old_avg) / (old_avg_size + b_size)
+
+        dim = x.shape[0]
+        batch_size = 100000
+        num_iter = 10
+        kxpx_mc = 0
+        mean, cov = np.zeros((dim,)), np.eye(dim)
+        for i in range(num_iter):
+            # sample from standard Gaussian
+            x_samples = np.random.multivariate_normal(mean, cov, size=batch_size).T
+            p = vandermonde(multind, x_samples)  # (N, Q)
+            k = self.kernel.eval(par, x_samples, x, scaling=False)  # (N, M)
+            kxpx_mc = cma_mc(k[..., None] * p[:, None, :], kxpx_mc, i * batch_size, axis=0)
+        return kxpx_mc
+
     def bq_weights(self, par, multi_ind=None):
         """
         Weights for the Bayes-Sard quadrature.
@@ -908,11 +927,11 @@ class BayesSardModel(Model):
         px = self._exp_x_px(multi_ind)
         xpx = self._exp_x_xpx(multi_ind)
         pxpx = self._exp_x_pxpx(multi_ind)
-        kxpx = self._exp_x_kxpx(par, multi_ind, x)
+        kxpx = self._mc_exp_x_kxpx(par, multi_ind, x)
 
         V = vandermonde(multi_ind, x)
         Z = V.T.dot(iK)
-        iViKV = la.cho_solve(la.cho_factor(Z.dot(V)), np.eye(num_basis))
+        iViKV = la.cho_solve(la.cho_factor(Z.dot(V) + 1e-8*np.eye(num_basis)), np.eye(num_basis))
         A = V.dot(iViKV)
         b = Z.dot(q) - px
         B = Z.dot(Q).dot(Z.T) + pxpx - Z.dot(kxpx) - kxpx.T.dot(Z.T)

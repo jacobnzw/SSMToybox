@@ -349,7 +349,7 @@ class BayesSardModelTest(TestCase):
             px_mc = cma_mc(p, px_mc, i*batch_size, axis=0)
             xpx_mc = cma_mc(x_samples[..., na] * p[na, ...], xpx_mc, i*batch_size, axis=1)
             pxpx_mc = cma_mc(p[:, na, :] * p[..., na], pxpx_mc, i*batch_size, axis=0)
-            kxpx_mc = cma_mc(k[:, na, :] * p[..., na], kxpx_mc, i*batch_size, axis=0)
+            kxpx_mc = cma_mc(k[..., na] * p[:, na, :], kxpx_mc, i*batch_size, axis=0)
 
         # compare MC approximates with analytic expressions
         tol = 5e-4
@@ -367,13 +367,28 @@ class BayesSardModelTest(TestCase):
         model = BayesSardModel(1, self.ker_par_1d, tdeg=2, points='ut', point_par=self.pt_par_ut)
         alpha = np.array([[0, 1, 2]])
         w, wc, wcc = model.bq_weights(self.ker_par_1d, alpha)
+        # test positive definiteness
+        try:
+            la.cholesky(wc)
+        except la.LinAlgError:
+            self.fail("Weights not positive definite.")
 
         model = BayesSardModel(2, self.ker_par_2d, tdeg=1, points='ut', point_par=self.pt_par_ut)
         w, wc, wcc = model.bq_weights(self.ker_par_2d)
+        # test positive definiteness
+        try:
+            la.cholesky(wc)
+        except la.LinAlgError:
+            self.fail("Weights not positive definite.")
 
-        # FIXME: fails with posdef error, might be _exp_x_kxpx() implements wrong expression (Toni)
-        # model = BayesSardModel(2, self.ker_par_2d, tdeg=2, points='ut', point_par=self.pt_par_ut)
-        # w, wc, wcc = model.bq_weights(self.ker_par_2d)
+        # FIXME: weights wc are not posdef, verify MC approx. of B
+        model = BayesSardModel(2, self.ker_par_2d, tdeg=2, points='ut', point_par=self.pt_par_ut)
+        w, wc, wcc = model.bq_weights(self.ker_par_2d)
+        # test positive definiteness
+        try:
+            la.cholesky(wc)
+        except la.LinAlgError:
+            self.fail("Weights not positive definite.")
 
 
 class TPModelTest(TestCase):
