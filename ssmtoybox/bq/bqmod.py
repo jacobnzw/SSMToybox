@@ -808,17 +808,21 @@ class BayesSardModel(Model):
 
     def _exp_x_kxpx(self, par, multi_ind, x):
         """
-        Compute expectation :math:`\\mathbb{E}[k(x)p(x)^T]_{nq}`. For given :math:`n` and :math`q`, the expectation is
+        Compute expectation :math:`\\mathbb{E}[k(x)p(x)^T]_{nq}`. For given :math:`n` and :math:`q`, the expectation is
         given by
 
         .. math::
-            \\prod_{d=1}^D\left[(1+\ell^2_d)^{\\alpha_{dj}}\\exp\left(-\\frac{x_d^2}{2(1+\ell_d^2)}\right)b_{ijd}\right]
+            \\prod_{d=1}^D\left[ a_{ijd} b_{ijd} \right]
 
         where
 
         .. math::
+            a_{ijd} = \\ell_d(1+\ell^2_d)^{-(1+\\alpha_{dj})/2} \\exp\left(-\\frac{x_{dj}^2}{2(1+\ell_d^2)}\right)
+
+        .. math::
             b_{ijd} = \\sum_{m=0}^{\left\lfloor \\alpha_{dj}/2 \right\rfloor}
-            \\frac{\\alpha_{dj}!}{2^j j! (\\alpha_{dj} - 2m)!} \\ell_d^{4m}x_{di}^{\\alpha_{dj}-2m}
+            \\frac{\\alpha_{dj}!}{2^m m! (\\alpha_{dj} - 2m)!}
+            \\ell_d^{2m}\left(\\frac{x_{di}}{\\sqrt{1+\\ell^2_d}}\right)^{\\alpha_{dj}-2m}
 
         Parameters
         ----------
@@ -848,18 +852,18 @@ class BayesSardModel(Model):
         for n in range(num_pts):
             for q in range(num_bases):
 
-                # compute each factor in the product
+                # compute factors in the product
                 temp = dim_zeros.copy()
                 for d in range(dim):
                     alpha = multi_ind[d, q]
                     # exponential part
-                    a = (1 + ell[d]**2)**alpha * np.exp(-x[d, n]**2 / (2*(1 + ell[d]**2)))
+                    a = ell[d]*(1 + ell[d]**2)**(-(1+alpha)/2) * np.exp(-x[d, n]**2 / (2*(1 + ell[d]**2)))
 
                     # binomial part
                     b = 0
                     for m in range(int(np.floor(alpha/2))+1):
-                        part_1 = (fact(alpha) / ((2**(q+1)) * fact(q+1) * fact(alpha - 2*m)))
-                        part_2 = (ell[d]**(4*m)) * (x[d, n]**(alpha - 2*m))
+                        part_1 = (fact(alpha) / ((2**m) * fact(m) * fact(alpha - 2*m)))
+                        part_2 = (ell[d]**(2*m)) * ((x[d, n]/np.sqrt(1+ell[d]**2))**(alpha - 2*m))
                         b += part_1 * part_2
                     temp[d] = a * b
 
@@ -957,7 +961,6 @@ class BayesSardModel(Model):
         A = V.dot(iViKV)
         b = Z.dot(q) - px
         B = Z.dot(Q).dot(Z.T) + pxpx - Z.dot(kxpx) - kxpx.T.dot(Z.T)
-        # B_mc = self._mc_exp_x_cov(par, multi_ind, x)
         D = R.dot(Z.T) - xpx
 
         # save for EMV and IVAR computation

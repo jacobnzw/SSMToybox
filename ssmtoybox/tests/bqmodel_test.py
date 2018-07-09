@@ -390,9 +390,10 @@ class BayesSardModelTest(TestCase):
         except la.LinAlgError:
             self.fail("Weights not positive definite.")
 
-        # FIXME: weights wc are not posdef, verify MC approx. of B
-        model = BayesSardModel(2, self.ker_par_2d, tdeg=2, points='ut', point_par=self.pt_par_ut)
-        w, wc, wcc = model.bq_weights(self.ker_par_2d)
+        # there are 6 multivariate polynomials in 2D, UT has only 5 points in 2D, need to choose more points
+        # to obtain positive-definite covariance weights!
+        model = BayesSardModel(2, self.ker_par_2d, tdeg=2, points='gh', point_par={'degree': 3})
+        w, wc, wcc = model.bq_weights(np.array([[1.0, 3, 3]]))
         # test positive definiteness
         try:
             la.cholesky(wc)
