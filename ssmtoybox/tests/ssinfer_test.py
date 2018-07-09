@@ -16,7 +16,7 @@ class BSQKalmanTest(TestCase):
     def test_filtering_ungm(self):
         ssm = UNGM()
         kpar = np.array([[1, 1]], dtype=np.float)
-        alg = BSQKalman(ssm, kpar, kpar)
+        alg = BSQKalman(ssm, kpar, kpar, points='ut')
         x, y = ssm.simulate(100)
         alg.forward_pass(y[..., 0])
 
