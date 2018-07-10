@@ -957,6 +957,7 @@ class BayesSardModel(Model):
         pxpx = self._exp_x_pxpx(multi_ind)
         kxpx = self._exp_x_kxpx(par, multi_ind, x)
 
+        # TODO: code up special case when #points == #polys (mult_ind.shape[1] == x.shape[1])
         V = vandermonde(multi_ind, x)
         Z = V.T.dot(iK)
         iViKV = la.cho_solve(la.cho_factor(Z.dot(V) + 1e-8*np.eye(num_basis)), np.eye(num_basis))
