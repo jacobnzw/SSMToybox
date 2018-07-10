@@ -710,7 +710,7 @@ class BayesSardModel(Model):
 
     def _exp_x_px(self, multi_ind):
         """
-        Compute expectation \\mathbb{E}[p(x)^T]_{q} for all :math`q`. The expectation is equal to
+        Compute expectation \\mathbb{E}[p(x)^T]_{q} for all :math:`q`. The expectation is equal to
 
         .. math::
              \\prod_{d=1}^D (\\alpha_d^q - 1)!!
@@ -739,7 +739,7 @@ class BayesSardModel(Model):
 
     def _exp_x_xpx(self, multi_ind):
         """
-        Compute expectation \\mathbb{E}[xp(x)^T]_{eq} for all :math:`e` and :math`q`. The expectation is equal to
+        Compute expectation \\mathbb{E}[xp(x)^T]_{eq} for all :math:`e` and :math:`q`. The expectation is equal to
 
         .. math::
              \\alpha^q_e\\prod_{d \neq e} (\\alpha^q_d - 1)!!
@@ -775,7 +775,7 @@ class BayesSardModel(Model):
 
     def _exp_x_pxpx(self, multi_ind):
         """
-        Compute expectation \\mathbb{E}[p(x)p(x)^T]_{rq} for all :math:`r` and :math`q`. The expectation is equal to
+        Compute expectation \\mathbb{E}[p(x)p(x)^T]_{rq} for all :math:`r` and :math:`q`. The expectation is equal to
 
         .. math::
              \\prod_{d = 1}^D (\\alpha^q_d + \\alpha^r_d - 1)!!
@@ -942,6 +942,8 @@ class BayesSardModel(Model):
         x = self.points
         num_basis = multi_ind.shape[1]
 
+        assert multi_ind.shape[0] == x.shape[0]
+
         # inverse kernel matrix
         iK = self.kernel.eval_inv_dot(par, x, scaling=False)
 
@@ -953,7 +955,7 @@ class BayesSardModel(Model):
         px = self._exp_x_px(multi_ind)
         xpx = self._exp_x_xpx(multi_ind)
         pxpx = self._exp_x_pxpx(multi_ind)
-        kxpx = self._mc_exp_x_kxpx(par, multi_ind, x)
+        kxpx = self._exp_x_kxpx(par, multi_ind, x)
 
         V = vandermonde(multi_ind, x)
         Z = V.T.dot(iK)
