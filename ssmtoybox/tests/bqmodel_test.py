@@ -366,28 +366,41 @@ class BayesSardModelTest(TestCase):
         self.assertLessEqual(np.abs(kxpx - kxpx_mc).max(), tol)
 
     def test_weights(self):
-        model = BayesSardModel(1, self.ker_par_1d, tdeg=2, points='ut', point_par=self.pt_par_ut)
+        from ssmtoybox.mtran import Unscented, GaussHermite
+
+        # UT weights in 1D
+        model = BayesSardModel(1, self.ker_par_1d, points='ut', point_par=self.pt_par_ut)
         alpha = np.array([[0, 1, 2]])
         w, wc, wcc = model.bq_weights(self.ker_par_1d, alpha)
+        # UT weights in 1D reproduced?
+        self.assertTrue(np.allclose(w, Unscented.weights(1)[0]))
         # test positive definiteness
         try:
             la.cholesky(wc)
         except la.LinAlgError:
             self.fail("Weights not positive definite. Min eigval: {}".format(la.eigvalsh(wc).min()))
 
+        # UT weights in 2D
         par = np.array([[1.0, 1.0, 1]])
-        model = BayesSardModel(2, par, tdeg=1, points='ut', point_par=self.pt_par_ut)
-        w, wc, wcc = model.bq_weights(par)
+        model = BayesSardModel(2, par, points='ut', point_par=self.pt_par_ut)
+        w, wc, wcc = model.bq_weights(par, np.array([[0, 1, 0, 2, 0],
+                                                     [0, 0, 1, 0, 2]]))
+        # UT weights reproduced in 2D?
+        self.assertTrue(np.allclose(w, Unscented.weights(2)[0]))
         # test positive definiteness
         try:
             la.cholesky(wc)
         except la.LinAlgError:
             self.fail("Weights not positive definite. Min eigval: {}".format(la.eigvalsh(wc).min()))
 
-        # there are 6 multivariate polynomials in 2D, UT has only 5 points in 2D, need to choose more points
-        # to obtain positive-definite covariance weights!
-        model = BayesSardModel(2, self.ker_par_2d, tdeg=2, points='gh', point_par={'degree': 3})
-        w, wc, wcc = model.bq_weights(np.array([[1.0, 3, 3]]))
+        # GH-3 weights in 2D
+        # there are 6 multivariate polynomials in 2D, UT has only 5 points in 2D
+        model = BayesSardModel(2, self.ker_par_2d, points='gh', point_par={'degree': 3})
+        alpha = np.array([[0, 1, 0, 1, 2, 0, 1, 2, 2],
+                          [0, 0, 1, 1, 0, 2, 2, 1, 2]])
+        par = np.array([[1.0, 1, 1]])
+        w, wc, wcc = model.bq_weights(par, alpha)
+        self.assertTrue(np.allclose(w, GaussHermite.weights(2, 3)))
         # test positive definiteness
         try:
             la.cholesky(wc)
