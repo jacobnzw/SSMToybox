@@ -317,21 +317,23 @@ class BayesSardModelTest(TestCase):
         model = BayesSardModel(1, self.ker_par_1d, tdeg=2, points='ut', point_par=self.pt_par_ut)
         mi_1d = np.array([[0, 1, 2]])
         par_1d = np.array([[1.0, 1.0]])
-        ke = model._exp_x_kxpx(par_1d, mi_1d, self.data_1d)
-        ke_true = np.array([[0.5*np.exp(-0.25), 0.25*np.exp(-0.25), 0.25*np.exp(-0.25)],
-                            [0.5*np.exp(-0.25), -0.25*np.exp(-0.25), 0.25*np.exp(-0.25)],
-                            [0.5, 0, 1/6]])
-        self.assertTrue(ke.shape == (self.data_1d.shape[1], mi_1d.shape[1]))
-        self.assertTrue(np.array_equal(ke, ke_true))
+        data = np.array([[0, 1, -1]], dtype=np.float)
+        ke = model._exp_x_kxpx(par_1d, mi_1d, data)
+        ke_true = np.array([[2**(-0.5), 0, 1/(2*(2**0.5))],
+                            [2**(-0.5)*np.exp(-0.25), np.exp(-0.25)/(2*(2**0.5)), 3*np.exp(-0.25)/(4*2**0.5)],
+                            [2**(-0.5)*np.exp(-0.25), -np.exp(-0.25)/(2*(2**0.5)), 3*np.exp(-0.25)/(4*2**0.5)]])
+        self.assertTrue(ke.shape == (data.shape[1], mi_1d.shape[1]))
+        self.assertTrue(np.allclose(ke, ke_true))
 
     def test_mc_poly_verification(self):
         dim = 1
-        alpha_1d = np.array([[0, 1, 2]])
-        model = BayesSardModel(1, self.ker_par_1d, tdeg=2, points='ut', point_par=self.pt_par_ut)
-        px = model._exp_x_px(alpha_1d)
-        xpx = model._exp_x_xpx(alpha_1d)
-        pxpx = model._exp_x_pxpx(alpha_1d)
-        kxpx = model._exp_x_kxpx(self.ker_par_1d, alpha_1d, self.data_1d)
+        alpha = np.array([[0, 1, 2]])
+        par = np.array([[1.0, 1]])
+        model = BayesSardModel(1, par, tdeg=2, points='ut', point_par=self.pt_par_ut)
+        px = model._exp_x_px(alpha)
+        xpx = model._exp_x_xpx(alpha)
+        pxpx = model._exp_x_pxpx(alpha)
+        kxpx = model._exp_x_kxpx(par, alpha, self.data_1d)
 
         # approximate expectations using cumulative moving average MC
         def cma_mc(new_samples, old_avg, old_avg_size, axis=0):
@@ -344,15 +346,15 @@ class BayesSardModelTest(TestCase):
         for i in range(num_iter):
             # sample from standard Gaussian
             x_samples = np.random.multivariate_normal(np.zeros((dim, )), np.eye(dim), size=batch_size).T
-            p = vandermonde(alpha_1d, x_samples)  # (N, Q)
-            k = model.kernel.eval(self.ker_par_1d, x_samples, self.data_1d, scaling=False)  # (N, M)
+            p = vandermonde(alpha, x_samples)  # (N, Q)
+            k = model.kernel.eval(par, x_samples, self.data_1d, scaling=False)  # (N, M)
             px_mc = cma_mc(p, px_mc, i*batch_size, axis=0)
             xpx_mc = cma_mc(x_samples[..., na] * p[na, ...], xpx_mc, i*batch_size, axis=1)
             pxpx_mc = cma_mc(p[:, na, :] * p[..., na], pxpx_mc, i*batch_size, axis=0)
             kxpx_mc = cma_mc(k[..., na] * p[:, na, :], kxpx_mc, i*batch_size, axis=0)
 
         # compare MC approximates with analytic expressions
-        tol = 5e-4
+        tol = 1e-3
         print('Maximum absolute difference using {:d} samples.'.format(batch_size*num_iter))
         print('px {:.2e}'.format(np.abs(px - px_mc).max()))
         print('xpx {:.2e}'.format(np.abs(xpx - xpx_mc).max()))
@@ -363,15 +365,6 @@ class BayesSardModelTest(TestCase):
         self.assertLessEqual(np.abs(pxpx - pxpx_mc).max(), tol)
         self.assertLessEqual(np.abs(kxpx - kxpx_mc).max(), tol)
 
-    def test_mc_kxpx(self):
-        model = BayesSardModel(1, self.ker_par_1d, tdeg=2, points='ut', point_par=self.pt_par_ut)
-        par = np.array([[1.0, 1]])
-        alpha = np.array([[0, 1, 2]])
-        mc_kxpx = model._mc_exp_x_kxpx(par, alpha, model.points)
-        kxpx = model._exp_x_kxpx(par, alpha, model.points)
-        self.assertLessEqual(np.abs(mc_kxpx - kxpx).max(), 5e-4,
-                             'Error kxpx: {:.2e}'.format(np.abs(mc_kxpx - kxpx).max()))
-
     def test_weights(self):
         model = BayesSardModel(1, self.ker_par_1d, tdeg=2, points='ut', point_par=self.pt_par_ut)
         alpha = np.array([[0, 1, 2]])
@@ -380,15 +373,16 @@ class BayesSardModelTest(TestCase):
         try:
             la.cholesky(wc)
         except la.LinAlgError:
-            self.fail("Weights not positive definite.")
+            self.fail("Weights not positive definite. Min eigval: {}".format(la.eigvalsh(wc).min()))
 
-        model = BayesSardModel(2, self.ker_par_2d, tdeg=1, points='ut', point_par=self.pt_par_ut)
-        w, wc, wcc = model.bq_weights(self.ker_par_2d)
+        par = np.array([[1.0, 1.0, 1]])
+        model = BayesSardModel(2, par, tdeg=1, points='ut', point_par=self.pt_par_ut)
+        w, wc, wcc = model.bq_weights(par)
         # test positive definiteness
         try:
             la.cholesky(wc)
         except la.LinAlgError:
-            self.fail("Weights not positive definite.")
+            self.fail("Weights not positive definite. Min eigval: {}".format(la.eigvalsh(wc).min()))
 
         # there are 6 multivariate polynomials in 2D, UT has only 5 points in 2D, need to choose more points
         # to obtain positive-definite covariance weights!
@@ -398,7 +392,7 @@ class BayesSardModelTest(TestCase):
         try:
             la.cholesky(wc)
         except la.LinAlgError:
-            self.fail("Weights not positive definite.")
+            self.fail("Weights not positive definite. Min eigval: {}".format(la.eigvalsh(wc).min()))
 
 
 class TPModelTest(TestCase):
