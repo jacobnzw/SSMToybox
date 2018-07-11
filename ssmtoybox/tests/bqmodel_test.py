@@ -233,10 +233,10 @@ class BayesSardModelTest(TestCase):
         cls.pt_par_ut = {'alpha': 1.0}
 
     def test_init(self):
-        BayesSardModel(1, self.ker_par_1d, tdeg=2, point_str='ut', point_par=self.pt_par_ut)
+        BayesSardModel(1, self.ker_par_1d, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
 
     def test_prediction(self):
-        model = BayesSardModel(1, self.ker_par_1d, tdeg=2, point_str='gh', point_par={'degree': 5})
+        model = BayesSardModel(1, self.ker_par_1d, multi_ind=2, point_str='gh', point_par={'degree': 5})
         xtest = np.linspace(-5, 5, 100)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
@@ -258,13 +258,13 @@ class BayesSardModelTest(TestCase):
         plt.show()
 
     def test_x_px(self):
-        model = BayesSardModel(1, self.ker_par_1d, tdeg=2, point_str='ut', point_par=self.pt_par_ut)
+        model = BayesSardModel(1, self.ker_par_1d, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
         mi_1d = np.array([[0, 1, 2]])
         ke = model._exp_x_px(mi_1d)
         self.assertTrue(ke.shape == (mi_1d.shape[1], ))
         self.assertTrue(np.array_equal(ke, np.array([1, 0, 1])))
 
-        model = BayesSardModel(2, self.ker_par_2d, tdeg=2, point_str='ut', point_par=self.pt_par_ut)
+        model = BayesSardModel(2, self.ker_par_2d, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
         mi_2d = np.array([[0, 1, 0, 1, 0, 2],
                           [0, 0, 1, 1, 2, 0]])
         ke = model._exp_x_px(mi_2d)
@@ -273,13 +273,13 @@ class BayesSardModelTest(TestCase):
         self.assertTrue(np.array_equal(ke, ke_true))
 
     def test_exp_x_xpx(self):
-        model = BayesSardModel(1, self.ker_par_1d, tdeg=2, point_str='ut', point_par=self.pt_par_ut)
+        model = BayesSardModel(1, self.ker_par_1d, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
         mi_1d = np.array([[0, 1, 2]])
         ke = model._exp_x_xpx(mi_1d)
         self.assertTrue(ke.shape == mi_1d.shape)
         self.assertTrue(np.array_equal(ke, np.array([[0, 1, 0]])))
 
-        model = BayesSardModel(2, self.ker_par_2d, tdeg=2, point_str='ut', point_par=self.pt_par_ut)
+        model = BayesSardModel(2, self.ker_par_2d, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
         mi_2d = np.array([[0, 1, 0, 1, 0, 2],
                           [0, 0, 1, 1, 2, 0]])
         ke_true = np.array([[0, 1, 0, 0, 0, 0],
@@ -289,7 +289,7 @@ class BayesSardModelTest(TestCase):
         self.assertTrue(np.array_equal(ke, ke_true))
 
     def test_exp_x_pxpx(self):
-        model = BayesSardModel(1, self.ker_par_1d, tdeg=2, point_str='ut', point_par=self.pt_par_ut)
+        model = BayesSardModel(1, self.ker_par_1d, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
         mi_1d = np.array([[0, 1, 2]])
         ke = model._exp_x_pxpx(mi_1d)
         ke_true = np.array([[1, 0, 1],
@@ -298,7 +298,7 @@ class BayesSardModelTest(TestCase):
         self.assertTrue(ke.shape == (mi_1d.shape[1], mi_1d.shape[1]))
         self.assertTrue(np.array_equal(ke, ke_true))
 
-        model = BayesSardModel(2, self.ker_par_2d, tdeg=2, point_str='ut', point_par=self.pt_par_ut)
+        model = BayesSardModel(2, self.ker_par_2d, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
         mi_2d = np.array([[0, 1, 0, 1, 0, 2],
                           [0, 0, 1, 1, 2, 0]])
         ke_true = np.array([[1, 0, 0, 0, 1, 1],
@@ -312,7 +312,7 @@ class BayesSardModelTest(TestCase):
         self.assertTrue(np.array_equal(ke, ke_true))
 
     def test_exp_x_kxpx(self):
-        model = BayesSardModel(1, self.ker_par_1d, tdeg=2, point_str='ut', point_par=self.pt_par_ut)
+        model = BayesSardModel(1, self.ker_par_1d, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
         mi_1d = np.array([[0, 1, 2]])
         par_1d = np.array([[1.0, 1.0]])
         data = np.array([[0, 1, -1]], dtype=np.float)
@@ -327,7 +327,7 @@ class BayesSardModelTest(TestCase):
         dim = 1
         alpha = np.array([[0, 1, 2]])
         par = np.array([[1.0, 1]])
-        model = BayesSardModel(1, par, tdeg=2, point_str='ut', point_par=self.pt_par_ut)
+        model = BayesSardModel(1, par, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
         px = model._exp_x_px(alpha)
         xpx = model._exp_x_xpx(alpha)
         pxpx = model._exp_x_pxpx(alpha)

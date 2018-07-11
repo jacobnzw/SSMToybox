@@ -603,13 +603,19 @@ class BayesSardModel(Model):
         Any parameters for constructing desired point-set.
     """
 
-    def __init__(self, dim, kern_par, tdeg=2, point_str='ut', point_par=None):
+    def __init__(self, dim, kern_par, multi_ind=2, point_str='ut', point_par=None):
         super(BayesSardModel, self).__init__(dim, kern_par, 'rbf', point_str, point_par)
-        # initialize multi-index (defines multi-variate polynomial GP prior mean)
-        self.mulind = []
-        for td in range(tdeg+1):
-            self.mulind.append(n_sum_k(dim, td))
-        self.mulind = np.hstack(self.mulind)
+
+        if type(multi_ind) is int:
+            # multi-index: monomials of total degree <= multi_ind
+            self.mulind = []
+            for td in range(multi_ind + 1):
+                self.mulind.append(n_sum_k(dim, td))
+            self.mulind = np.hstack(self.mulind)
+        elif type(multi_ind) is np.ndarray:
+            self.mulind = multi_ind
+        else:
+            raise ValueError('Multi-index error: multi-index has to be either int or ndarray')
 
     def _exp_x_px(self, multi_ind):
         """

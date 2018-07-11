@@ -5,7 +5,7 @@ from scipy.linalg import cho_factor, cho_solve, block_diag
 from scipy.stats import multivariate_normal
 from numpy import newaxis as na
 from ssmtoybox.ssmod import StateSpaceModel, StudentStateSpaceModel
-from ssmtoybox.bq.bqmtran import GPQ, GPQMO, TPQ, TPQMO, BSQ
+from ssmtoybox.bq.bqmtran import GaussianProcessTransform, GPQMO, StudentTProcessTransform, TPQMO, BayesSardTransform
 from ssmtoybox.mtran import MomentTransform, Taylor1stOrder, TaylorGPQD, SphericalRadial, SphericalRadialTrunc, \
     Unscented, UnscentedTrunc, GaussHermite, GaussHermiteTrunc
 
@@ -965,8 +965,8 @@ class GPQKalman(GaussianInference):
         assert isinstance(ssm, StateSpaceModel)
         nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
         nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
-        t_dyn = GPQ(nq, kern_par_dyn, kernel, points, point_hyp)
-        t_obs = GPQ(nr, kern_par_obs, kernel, points, point_hyp)
+        t_dyn = GaussianProcessTransform(nq, kern_par_dyn, kernel, points, point_hyp)
+        t_obs = GaussianProcessTransform(nr, kern_par_obs, kernel, points, point_hyp)
         super(GPQKalman, self).__init__(ssm, t_dyn, t_obs)
 
 
@@ -978,8 +978,8 @@ class BSQKalman(GaussianInference):
         assert isinstance(ssm, StateSpaceModel)
         nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
         nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
-        t_dyn = BSQ(nq, kern_par_dyn, tdeg_dyn, points, point_hyp)
-        t_obs = BSQ(nr, kern_par_obs, tdeg_obs, points, point_hyp)
+        t_dyn = BayesSardTransform(nq, kern_par_dyn, tdeg_dyn, points, point_hyp)
+        t_obs = BayesSardTransform(nr, kern_par_obs, tdeg_obs, points, point_hyp)
         super(BSQKalman, self).__init__(ssm, t_dyn, t_obs)
 
 
@@ -1054,8 +1054,8 @@ class GPQMKalman(MarginalInference):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        t_dyn = GPQ(nq, kernel, points, point_par=point_hyp)
-        t_obs = GPQ(nr, kernel, points, point_par=point_hyp)
+        t_dyn = GaussianProcessTransform(nq, kernel, points, point_par=point_hyp)
+        t_obs = GaussianProcessTransform(nr, kernel, points, point_par=point_hyp)
         super(GPQMKalman, self).__init__(sys, t_dyn, t_obs, par_mean, par_cov)
 
 
@@ -1112,8 +1112,8 @@ class TPQKalman(GaussianInference):
         assert isinstance(ssm, StateSpaceModel)
         nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
         nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
-        t_dyn = TPQ(nq, kern_par_dyn, kernel, points, point_hyp, nu)
-        t_obs = TPQ(nr, kern_par_obs, kernel, points, point_hyp, nu)
+        t_dyn = StudentTProcessTransform(nq, kern_par_dyn, kernel, points, point_hyp, nu)
+        t_obs = StudentTProcessTransform(nr, kern_par_obs, kernel, points, point_hyp, nu)
         super(TPQKalman, self).__init__(ssm, t_dyn, t_obs)
 
 
@@ -1176,8 +1176,8 @@ class TPQStudent(StudentInference):
         point_par_obs.update({'dof': r_dof})
         # TODO: finish fixing DOFs, DOF for TPQ and DOF for the filtered state.
 
-        t_dyn = TPQ(nq, kern_par_dyn, 'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
-        t_obs = TPQ(nr, kern_par_obs, 'rbf-student', 'fs', point_par_obs, nu=dof_tp)
+        t_dyn = StudentTProcessTransform(nq, kern_par_dyn, 'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
+        t_obs = StudentTProcessTransform(nr, kern_par_obs, 'rbf-student', 'fs', point_par_obs, nu=dof_tp)
         super(TPQStudent, self).__init__(ssm, t_dyn, t_obs, dof, fixed_dof)
 
 

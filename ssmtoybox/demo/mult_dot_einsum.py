@@ -2,7 +2,7 @@ import numpy as np
 import numpy.linalg as la
 from scipy.linalg import cho_factor, cho_solve
 from ssmtoybox.ssmod import ReentryRadar
-from ssmtoybox.bq.bqmtran import GPQ
+from ssmtoybox.bq.bqmtran import GaussianProcessTransform
 from ssmtoybox.mtran import MonteCarlo
 from unittest import TestCase
 
@@ -39,7 +39,7 @@ class MultTest(TestCase):
 
         dim_in, dim_out = 2, 1
         ker_par_mo = np.hstack((np.ones((dim_out, 1)), 1 * np.ones((dim_out, dim_in))))
-        tf_mo = GPQ(dim_in, ker_par_mo, points='sr')
+        tf_mo = GaussianProcessTransform(dim_in, ker_par_mo, point_str='sr')
         iK, Q = tf_mo.iK, tf_mo.Q
 
         C1 = iK.dot(Q).dot(iK)
@@ -60,7 +60,7 @@ class MultTest(TestCase):
 
         # transform
         ker_par_mo = np.hstack((np.ones((dim_out, 1)), 25 * np.ones((dim_out, dim_in))))
-        tf_so = GPQ(dim_in, ker_par_mo, points='sr')
+        tf_so = GaussianProcessTransform(dim_in, ker_par_mo, point_str='sr')
 
         # Monte-Carlo for ground truth
         tf_mc = MonteCarlo(dim_in, 1000)
