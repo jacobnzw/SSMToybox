@@ -29,7 +29,7 @@ class Model(object, metaclass=ABCMeta):
     kern_str : str
         String abbreviation for the kernel.
 
-    points : str
+    point_str : str
         String abbreviation for the point-set.
 
     point_par : dict
@@ -77,16 +77,16 @@ class Model(object, metaclass=ABCMeta):
     _supported_points_ = ['sr', 'ut', 'gh', 'fs']
     _supported_kernels_ = ['rbf', 'rq', 'rbf-student']
 
-    def __init__(self, dim, kern_par, kern_str, points, point_par=None):
+    def __init__(self, dim, kern_par, kern_str, point_str, point_par=None):
         # init kernel and sigma-points
         self.kernel = Model.get_kernel(dim, kern_str, kern_par)
-        self.points = Model.get_points(dim, points, point_par)
+        self.points = Model.get_points(dim, point_str, point_par)
 
         # init variables for passing kernel expectations and kernel matrix inverse
         self.q, self.Q, self.R, self.iK = None, None, None, None
 
         # save for printing
-        self.str_pts = points
+        self.str_pts = point_str
         self.str_pts_par = str(point_par)
 
         # may no longer be necessary now that jitter is in kernel
@@ -94,8 +94,8 @@ class Model(object, metaclass=ABCMeta):
         self.eye_d, self.eye_n = np.eye(self.dim_in), np.eye(self.num_pts)
 
         # expected model variance and integral model variance
-        self.model_variance = None
-        self.integral_variance = None
+        self.model_var = None
+        self.integral_var = None
 
     def __str__(self):
         """
@@ -414,7 +414,7 @@ class GaussianProcess(Model):  # TODO: rename to GaussianProcessModel, same for 
     Gaussian process regression model of the integrand in the Bayesian quadrature.
     """
 
-    def __init__(self, dim, kern_par, kern_str='rbf', points='ut', point_par=None):
+    def __init__(self, dim, kern_par, kern_str='rbf', point_str='ut', point_par=None):
         """
         Gaussian process regression model.
 
@@ -429,14 +429,14 @@ class GaussianProcess(Model):  # TODO: rename to GaussianProcessModel, same for 
         kern_str : str
             Acronym of the covariance function of the Gaussian process model.
 
-        points : str
+        point_str : str
             Acronym for the sigma-point set to use in BQ.
 
         point_par : dict
             Parameters of the sigma-point set.
         """
 
-        super(GaussianProcess, self).__init__(dim, kern_par, kern_str, points, point_par)
+        super(GaussianProcess, self).__init__(dim, kern_par, kern_str, point_str, point_par)
 
     def predict(self, test_data, fcn_obs, x_obs=None, par=None):
         """
@@ -497,19 +497,19 @@ class GaussianProcess(Model):  # TODO: rename to GaussianProcessModel, same for 
         w_cc = R.dot(iK)
 
         # expected model variance
-        self.model_variance = self.kernel.exp_x_kxx(par) * (1 - np.trace(Q.dot(iK)))
+        self.model_var = self.kernel.exp_x_kxx(par) * (1 - np.trace(Q.dot(iK)))
         # integral variance
-        self.integral_variance = self.kernel.exp_xy_kxy(par) - q.T.dot(iK).dot(q)
+        self.integral_var = self.kernel.exp_xy_kxy(par) - q.T.dot(iK).dot(q)
 
         # covariance weights should be symmetric
         if not np.array_equal(w_c, w_c.T):
             w_c = 0.5 * (w_c + w_c.T)
 
-        return w_m, w_c, w_cc, self.model_variance, self.integral_variance
+        return w_m, w_c, w_cc, self.model_var, self.integral_var
 
     def exp_model_variance(self, par, *args):
         iK = self.kernel.eval_inv_dot(par, self.points)
-        Q = self.exp_x_kxkx(par, par, self.points)
+        Q = self.kernel.exp_x_kxkx(par, par, self.points)
         return self.kernel.exp_x_kxx(par) * (1 - np.trace(Q.dot(iK)))
 
     def integral_variance(self, par, *args):
@@ -603,8 +603,8 @@ class BayesSardModel(Model):
         Any parameters for constructing desired point-set.
     """
 
-    def __init__(self, dim, kern_par, tdeg=2, points='ut', point_par=None):
-        super(BayesSardModel, self).__init__(dim, kern_par, 'rbf', points, point_par)
+    def __init__(self, dim, kern_par, tdeg=2, point_str='ut', point_par=None):
+        super(BayesSardModel, self).__init__(dim, kern_par, 'rbf', point_str, point_par)
         # initialize multi-index (defines multi-variate polynomial GP prior mean)
         self.mulind = []
         for td in range(tdeg+1):
@@ -891,6 +891,12 @@ class BayesSardModel(Model):
 
         Wcc : ndarray
             Weights for computation of the transformed cross-covariance.
+
+        emvar : ndarray
+            Expected model variance.
+
+        ivar : ndarray
+            Integral variance.
         """
         if multi_ind is None:
             multi_ind = self.mulind
@@ -904,7 +910,7 @@ class BayesSardModel(Model):
                              ' of the sigma-points.'.format(multi_ind.shape[0], self.dim_in))
 
         # inverse kernel matrix and Vandermonde matrix
-        iK = self.kernel.eval_inv_dot(par, x, scaling=False)
+        iK = self.kernel.eval_inv_dot(par, x, scaling=False)  # TODO: make sure scaling=False is OK for both cases.
         V = vandermonde(multi_ind, x)
         iViKV = la.cho_solve(la.cho_factor(V.T.dot(iK).dot(V) + 1e-8 * np.eye(num_basis)), np.eye(num_basis))
         # expectations of multivariate polynomials
@@ -914,7 +920,7 @@ class BayesSardModel(Model):
         kxpx = self._exp_x_kxpx(par, multi_ind, x)
         # kernel expectations
         q = self.kernel.exp_x_kx(par, x)
-        kxy = self.kernel.exp_x_kxy(par)
+        kxy = self.kernel.exp_xy_kxy(par)
 
         # if the number of basis functions is same as the number of points, we assume the points are pi-unisolvent
         # and use a special-case implementation of quadrature weights
@@ -923,15 +929,14 @@ class BayesSardModel(Model):
             iV = la.solve(V, np.eye(num_basis))
 
             # BSQ weights for pi-unisolvent points
-            w_m = iV.dot(px)
-            w_c = iV.dot(pxpx).dot(iV.T)
-            w_cc = xpx.dot(iV.T)
+            w_m = iV.T.dot(px)
+            w_c = iV.T.dot(pxpx).dot(iV)
+            w_cc = xpx.dot(iV)
 
             # expected model variance and integral variance
             kxx = self.kernel.exp_x_kxx(par)
-            kx = self.kernel.exp_x_kx(par)
-            self.model_variance = kxx - np.trace(kxpx.dot(iV.T) - kxpx.T.dot(iV) + pxpx.dot(iViKV))
-            self.integral_variance = kxy - kx.T.dot(iV).dot(px) - px.T.dot(iV.T).dot(kx) + px.T.dot(iViKV).dot(px)
+            self.model_var = kxx - np.trace(kxpx.dot(iV.T) - kxpx.T.dot(iV) + pxpx.dot(iViKV))
+            self.integral_var = kxy - q.T.dot(iV).dot(px) - px.T.dot(iV.T).dot(q) + px.T.dot(iViKV).dot(px)
 
         elif num_basis < self.num_pts:
             # additional kernel expectations
@@ -951,8 +956,8 @@ class BayesSardModel(Model):
 
             # expected model variance and integral variance
             kxx = self.kernel.scale.squeeze() ** 2
-            self.model_variance = kxx * (1 - np.trace(Q.dot(iK)) + np.trace(B.dot(iViKV)))
-            self.integral_variance = kxy - q.T.dot(iK).dot(q) + b.T.dot(iViKV).dot(b)
+            self.model_var = kxx * (1 - np.trace(Q.dot(iK)) + np.trace(B.dot(iViKV)))
+            self.integral_var = kxy - q.T.dot(iK).dot(q) + b.T.dot(iViKV).dot(b)
 
         else:
             raise ValueError('Number of basis functions needs to be lower than or equal to the number of points.'
@@ -962,7 +967,7 @@ class BayesSardModel(Model):
         if not np.array_equal(w_c, w_c.T):
             w_c = 0.5 * (w_c + w_c.T)
 
-        return w_m, w_c, w_cc, self.model_variance, self.integral_variance
+        return w_m, w_c, w_cc, self.model_var, self.integral_var
 
     def exp_model_variance(self, par, mulind=None):
         """
@@ -1030,12 +1035,12 @@ class BayesSardModel(Model):
         pass
 
 
-class StudentTProcess(Model):  # TODO: Inherit from GaussianProcess, rewrite method as calls to parent.
+class StudentTProcess(GaussianProcess):
     """
     Student t process regression model of the integrand in the Bayesian quadrature.
     """
 
-    def __init__(self, dim, kern_par, kern_str='rbf', points='ut', point_par=None, nu=3.0):
+    def __init__(self, dim, kern_par, kern_str='rbf', point_str='ut', point_par=None, nu=3.0):
         """
         Student's t-process regression model.
 
@@ -1050,7 +1055,7 @@ class StudentTProcess(Model):  # TODO: Inherit from GaussianProcess, rewrite met
         kern_str : str
             Acronym of the covariance function of the Gaussian process model.
 
-        points : str
+        point_str : str
             Acronym for the sigma-point set to use in BQ.
 
         point_par : dict
@@ -1060,7 +1065,7 @@ class StudentTProcess(Model):  # TODO: Inherit from GaussianProcess, rewrite met
             Degrees of freedom.
         """
 
-        super(StudentTProcess, self).__init__(dim, kern_par, kern_str, points, point_par)
+        super(StudentTProcess, self).__init__(dim, kern_par, kern_str, point_str, point_par)
         nu = 3.0 if nu < 2 else nu  # nu > 2
         self.nu = nu
 
@@ -1101,22 +1106,22 @@ class StudentTProcess(Model):  # TODO: Inherit from GaussianProcess, rewrite met
         if x_obs is None:
             x_obs = self.points
 
-        iK = self.kernel.eval_inv_dot(par, x_obs)
-        kx = self.kernel.eval(par, test_data, x_obs)
-        kxx = self.kernel.eval(par, test_data, test_data, diag=True)
-        mean = np.squeeze(kx.dot(iK).dot(fcn_obs.T))
-        var = np.squeeze(kxx - np.einsum('im,mn,ni->i', kx, iK, kx.T))
+        mean, var = super(StudentTProcess, self).predict(test_data, fcn_obs, x_obs, par)
+        iK = self.kernel.eval_inv_dot(par, self.points)
         scale = (nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (nu - 2 + self.num_pts)
         return mean, scale * var
 
-    def exp_model_variance(self, fcn_obs):
+    def exp_model_variance(self, par, *args):
         """
         Expected model variance.
 
         Parameters
         ----------
-        fcn_obs : ndarray
-            Function evaluations.
+        par : ndarray
+            Kernel parameters.
+
+        args[0] : ndarray
+            Function observations.
 
         Returns
         -------
@@ -1124,21 +1129,23 @@ class StudentTProcess(Model):  # TODO: Inherit from GaussianProcess, rewrite met
             Expected model variance.
         """
 
-        fcn_obs = np.squeeze(fcn_obs)
-        scale = (self.nu - 2 + fcn_obs.dot(self.iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
-        return scale * self.kernel.scale.squeeze() ** 2 * (1 - np.trace(self.Q.dot(self.iK)))
+        gp_emv = super(StudentTProcess, self).exp_model_variance(par)
+        fcn_obs = np.squeeze(args[0])
+        iK = self.kernel.exp_x_kxkx(par, par, self.points)
+        scale = (self.nu - 2 + fcn_obs.dot(iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
+        return scale * gp_emv
 
-    def integral_variance(self, fcn_obs, par=None):
+    def integral_variance(self, par, *args):
         """
         Variance of the integral.
 
         Parameters
         ----------
-        fcn_obs : ndarray
-            Function evaluations.
-
         par : ndarray
             Kernel parameters.
+
+        args[0] : ndarray
+            Function evaluations.
 
         Returns
         -------
@@ -1147,14 +1154,11 @@ class StudentTProcess(Model):  # TODO: Inherit from GaussianProcess, rewrite met
         """
 
         par = self.kernel.get_parameters(par)
-
-        kbar = self.kernel.exp_xy_kxy(par)
-        q = self.kernel.exp_x_kx(par, self.points)
         iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
-
-        fcn_obs = np.squeeze(fcn_obs)
+        fcn_obs = np.squeeze(args[0])
+        gp_emv = super(StudentTProcess, self).integral_var(par)
         scale = (self.nu - 2 + fcn_obs.dot(iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
-        return scale * (kbar - q.T.dot(iK).dot(q))
+        return scale * gp_emv
 
     def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
         """
@@ -1215,8 +1219,8 @@ class StudentTProcess(Model):  # TODO: Inherit from GaussianProcess, rewrite met
 
 class MultiOutputModel(Model):
 
-    def __init__(self, dim_in, dim_out, kern_par, kern_str, points, point_par=None):
-        super(MultiOutputModel, self).__init__(dim_in, kern_par, kern_str, points, point_par)
+    def __init__(self, dim_in, dim_out, kern_par, kern_str, point_str, point_par=None):
+        super(MultiOutputModel, self).__init__(dim_in, kern_par, kern_str, point_str, point_par)
         self.dim_out = dim_out
 
     def bq_weights(self, par):
@@ -1451,7 +1455,7 @@ class GaussianProcessMO(MultiOutputModel):  # TODO: Multiple inheritance could b
     Multi-output Gaussian process regression model of the integrand in the Bayesian quadrature.
     """
 
-    def __init__(self, dim_in, dim_out, kern_par, kern_str, points, point_par=None):
+    def __init__(self, dim_in, dim_out, kern_par, kern_str, point_str, point_par=None):
         """
         Multi-output Gaussian process regression model.
 
@@ -1469,14 +1473,14 @@ class GaussianProcessMO(MultiOutputModel):  # TODO: Multiple inheritance could b
         kern_str : string
             Acronym of the covariance function of the Gaussian process model.
 
-        points : string
+        point_str : string
             Acronym for the sigma-point set to use in BQ.
 
         point_par : dict
             Parameters of the sigma-point set.
         """
 
-        super(GaussianProcessMO, self).__init__(dim_in, dim_out, kern_par, kern_str, points, point_par)
+        super(GaussianProcessMO, self).__init__(dim_in, dim_out, kern_par, kern_str, point_str, point_par)
 
     def predict(self, test_data, fcn_obs, par=None):
         """
@@ -1583,7 +1587,7 @@ class GaussianProcessMO(MultiOutputModel):  # TODO: Multiple inheritance could b
 
 class StudentTProcessMO(MultiOutputModel):
 
-    def __init__(self, dim_in, dim_out, kern_par, kern_str, points, point_par=None, nu=3.0):
+    def __init__(self, dim_in, dim_out, kern_par, kern_str, point_str, point_par=None, nu=3.0):
         """
         Multi-output Student's t-process regression model.
 
@@ -1601,14 +1605,14 @@ class StudentTProcessMO(MultiOutputModel):
         kern_str : str
             Acronym of the covariance function of the Gaussian process model.
 
-        points : str
+        point_str : str
             Acronym for the sigma-point set to use in BQ.
 
         point_par : dict
             Parameters of the sigma-point set.
         """
 
-        super(StudentTProcessMO, self).__init__(dim_in, dim_out, kern_par, kern_str, points, point_par)
+        super(StudentTProcessMO, self).__init__(dim_in, dim_out, kern_par, kern_str, point_str, point_par)
         self.nu = nu
 
     def predict(self, test_data, fcn_obs, par=None):

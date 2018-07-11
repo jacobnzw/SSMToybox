@@ -167,7 +167,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         elif model == 'tp-mo':
             return StudentTProcessMO(dim_in, dim_out, kern_par, kernel, points, point_par, **kwargs)
         elif model == 'bs':
-            return BayesSardModel(dim_in, kern_par, points=points, point_par=point_par, **kwargs)
+            return BayesSardModel(dim_in, kern_par, point_str=points, point_par=point_par, **kwargs)
 
     def minimum_variance_points(self, x0, kern_par):
         # run optimizer to find minvar point sets using initial guess x0; requires implemented _integral_variance()
