@@ -942,38 +942,62 @@ class BayesSardModel(Model):
         x = self.points
         num_basis = multi_ind.shape[1]
 
-        assert multi_ind.shape[0] == x.shape[0]
+        # dimension of the monomials must be equal to dimension of the points
+        if multi_ind.shape[0] != self.dim_in:
+            raise ValueError('Dimension mismatch {:d} != {:d}. Dimension of monomials must be equal to the dimension'
+                             ' of the sigma-points.'.format(multi_ind.shape[0], self.dim_in))
 
-        # inverse kernel matrix
-        iK = self.kernel.eval_inv_dot(par, x, scaling=False)
+        # if the number of basis functions is same as the number of points, we assume the points are pi-unisolvent
+        # and use a special-case implementation of quadrature weights
+        if num_basis == self.num_pts:
+            # inverse kernel matrix
+            iK = self.kernel.eval_inv_dot(par, x, scaling=False)
+            # expectations of multivariate polynomials
+            px = self._exp_x_px(multi_ind)
+            xpx = self._exp_x_xpx(multi_ind)
+            pxpx = self._exp_x_pxpx(multi_ind)
 
-        # Kernel expectations
-        q = self.kernel.exp_x_kx(par, x)
-        Q = self.kernel.exp_x_kxkx(par, par, x)
-        R = self.kernel.exp_x_xkx(par, x)
-        # expectations of multivariate polynomials
-        px = self._exp_x_px(multi_ind)
-        xpx = self._exp_x_xpx(multi_ind)
-        pxpx = self._exp_x_pxpx(multi_ind)
-        kxpx = self._exp_x_kxpx(par, multi_ind, x)
+            V = vandermonde(multi_ind, x)
+            iV = la.solve(V, np.eye(num_basis))
+            iViKV = la.cho_solve(la.cho_factor(V.T.dot(iK).dot(V) + 1e-8 * np.eye(num_basis)), np.eye(num_basis))
 
-        # TODO: code up special case when #points == #polys (mult_ind.shape[1] == x.shape[1])
-        V = vandermonde(multi_ind, x)
-        Z = V.T.dot(iK)
-        iViKV = la.cho_solve(la.cho_factor(Z.dot(V) + 1e-8*np.eye(num_basis)), np.eye(num_basis))
-        A = V.dot(iViKV)
-        b = Z.dot(q) - px
-        B = Z.dot(Q).dot(Z.T) + pxpx - Z.dot(kxpx) - kxpx.T.dot(Z.T)
-        D = R.dot(Z.T) - xpx
+            # BSQ weights for pi-unisolvent points
+            w_m = iV.dot(px)
+            w_c = iV.dot(pxpx).dot(iV.T)
+            w_cc = xpx.dot(iV.T)
 
-        # save for EMV and IVAR computation
+        elif num_basis < self.num_pts:
+            # inverse kernel matrix
+            iK = self.kernel.eval_inv_dot(par, x, scaling=False)
+            # Kernel expectations
+            q = self.kernel.exp_x_kx(par, x)
+            Q = self.kernel.exp_x_kxkx(par, par, x)
+            R = self.kernel.exp_x_xkx(par, x)
+            # expectations of multivariate polynomials
+            px = self._exp_x_px(multi_ind)
+            xpx = self._exp_x_xpx(multi_ind)
+            pxpx = self._exp_x_pxpx(multi_ind)
+            kxpx = self._exp_x_kxpx(par, multi_ind, x)
+
+            V = vandermonde(multi_ind, x)
+            Z = V.T.dot(iK)
+            iViKV = la.cho_solve(la.cho_factor(Z.dot(V) + 1e-8 * np.eye(num_basis)), np.eye(num_basis))
+            A = V.dot(iViKV)
+            b = Z.dot(q) - px
+            B = Z.dot(Q).dot(Z.T) + pxpx - Z.dot(kxpx) - kxpx.T.dot(Z.T)
+            D = R.dot(Z.T) - xpx
+
+            # BSQ weights: general case
+            w_m = iK.dot(q - A.dot(b))
+            w_c = iK.dot(Q - A.dot(B).dot(A.T)).dot(iK)
+            w_cc = (R - D.dot(A.T)).dot(iK)
+        else:
+            raise ValueError('Number of basis functions needs to be lower than or equal to the number of points.'
+                             'You supplied {:d} basis functions and {:d} points.'.format(num_basis, self.num_pts))
+
+        # TODO: compute expected model variance and integral variance for each case, save to self.emv, self.ivar
         self.q, self.Q, self.R, self.iK = q, Q, R, iK
         self.B, self.iViKV = B, iViKV
-
-        # BSQ weights in terms of kernel expectations
-        w_m = iK.dot(q - A.dot(b))
-        w_c = iK.dot(Q - A.dot(B).dot(A.T)).dot(iK)
-        w_cc = (R - D.dot(A.T)).dot(iK)
 
         # covariance weights should be symmetric
         if not np.array_equal(w_c, w_c.T):
