@@ -26,7 +26,7 @@ class Model(object, metaclass=ABCMeta):
     kern_par : ndarray
         Kernel parameters in a vector.
 
-    kernel : str
+    kern_str : str
         String abbreviation for the kernel.
 
     points : str
@@ -77,9 +77,9 @@ class Model(object, metaclass=ABCMeta):
     _supported_points_ = ['sr', 'ut', 'gh', 'fs']
     _supported_kernels_ = ['rbf', 'rq', 'rbf-student']
 
-    def __init__(self, dim, kern_par, kernel, points, point_par=None):
+    def __init__(self, dim, kern_par, kern_str, points, point_par=None):
         # init kernel and sigma-points
-        self.kernel = Model.get_kernel(dim, kernel, kern_par)
+        self.kernel = Model.get_kernel(dim, kern_str, kern_par)
         self.points = Model.get_points(dim, points, point_par)
 
         # init variables for passing kernel expectations and kernel matrix inverse
@@ -93,6 +93,10 @@ class Model(object, metaclass=ABCMeta):
         self.dim_in, self.num_pts = self.points.shape
         self.eye_d, self.eye_n = np.eye(self.dim_in), np.eye(self.num_pts)
 
+        # expected model variance and integral model variance
+        self.model_variance = None
+        self.integral_variance = None
+
     def __str__(self):
         """
         Prettier string representation.
@@ -103,52 +107,6 @@ class Model(object, metaclass=ABCMeta):
             String representation including short name of the point-set, the kernel and its parameter values.
         """
         return '{}\n{} {}'.format(self.kernel, self.str_pts, self.str_pts_par)
-
-    def bq_weights(self, par):
-        """
-        Weights of the Bayesian quadrature.
-
-        Weights for both GPQ and TPQ are the same, hence they're implemented in the general model class.
-
-        Parameters
-        ----------
-        par : ndarray
-            Kernel parameters.
-
-        Returns
-        -------
-        wm : ndarray
-            Weights for computation of the transformed mean.
-
-        Wc : ndarray
-            Weights for computation of the transformed covariance.
-
-        Wcc : ndarray
-            Weights for computation of the transformed cross-covariance.
-        """
-        par = self.kernel.get_parameters(par)
-        x = self.points
-
-        # inverse kernel matrix
-        iK = self.kernel.eval_inv_dot(par, x, scaling=False)
-
-        # Kernel expectations
-        q = self.kernel.exp_x_kx(par, x)
-        Q = self.kernel.exp_x_kxkx(par, par, x)
-        R = self.kernel.exp_x_xkx(par, x)
-
-        # save for EMV and IVAR computation
-        self.q, self.Q, self.R, self.iK = q, Q, R, iK
-
-        # BQ weights in terms of kernel expectations
-        w_m = q.dot(iK)
-        w_c = iK.dot(Q).dot(iK)
-        w_cc = R.dot(iK)
-
-        # covariance weights should be symmetric
-        w_c = 0.5 * (w_c + w_c.T)
-
-        return w_m, w_c, w_cc
 
     @abstractmethod
     def predict(self, test_data, fcn_obs, par=None):
@@ -181,48 +139,64 @@ class Model(object, metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def exp_model_variance(self, fcn_obs):
+    def bq_weights(self, par, *args):
         """
-        Expected model variance given the function observations and the kernel parameters.
+        Weights of the Bayesian quadrature.
 
         Parameters
         ----------
-        fcn_obs : ndarray
-            Observed function values at the point-set locations.
+        par : ndarray
+            Kernel parameters.
+
+        Returns
+        -------
+        wm : ndarray
+            Weights for computation of the transformed mean.
+
+        Wc : ndarray
+            Weights for computation of the transformed covariance.
+
+        Wcc : ndarray
+            Weights for computation of the transformed cross-covariance.
+
+        emvar : ndarray
+            Expected model variance.
+
+        ivar : ndarray
+            Integral variance.
+        """
+        pass
+
+    @abstractmethod
+    def exp_model_variance(self, par, *args):
+        """
+        Expected model variance :math:`\mathbb{E}_x[\mathbb{V}_f[f(x)]]`.
+
+        Parameters
+        ----------
+        par : ndarray
+            Kernel parameters.
 
         Returns
         -------
         : float
             Expected model variance.
-
-        Notes
-        -----
-        This is an abstract method. Implementation needs to be provided by the subclass and should be easily
-        accomplished using the kernel expectation method from the `Kernel` class.
         """
         pass
 
     @abstractmethod
-    def integral_variance(self, fcn_obs, par=None):
+    def integral_variance(self, par, *args):
         """
-        Integral variance given the function value observations and the kernel parameters.
-
-        Notes
-        -----
-        This is an abstract method. Implementation needs to be provided by the subclass and should be easily
-        accomplished using the kernel expectation method from the `Kernel` class.
+        Integral variance :math:`\mathbb{V}_f[\mathbb{E}_x[f(x)]]`.
 
         Parameters
         ----------
-        fcn_obs : ndarray
-            Observed function values at the point-set locations.
-
         par : ndarray
-            Kernel parameters, default `par=None`.
+            Kernel parameters.
 
         Returns
         -------
-        float
+        : float
             Variance of the integral.
         """
         pass
@@ -259,54 +233,9 @@ class Model(object, metaclass=ABCMeta):
         """
         pass
 
-    def likelihood_reg_emv(self, log_par, fcn_obs):
-        """
-        Negative marginal log-likelihood with a expected model variance as regularizer.
+    def optimize(self, log_par_0, fcn_obs, x_obs, method='BFGS', **kwargs):
+        """Optimize kernel parameters.
 
-        Parameters
-        ----------
-        log_par : ndarray
-            Logarithm of the kernel parameters.
-
-        fcn_obs : ndarray
-            Observed function values at the point-set locations.
-
-        Returns
-        -------
-        : float
-            Sum of negative marginal log-likelihood and expected model variance.
-        """
-        # negative marginal log-likelihood w/ additional regularizing term
-        # regularizing terms: integral variance, expected model variance or both, prior on par
-        nlml, nlml_grad = self.neg_log_marginal_likelihood(log_par, fcn_obs)
-        # NOTE: not entirely sure regularization is usefull, because the regularized ML-II seems to give very similar
-        # results to ML-II; this regularizer tends to prefer longer lengthscales
-        reg = self.exp_model_variance(fcn_obs)
-        return nlml + reg
-
-    def likelihood_reg_ivar(self, log_par, fcn_obs):
-        """
-        Negative marginal log-likelihood with a integral variance as regularizer.
-
-        Parameters
-        ----------
-        log_par : ndarray
-            Logarithm of the kernel parameters.
-
-        fcn_obs : ndarray
-            Observed function values at the point-set locations.
-
-        Returns
-        -------
-            Sum of negative marginal log-likelihood and integral variance.
-        """
-        # negative marginal log-likelihood w/ additional regularizing term
-        nlml, nlml_grad = self.neg_log_marginal_likelihood(log_par, fcn_obs)
-        reg = self.integral_variance(fcn_obs, par=np.exp(log_par))
-        return nlml + reg
-
-    def optimize(self, log_par_0, fcn_obs, x_obs, crit='NLML', method='BFGS', **kwargs):
-        """
         Find optimal values of kernel parameters by minimizing chosen criterion given the point-set and the function
         observations.
 
@@ -321,15 +250,6 @@ class Model(object, metaclass=ABCMeta):
         x_obs : ndarray
             Function inputs.
 
-        crit : str
-            Objective function to use as a criterion for finding optimal setting of kernel parameters.
-            'nlml'
-                Negative marginal log-likelihood.
-            'nlml+emv'
-                NLML with expected model variance as regularizer.
-            'nlml+ivar'
-                NLML with integral variance as regularizer.
-
         method : str
             Optimization method for `scipy.optimize.minimize`, default method='BFGS'.
 
@@ -341,28 +261,12 @@ class Model(object, metaclass=ABCMeta):
         : scipy.optimize.OptimizeResult
             Results of the optimization in a dict-like structure returned by `scipy.optimize.minimize`.
 
-        Notes
-        -----
-        The criteria using expected model variance and integral variance as regularizers ('nlml+emv', 'nlml+ivar')
-        are somewhat experimental. I did not operate under any sound theoretical justification when implementing
-        those. Just curious to see what happens, thus might be removed in the future.
-
         See Also
         --------
         scipy.optimize.minimize
         """
-        crit = crit.lower()
-        if crit == 'nlml':
-            obj_func = self.neg_log_marginal_likelihood
-            jac = True
-        elif crit == 'nlml+emv':
-            obj_func = self.likelihood_reg_emv
-            jac = False  # gradients not implemented for regularizers (solver uses approximations)
-        elif crit == 'nlml+ivar':
-            obj_func = self.likelihood_reg_ivar
-            jac = False  # gradients not implemented for regularizers (solver uses approximations)
-        else:
-            raise ValueError('Unknown criterion {}.'.format(crit))
+        obj_func = self.neg_log_marginal_likelihood
+        jac = True
         jitter = 1e-8 * np.eye(x_obs.shape[1])
         return minimize(obj_func, log_par_0, args=(fcn_obs, x_obs, jitter), method=method, jac=jac, **kwargs)
 
@@ -505,12 +409,12 @@ class Model(object, metaclass=ABCMeta):
             return RQ(dim, par)
 
 
-class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/GPRegression, same for TP
+class GaussianProcess(Model):  # TODO: rename to GaussianProcessModel, same for TP
     """
     Gaussian process regression model of the integrand in the Bayesian quadrature.
     """
 
-    def __init__(self, dim, kern_par, kernel='rbf', points='ut', point_par=None):
+    def __init__(self, dim, kern_par, kern_str='rbf', points='ut', point_par=None):
         """
         Gaussian process regression model.
 
@@ -522,7 +426,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         kern_par : ndarray
             Kernel parameters in matrix.
 
-        kernel : str
+        kern_str : str
             Acronym of the covariance function of the Gaussian process model.
 
         points : str
@@ -532,7 +436,7 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
             Parameters of the sigma-point set.
         """
 
-        super(GaussianProcess, self).__init__(dim, kern_par, kernel, points, point_par)
+        super(GaussianProcess, self).__init__(dim, kern_par, kern_str, points, point_par)
 
     def predict(self, test_data, fcn_obs, x_obs=None, par=None):
         """
@@ -575,42 +479,41 @@ class GaussianProcess(Model):  # consider renaming to GaussianProcessRegression/
         var = np.squeeze(kxx - np.einsum('im,mn,ni->i', kx, iK, kx.T))
         return mean, var
 
-    def exp_model_variance(self, fcn_obs):
-        """
-        Expected model variance.
-
-        Parameters
-        ----------
-        fcn_obs : ndarray
-            Function evaluations.
-
-        Returns
-        -------
-        : float
-            Expected model variance.
-        """
-
-        return self.kernel.scale.squeeze() ** 2 * (1 - np.trace(self.Q.dot(self.iK)))
-
-    def integral_variance(self, fcn_obs, par=None):
-        """
-        Variance of the integral.
-
-        Parameters
-        ----------
-        fcn_obs : ndarray
-            Function evaluations.
-
-        par : ndarray
-            Kernel parameters.
-
-        Returns
-        -------
-        : float
-
-        """
-
+    def bq_weights(self, par, *args):
         par = self.kernel.get_parameters(par)
+        x = self.points
+
+        # inverse kernel matrix
+        iK = self.kernel.eval_inv_dot(par, x, scaling=False)
+
+        # Kernel expectations
+        q = self.kernel.exp_x_kx(par, x)
+        Q = self.kernel.exp_x_kxkx(par, par, x)
+        R = self.kernel.exp_x_xkx(par, x)
+
+        # BQ weights in terms of kernel expectations
+        w_m = q.dot(iK)
+        w_c = iK.dot(Q).dot(iK)
+        w_cc = R.dot(iK)
+
+        # expected model variance
+        self.model_variance = self.kernel.exp_x_kxx(par) * (1 - np.trace(Q.dot(iK)))
+        # integral variance
+        self.integral_variance = self.kernel.exp_xy_kxy(par) - q.T.dot(iK).dot(q)
+
+        # covariance weights should be symmetric
+        if not np.array_equal(w_c, w_c.T):
+            w_c = 0.5 * (w_c + w_c.T)
+
+        return w_m, w_c, w_cc, self.model_variance, self.integral_variance
+
+    def exp_model_variance(self, par, *args):
+        iK = self.kernel.eval_inv_dot(par, self.points)
+        Q = self.exp_x_kxkx(par, par, self.points)
+        return self.kernel.exp_x_kxx(par) * (1 - np.trace(Q.dot(iK)))
+
+    def integral_variance(self, par, *args):
+        par = self.kernel.get_parameters(par)  # if par None returns default kernel parameters
         q = self.kernel.exp_x_kx(par, self.points)
         iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
         kbar = self.kernel.exp_xy_kxy(par)
@@ -913,6 +816,59 @@ class BayesSardModel(Model):
             cov_mc = cma_mc(b[..., None] * b[:, None, :], cov_mc, i * batch_size, axis=0)
         return cov_mc
 
+    def predict(self, test_data, fcn_obs, x_obs=None, par=None, mulind=None):
+        """
+        Gaussian process predictions with polynomial prior mean.
+
+        Parameters
+        ----------
+        test_data : ndarray
+            Test data, shape (D, M).
+
+        fcn_obs : ndarray
+            Observations of the integrand at sigma-points.
+
+        x_obs : ndarray, optional
+            Training inputs.
+
+        par : (1, num_par) ndarray, optional
+            Kernel parameters.
+
+        mulind : (dim, num_basis) ndarray, optional
+            Matrix where each column is multi-index specifying a multivariate monomial.
+
+        Returns
+        -------
+        mean : ndarray
+            Predictive mean.
+
+        var : ndarray
+            Predictive variance.
+        """
+        if x_obs is None:
+            x_obs = self.points
+        # if multi-index unspecified, revert to default degree multivariate polynomial
+        if mulind is None:
+            mulind = self.mulind
+        num_basis = mulind.shape[1]
+        par = self.kernel.get_parameters(par)
+
+        iK = self.kernel.eval_inv_dot(par, x_obs)  # (num_train, num_train)
+        kx = self.kernel.eval(par, test_data, x_obs)  # (num_test, num_train)
+        kxx = self.kernel.eval(par, test_data, test_data, diag=True)  # (num_test, num_test)
+
+        V = vandermonde(mulind, x_obs)  # (num_train, num_basis)
+        Z = V.T.dot(iK)  # (num_basis, num_train)
+        iViKV = la.cho_solve(la.cho_factor(Z.dot(V)), np.eye(num_basis))  # (num_basis, num_basis)
+        A = iViKV.dot(V.T)  # (num_basis, num_train)
+        vx = vandermonde(mulind, test_data)  # (num_test, num_basis)
+        b = Z.dot(kx.T) - vx.T  # (num_basis, num_test)
+
+        # GP mean and predictive variance
+        mean = np.squeeze((kx - b.T.dot(A)).dot(iK).dot(fcn_obs.T))
+        var = np.squeeze(kxx - np.einsum('im,mn,ni->i', kx, iK, kx.T) + np.einsum('im,mn,ni->i', b.T, iViKV, b))
+        return mean, var
+
     def bq_weights(self, par, multi_ind=None):
         """
         Weights for the Bayes-Sard quadrature.
@@ -947,41 +903,42 @@ class BayesSardModel(Model):
             raise ValueError('Dimension mismatch {:d} != {:d}. Dimension of monomials must be equal to the dimension'
                              ' of the sigma-points.'.format(multi_ind.shape[0], self.dim_in))
 
+        # inverse kernel matrix and Vandermonde matrix
+        iK = self.kernel.eval_inv_dot(par, x, scaling=False)
+        V = vandermonde(multi_ind, x)
+        iViKV = la.cho_solve(la.cho_factor(V.T.dot(iK).dot(V) + 1e-8 * np.eye(num_basis)), np.eye(num_basis))
+        # expectations of multivariate polynomials
+        px = self._exp_x_px(multi_ind)
+        xpx = self._exp_x_xpx(multi_ind)
+        pxpx = self._exp_x_pxpx(multi_ind)
+        kxpx = self._exp_x_kxpx(par, multi_ind, x)
+        # kernel expectations
+        q = self.kernel.exp_x_kx(par, x)
+        kxy = self.kernel.exp_x_kxy(par)
+
         # if the number of basis functions is same as the number of points, we assume the points are pi-unisolvent
         # and use a special-case implementation of quadrature weights
         if num_basis == self.num_pts:
-            # inverse kernel matrix
-            iK = self.kernel.eval_inv_dot(par, x, scaling=False)
-            # expectations of multivariate polynomials
-            px = self._exp_x_px(multi_ind)
-            xpx = self._exp_x_xpx(multi_ind)
-            pxpx = self._exp_x_pxpx(multi_ind)
-
-            V = vandermonde(multi_ind, x)
+            # inverse Vandermonde matrix
             iV = la.solve(V, np.eye(num_basis))
-            iViKV = la.cho_solve(la.cho_factor(V.T.dot(iK).dot(V) + 1e-8 * np.eye(num_basis)), np.eye(num_basis))
 
             # BSQ weights for pi-unisolvent points
             w_m = iV.dot(px)
             w_c = iV.dot(pxpx).dot(iV.T)
             w_cc = xpx.dot(iV.T)
 
+            # expected model variance and integral variance
+            kxx = self.kernel.exp_x_kxx(par)
+            kx = self.kernel.exp_x_kx(par)
+            self.model_variance = kxx - np.trace(kxpx.dot(iV.T) - kxpx.T.dot(iV) + pxpx.dot(iViKV))
+            self.integral_variance = kxy - kx.T.dot(iV).dot(px) - px.T.dot(iV.T).dot(kx) + px.T.dot(iViKV).dot(px)
+
         elif num_basis < self.num_pts:
-            # inverse kernel matrix
-            iK = self.kernel.eval_inv_dot(par, x, scaling=False)
-            # Kernel expectations
-            q = self.kernel.exp_x_kx(par, x)
+            # additional kernel expectations
             Q = self.kernel.exp_x_kxkx(par, par, x)
             R = self.kernel.exp_x_xkx(par, x)
-            # expectations of multivariate polynomials
-            px = self._exp_x_px(multi_ind)
-            xpx = self._exp_x_xpx(multi_ind)
-            pxpx = self._exp_x_pxpx(multi_ind)
-            kxpx = self._exp_x_kxpx(par, multi_ind, x)
 
-            V = vandermonde(multi_ind, x)
             Z = V.T.dot(iK)
-            iViKV = la.cho_solve(la.cho_factor(Z.dot(V) + 1e-8 * np.eye(num_basis)), np.eye(num_basis))
             A = V.dot(iViKV)
             b = Z.dot(q) - px
             B = Z.dot(Q).dot(Z.T) + pxpx - Z.dot(kxpx) - kxpx.T.dot(Z.T)
@@ -991,34 +948,65 @@ class BayesSardModel(Model):
             w_m = iK.dot(q - A.dot(b))
             w_c = iK.dot(Q - A.dot(B).dot(A.T)).dot(iK)
             w_cc = (R - D.dot(A.T)).dot(iK)
+
+            # expected model variance and integral variance
+            kxx = self.kernel.scale.squeeze() ** 2
+            self.model_variance = kxx * (1 - np.trace(Q.dot(iK)) + np.trace(B.dot(iViKV)))
+            self.integral_variance = kxy - q.T.dot(iK).dot(q) + b.T.dot(iViKV).dot(b)
+
         else:
             raise ValueError('Number of basis functions needs to be lower than or equal to the number of points.'
                              'You supplied {:d} basis functions and {:d} points.'.format(num_basis, self.num_pts))
-
-        # TODO: compute expected model variance and integral variance for each case, save to self.emv, self.ivar
-        self.q, self.Q, self.R, self.iK = q, Q, R, iK
-        self.B, self.iViKV = B, iViKV
 
         # covariance weights should be symmetric
         if not np.array_equal(w_c, w_c.T):
             w_c = 0.5 * (w_c + w_c.T)
 
-        return w_m, w_c, w_cc
+        return w_m, w_c, w_cc, self.model_variance, self.integral_variance
 
-    def exp_model_variance(self, fcn_obs):
-        return self.kernel.scale.squeeze() ** 2 * (1 - np.trace(self.Q.dot(self.iK)) + np.trace(self.B.dot(self.iViKV)))
+    def exp_model_variance(self, par, mulind=None):
+        """
+        Expected model variance for the Bayes-Sard GP model of the integrand.
 
-    def integral_variance(self, fcn_obs, mulind=None, par=None):
+        Parameters
+        ----------
+        par : ndarray
+            Kernel parameters.
+
+        mulind : ndarray, optional
+            Multi-index.
+
+        Returns
+        -------
+        : float
+            Expected model variance.
+        """
+        if mulind is None:
+            mulind = self.mulind
+        par = self.kernel.get_parameters(par)
+
+        pxpx = self.kernel.exp_x_pxpx(mulind)
+        kxpx = self.kernel.exp_x_kxpx(par, mulind, self.points)
+        kxkx = self.kernel.exp_x_kxkx(par, par, self.points)
+        iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
+        V = vandermonde(mulind, self.points)
+        iViKV = la.cho_solve(la.cho_factor(V.T.dot(iK).dot(V)), np.eye(mulind.shape[1]))
+        Z = V.T.dot(iK)
+        B = Z.dot(kxkx).dot(Z.T) + pxpx - Z.dot(kxpx) - kxpx.T.dot(Z.T)
+        kscale = self.self.kernel.scale.squeeze() ** 2
+        return kscale * (1 - np.trace(kxkx.dot(iK)) + np.trace(B.dot(iViKV)))
+
+    def integral_variance(self, par, mulind=None):
         """
         Variance of the integral.
 
         Parameters
         ----------
-        fcn_obs : ndarray
-            Function evaluations.
-
         par : ndarray
             Kernel parameters.
+
+        mulind : ndarray, optional
+            Multi-index.
 
         Returns
         -------
@@ -1028,6 +1016,7 @@ class BayesSardModel(Model):
         if mulind is None:
             mulind = self.mulind
         par = self.kernel.get_parameters(par)
+
         q = self.kernel.exp_x_kx(par, self.points)
         iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
         kbar = self.kernel.exp_xy_kxy(par)
@@ -1037,66 +1026,16 @@ class BayesSardModel(Model):
         iViKV = la.cho_solve(la.cho_factor(V.T.dot(iK).dot(V)), np.eye(mulind.shape[1]))
         return kbar - q.T.dot(iK).dot(q) + b.T.dot(iViKV).dot(b)
 
-    def predict(self, test_data, fcn_obs, x_obs=None, par=None, mulind=None):
-        """
-        Gaussian process predictions with polynomial prior mean.
-
-        Parameters
-        ----------
-        test_data : ndarray
-            Test data, shape (D, M).
-
-        fcn_obs : ndarray
-            Observations of the integrand at sigma-points.
-
-        x_obs : ndarray
-            Training inputs.
-
-        par : ndarray
-            Kernel parameters.
-
-        Returns
-        -------
-        mean : ndarray
-            Predictive mean.
-
-        var : ndarray
-            Predictive variance.
-        """
-        if x_obs is None:
-            x_obs = self.points
-        # if multi-index unspecified, revert to default degree multivariate polynomial
-        if mulind is None:
-            mulind = self.mulind
-        num_basis = mulind.shape[1]
-        par = self.kernel.get_parameters(par)
-
-        iK = self.kernel.eval_inv_dot(par, x_obs)  # (num_train, num_train)
-        kx = self.kernel.eval(par, test_data, x_obs)  # (num_test, num_train)
-        kxx = self.kernel.eval(par, test_data, test_data, diag=True)  # (num_test, num_test)
-
-        V = vandermonde(mulind, x_obs)  # (num_train, num_basis)
-        Z = V.T.dot(iK)  # (num_basis, num_train)
-        iViKV = la.cho_solve(la.cho_factor(Z.dot(V)), np.eye(num_basis))  # (num_basis, num_basis)
-        A = iViKV.dot(V.T)  # (num_basis, num_train)
-        vx = vandermonde(mulind, test_data)  # (num_test, num_basis)
-        b = Z.dot(kx.T) - vx.T  # (num_basis, num_test)
-
-        # GP mean and predictive variance
-        mean = np.squeeze((kx - b.T.dot(A)).dot(iK).dot(fcn_obs.T))
-        var = np.squeeze(kxx - np.einsum('im,mn,ni->i', kx, iK, kx.T) + np.einsum('im,mn,ni->i', b.T, iViKV, b))
-        return mean, var
-
     def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
         pass
 
 
-class StudentTProcess(Model):
+class StudentTProcess(Model):  # TODO: Inherit from GaussianProcess, rewrite method as calls to parent.
     """
     Student t process regression model of the integrand in the Bayesian quadrature.
     """
 
-    def __init__(self, dim, kern_par, kernel='rbf', points='ut', point_par=None, nu=3.0):
+    def __init__(self, dim, kern_par, kern_str='rbf', points='ut', point_par=None, nu=3.0):
         """
         Student's t-process regression model.
 
@@ -1108,7 +1047,7 @@ class StudentTProcess(Model):
         kern_par : ndarray
             Kernel parameters in matrix.
 
-        kernel : str
+        kern_str : str
             Acronym of the covariance function of the Gaussian process model.
 
         points : str
@@ -1121,7 +1060,7 @@ class StudentTProcess(Model):
             Degrees of freedom.
         """
 
-        super(StudentTProcess, self).__init__(dim, kern_par, kernel, points, point_par)
+        super(StudentTProcess, self).__init__(dim, kern_par, kern_str, points, point_par)
         nu = 3.0 if nu < 2 else nu  # nu > 2
         self.nu = nu
 
@@ -1276,8 +1215,8 @@ class StudentTProcess(Model):
 
 class MultiOutputModel(Model):
 
-    def __init__(self, dim_in, dim_out, kern_par, kernel, points, point_par=None):
-        super(MultiOutputModel, self).__init__(dim_in, kern_par, kernel, points, point_par)
+    def __init__(self, dim_in, dim_out, kern_par, kern_str, points, point_par=None):
+        super(MultiOutputModel, self).__init__(dim_in, kern_par, kern_str, points, point_par)
         self.dim_out = dim_out
 
     def bq_weights(self, par):
@@ -1512,7 +1451,7 @@ class GaussianProcessMO(MultiOutputModel):  # TODO: Multiple inheritance could b
     Multi-output Gaussian process regression model of the integrand in the Bayesian quadrature.
     """
 
-    def __init__(self, dim_in, dim_out, kern_par, kernel, points, point_par=None):
+    def __init__(self, dim_in, dim_out, kern_par, kern_str, points, point_par=None):
         """
         Multi-output Gaussian process regression model.
 
@@ -1527,7 +1466,7 @@ class GaussianProcessMO(MultiOutputModel):  # TODO: Multiple inheritance could b
         kern_par : numpy.ndarray
             Kernel parameters in matrix.
 
-        kernel : string
+        kern_str : string
             Acronym of the covariance function of the Gaussian process model.
 
         points : string
@@ -1537,7 +1476,7 @@ class GaussianProcessMO(MultiOutputModel):  # TODO: Multiple inheritance could b
             Parameters of the sigma-point set.
         """
 
-        super(GaussianProcessMO, self).__init__(dim_in, dim_out, kern_par, kernel, points, point_par)
+        super(GaussianProcessMO, self).__init__(dim_in, dim_out, kern_par, kern_str, points, point_par)
 
     def predict(self, test_data, fcn_obs, par=None):
         """
@@ -1644,7 +1583,7 @@ class GaussianProcessMO(MultiOutputModel):  # TODO: Multiple inheritance could b
 
 class StudentTProcessMO(MultiOutputModel):
 
-    def __init__(self, dim_in, dim_out, kern_par, kernel, points, point_par=None, nu=3.0):
+    def __init__(self, dim_in, dim_out, kern_par, kern_str, points, point_par=None, nu=3.0):
         """
         Multi-output Student's t-process regression model.
 
@@ -1659,7 +1598,7 @@ class StudentTProcessMO(MultiOutputModel):
         kern_par : ndarray
             Kernel parameters in matrix.
 
-        kernel : str
+        kern_str : str
             Acronym of the covariance function of the Gaussian process model.
 
         points : str
@@ -1669,7 +1608,7 @@ class StudentTProcessMO(MultiOutputModel):
             Parameters of the sigma-point set.
         """
 
-        super(StudentTProcessMO, self).__init__(dim_in, dim_out, kern_par, kernel, points, point_par)
+        super(StudentTProcessMO, self).__init__(dim_in, dim_out, kern_par, kern_str, points, point_par)
         self.nu = nu
 
     def predict(self, test_data, fcn_obs, par=None):
