@@ -935,8 +935,9 @@ class BayesSardModel(Model):
 
             # expected model variance and integral variance
             kxx = self.kernel.exp_x_kxx(par)
-            self.model_var = kxx - np.trace(kxpx.dot(iV.T) - kxpx.T.dot(iV) + pxpx.dot(iViKV))
-            self.integral_var = kxy - q.T.dot(iV).dot(px) - px.T.dot(iV.T).dot(q) + px.T.dot(iViKV).dot(px)
+            # pxpx.dot(iViKV) == w_c.dot(K)
+            self.model_var = kxx - np.trace(kxpx.T.dot(iV.T) + kxpx.dot(iV) - pxpx.dot(iViKV))
+            self.integral_var = kxy - q.T.dot(iV.T).dot(px) - px.T.dot(iV).dot(q) + px.T.dot(iViKV).dot(px)
 
         elif num_basis < self.num_pts:
             # additional kernel expectations
