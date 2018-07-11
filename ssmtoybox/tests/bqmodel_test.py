@@ -372,6 +372,8 @@ class BayesSardModelTest(TestCase):
         w, wc, wcc, emv, ivar = model.bq_weights(self.ker_par_1d, alpha)
         # UT weights in 1D reproduced?
         self.assertTrue(np.allclose(w, Unscented.weights(1)[0]))
+        self.assertGreaterEqual(emv, 0)
+        self.assertGreaterEqual(ivar, 0)
         # test positive definiteness
         try:
             la.cholesky(wc)
@@ -386,6 +388,8 @@ class BayesSardModelTest(TestCase):
         w, wc, wcc, emv, ivar = model.bq_weights(par, alpha)
         # UT weights reproduced in 2D?
         self.assertTrue(np.allclose(w, Unscented.weights(2)[0]))
+        self.assertGreaterEqual(emv, 0)
+        self.assertGreaterEqual(ivar, 0)
         # test positive definiteness
         try:
             la.cholesky(wc)
@@ -400,6 +404,8 @@ class BayesSardModelTest(TestCase):
         par = np.array([[1.0, 1, 1]])
         w, wc, wcc, emv, ivar = model.bq_weights(par, alpha)
         self.assertTrue(np.allclose(w, GaussHermite.weights(2, 3)))
+        self.assertGreaterEqual(emv, 0)
+        self.assertGreaterEqual(ivar, 0)
         # test positive definiteness
         try:
             la.cholesky(wc)
