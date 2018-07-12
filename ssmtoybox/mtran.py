@@ -46,6 +46,104 @@ class MomentTransform(metaclass=ABCMeta):
         pass
 
 
+class LinearizationTransform(MomentTransform):
+    def __init__(self, dim):
+        self.dim = dim
+
+    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
+        mean_f = f(mean, fcn_pars)
+        jacobian_f = f(mean, fcn_pars, dx=True)
+        jacobian_f = jacobian_f.reshape(len(mean_f), self.dim)
+        cov_fx = jacobian_f.dot(cov)
+        cov_f = cov_fx.dot(jacobian_f.T)
+        return mean_f, cov_f, cov_fx
+
+
+class TaylorOrder2Transform(MomentTransform):
+    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
+        pass
+
+
+class TaylorGPQDTransform(MomentTransform):
+    """Transformation equivalent to GPQ+D w/ RBF kernel, single sigma-point at zero and substitution x = m + z in the
+    integral. For el --> infinity the transform converges to LinearizationTransform transform.
+    """
+
+    def __init__(self, dim, alpha=1.0, el=1.0):
+        self.dim = dim
+        self.alpha = alpha
+        self.ell = el
+        self.Lam = np.diag(el ** 2 * np.ones(dim))
+        self.iLam = np.diag(el ** -2 * np.ones(dim))
+        self.eye_d = np.eye(dim)
+        # lists for logging average model variance and posterior integral variance
+        self.mvar_list = []
+        self.ivar_list = []
+
+    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
+        # TODO: equations can be optimized further
+        # wm = la.det(cov.dot(self.iLam) + self.eye_d) ** -0.5
+        wm = la.det(self.iLam.dot(cov) + self.eye_d) ** -0.5
+        fm = f(mean, fcn_pars)
+        mean_f = wm * fm
+        jacobian_f = f(mean, fcn_pars, dx=True)
+        jacobian_f = jacobian_f.reshape(len(mean_f), self.dim)
+        # wc = la.det(cov.dot(2 * self.iLam) + self.eye_d) ** -0.5
+        wc = la.det(2 * self.iLam.dot(cov) + self.eye_d) ** -0.5
+        Wc = 0.5 * self.Lam.dot(la.inv(0.5 * self.Lam + cov)).dot(cov)
+        model_var = self.alpha ** 2 - self.alpha ** 2 * wc * (1 + np.trace(Wc.dot(self.iLam)))
+        integ_var = self.alpha ** 2 * wc - wm ** 2
+        self.mvar_list.append(model_var)
+        self.ivar_list.append(integ_var)
+        cov_f = wc * (np.outer(fm, fm) + jacobian_f.dot(Wc).dot(jacobian_f.T)) - np.outer(mean_f, mean_f) + model_var
+        cov_fx = self.Lam.dot(la.inv(self.Lam + cov)).dot(cov).dot(jacobian_f.T)
+        return mean_f, cov_f, cov_fx
+
+
+class LinearTransform(MomentTransform):
+    # would have to be implemented via first order Taylor, because for linear f(x) = Ax and h(x) = Hx,
+    # the Jacobians would be A and H, which mean TaylorFirstOrder is exact inference for linear functions and,
+    # in a sense, Kalman filter does not have to be explicitly implemented, because the ExtendedKalman becomes
+    # Kalman for linear f() and h().
+    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
+        pass
+
+
+class MonteCarloTransform(MomentTransform):
+    """Monte Carlo transform.
+
+    Serves as baseline for comparing all other moment transforms.
+    """
+
+    def __init__(self, dim, n=100):
+        n = int(n)
+        self.wm, self.Wc = self.weights(n)
+        self.unit_sp = self.unit_sigma_points(dim, n)
+
+    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
+        mean = mean[:, na]
+        # form sigma-points from unit sigma-points
+        x = mean + la.cholesky(cov).dot(self.unit_sp)
+        # push sigma-points through non-linearity
+        fx = np.apply_along_axis(f, 0, x, fcn_pars)
+        # output mean
+        mean_f = (self.wm * fx).sum(axis=1)
+        # output covariance
+        dfx = fx - mean_f[:, na]
+        cov_f = self.Wc * (dfx.dot(dfx.T))
+        # input-output covariance
+        cov_fx = self.Wc * dfx.dot((x - mean).T)
+        return mean_f, cov_f, cov_fx
+
+    @staticmethod
+    def weights(n):
+        return 1.0 / n, 1.0 / (n - 1)
+
+    @staticmethod
+    def unit_sigma_points(dim, n):
+        return np.random.multivariate_normal(np.zeros(dim), np.eye(dim), size=n).T
+
+
 class SigmaPointTransform(MomentTransform):
     """ Base class for all sigma-point moment transforms."""
 
@@ -96,142 +194,7 @@ class SigmaPointTransform(MomentTransform):
         return mean_f, cov_f, cov_fx
 
 
-class SigmaPointTruncTransform(SigmaPointTransform):
-    """
-    Sigma-point transform respecting effective input dimensionality.
-
-    Notes
-    -----
-    Created mainly for experimental purposes!
-    Computing input-output cross-covariance is problematic and needs further thinking.
-    """
-
-    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
-        mean = mean[:, na]
-
-        # consider only effective dimension
-        mean_eff = mean[:self.dim_eff]
-        cov_eff = cov[:self.dim_eff, :self.dim_eff]
-
-        # form sigma-points from unit sigma-points
-        x_eff = mean_eff + cholesky(cov_eff).dot(self.unit_sp_eff)
-        x = mean + cholesky(cov).dot(self.unit_sp)
-
-        # push sigma-points through non-linearity
-        fx_eff = np.apply_along_axis(f, 0, x_eff, fcn_pars)
-        fx = np.apply_along_axis(f, 0, x, fcn_pars)
-
-        # output mean
-        mean_f = fx_eff.dot(self.wm)
-        # output covariance
-        dfx_eff = fx_eff - mean_f[:, na]
-        dfx = fx - mean_f[:, na]
-        cov_f = dfx_eff.dot(self.Wc).dot(dfx_eff.T)
-        # input-output covariance
-        cov_fx = dfx.dot(self.Wcc).dot((x - mean).T)
-        # cov_fx = None
-        return mean_f, cov_f, cov_fx
-
-
-class Taylor1stOrder(MomentTransform):
-    def __init__(self, dim):
-        self.dim = dim
-
-    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
-        mean_f = f(mean, fcn_pars)
-        jacobian_f = f(mean, fcn_pars, dx=True)
-        jacobian_f = jacobian_f.reshape(len(mean_f), self.dim)
-        cov_fx = jacobian_f.dot(cov)
-        cov_f = cov_fx.dot(jacobian_f.T)
-        return mean_f, cov_f, cov_fx
-
-
-class Taylor2ndOrder(MomentTransform):
-    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
-        pass
-
-
-class TaylorGPQD(MomentTransform):
-    """Transformation equivalent to GPQ+D w/ RBF kernel, single sigma-point at zero and substitution x = m + z in the
-    integral. For el --> infinity the transform converges to Taylor1stOrder transform.
-    """
-
-    def __init__(self, dim, alpha=1.0, el=1.0):
-        self.dim = dim
-        self.alpha = alpha
-        self.ell = el
-        self.Lam = np.diag(el ** 2 * np.ones(dim))
-        self.iLam = np.diag(el ** -2 * np.ones(dim))
-        self.eye_d = np.eye(dim)
-        # lists for logging average model variance and posterior integral variance
-        self.mvar_list = []
-        self.ivar_list = []
-
-    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
-        # TODO: equations can be optimized further
-        # wm = la.det(cov.dot(self.iLam) + self.eye_d) ** -0.5
-        wm = la.det(self.iLam.dot(cov) + self.eye_d) ** -0.5
-        fm = f(mean, fcn_pars)
-        mean_f = wm * fm
-        jacobian_f = f(mean, fcn_pars, dx=True)
-        jacobian_f = jacobian_f.reshape(len(mean_f), self.dim)
-        # wc = la.det(cov.dot(2 * self.iLam) + self.eye_d) ** -0.5
-        wc = la.det(2 * self.iLam.dot(cov) + self.eye_d) ** -0.5
-        Wc = 0.5 * self.Lam.dot(la.inv(0.5 * self.Lam + cov)).dot(cov)
-        model_var = self.alpha ** 2 - self.alpha ** 2 * wc * (1 + np.trace(Wc.dot(self.iLam)))
-        integ_var = self.alpha ** 2 * wc - wm ** 2
-        self.mvar_list.append(model_var)
-        self.ivar_list.append(integ_var)
-        cov_f = wc * (np.outer(fm, fm) + jacobian_f.dot(Wc).dot(jacobian_f.T)) - np.outer(mean_f, mean_f) + model_var
-        cov_fx = self.Lam.dot(la.inv(self.Lam + cov)).dot(cov).dot(jacobian_f.T)
-        return mean_f, cov_f, cov_fx
-
-
-class Linear(MomentTransform):
-    # would have to be implemented via first order Taylor, because for linear f(x) = Ax and h(x) = Hx,
-    # the Jacobians would be A and H, which mean TaylorFirstOrder is exact inference for linear functions and,
-    # in a sense, Kalman filter does not have to be explicitly implemented, because the ExtendedKalman becomes
-    # Kalman for linear f() and h().
-    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
-        pass
-
-
-class MonteCarlo(MomentTransform):
-    """Monte Carlo transform.
-
-    Serves as baseline for comparing all other moment transforms.
-    """
-
-    def __init__(self, dim, n=100):
-        n = int(n)
-        self.wm, self.Wc = self.weights(n)
-        self.unit_sp = self.unit_sigma_points(dim, n)
-
-    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
-        mean = mean[:, na]
-        # form sigma-points from unit sigma-points
-        x = mean + la.cholesky(cov).dot(self.unit_sp)
-        # push sigma-points through non-linearity
-        fx = np.apply_along_axis(f, 0, x, fcn_pars)
-        # output mean
-        mean_f = (self.wm * fx).sum(axis=1)
-        # output covariance
-        dfx = fx - mean_f[:, na]
-        cov_f = self.Wc * (dfx.dot(dfx.T))
-        # input-output covariance
-        cov_fx = self.Wc * dfx.dot((x - mean).T)
-        return mean_f, cov_f, cov_fx
-
-    @staticmethod
-    def weights(n):
-        return 1.0 / n, 1.0 / (n - 1)
-
-    @staticmethod
-    def unit_sigma_points(dim, n):
-        return np.random.multivariate_normal(np.zeros(dim), np.eye(dim), size=n).T
-
-
-class SphericalRadial(SigmaPointTransform):
+class SphericalRadialTransform(SigmaPointTransform):
     """
     Spherical-radial moment transform.
 
@@ -286,19 +249,7 @@ class SphericalRadial(SigmaPointTransform):
         return np.hstack((c * np.eye(dim), -c * np.eye(dim)))
 
 
-class SphericalRadialTrunc(SigmaPointTruncTransform):
-    def __init__(self, dim, dim_eff):
-        self.dim, self.dim_eff = dim, dim_eff
-        # weights & points for transformed mean and covariance
-        self.wm = SphericalRadial.weights(dim_eff)
-        self.Wc = np.diag(self.wm)
-        self.unit_sp_eff = SphericalRadial.unit_sigma_points(dim_eff)
-        # weights & points for input-output covariance
-        self.Wcc = np.diag(SphericalRadial.weights(dim))
-        self.unit_sp = SphericalRadial.unit_sigma_points(dim)
-
-
-class Unscented(SigmaPointTransform):
+class UnscentedTransform(SigmaPointTransform):
     """
     Unscented moment transform.
 
@@ -387,19 +338,7 @@ class Unscented(SigmaPointTransform):
         return wm, wc
 
 
-class UnscentedTrunc(SigmaPointTruncTransform):
-    def __init__(self, dim, dim_eff, kappa=None, alpha=1.0, beta=2.0):
-        self.dim, self.dim_eff = dim, dim_eff
-        # weights & points for transformed mean and covariance
-        self.wm, wc = Unscented.weights(dim_eff, kappa, alpha, beta)
-        self.Wc = np.diag(wc)
-        self.unit_sp_eff = Unscented.unit_sigma_points(dim_eff, kappa, alpha)
-        # weights & points for input-output covariance
-        self.Wcc = np.diag(Unscented.weights(dim, kappa, alpha, beta)[1])
-        self.unit_sp = Unscented.unit_sigma_points(dim, kappa, alpha)
-
-
-class GaussHermite(SigmaPointTransform):
+class GaussHermiteTransform(SigmaPointTransform):
     """
     Gauss-Hermite moment transform.
 
@@ -466,19 +405,7 @@ class GaussHermite(SigmaPointTransform):
         return cartesian([x] * dim).T  # column/sigma-point
 
 
-class GaussHermiteTrunc(SigmaPointTruncTransform):
-    def __init__(self, dim, dim_eff, degree=3):
-        self.dim, self.dim_eff = dim, dim_eff
-        # weights & points for transformed mean and covariance
-        self.wm = GaussHermite.weights(dim_eff, degree)
-        self.Wc = np.diag(self.wm)
-        self.unit_sp_eff = GaussHermite.unit_sigma_points(dim_eff, degree)
-        # weights & points for input-output covariance
-        self.Wcc = np.diag(GaussHermite.weights(dim, degree))
-        self.unit_sp = GaussHermite.unit_sigma_points(dim, degree)
-
-
-class FullySymmetricStudent(SigmaPointTransform):
+class FullySymmetricStudentTransform(SigmaPointTransform):
     """
     Moment transform for Student's t-distributed random variables based on fully symmetric integration rule from [1]_.
 
@@ -545,9 +472,9 @@ class FullySymmetricStudent(SigmaPointTransform):
             Quadrature weights.
         """
 
-        if degree not in FullySymmetricStudent._supported_degrees_:
+        if degree not in FullySymmetricStudentTransform._supported_degrees_:
             print("Defaulting to degree 3. Supplied degree {} not supported. Supported degrees: {}", degree,
-                  FullySymmetricStudent._supported_degrees_)
+                  FullySymmetricStudentTransform._supported_degrees_)
             degree = 3
 
         # use kappa = 3 - dim if kappa not given
@@ -607,9 +534,9 @@ class FullySymmetricStudent(SigmaPointTransform):
 
         """
 
-        if degree not in FullySymmetricStudent._supported_degrees_:
+        if degree not in FullySymmetricStudentTransform._supported_degrees_:
             print("Defaulting to degree 3. Supplied degree {} not supported. Supported degrees: {}", degree,
-                  FullySymmetricStudent._supported_degrees_)
+                  FullySymmetricStudentTransform._supported_degrees_)
             degree = 3
 
         # use kappa = 3 - dim if kappa not given
@@ -631,9 +558,9 @@ class FullySymmetricStudent(SigmaPointTransform):
             I4 = 3 * dof ** 2 / ((dof - 2) * (dof - 4))
             u = np.sqrt(I4 / I2)
 
-            sp0 = FullySymmetricStudent.symmetric_set(dim, [])
-            sp1 = FullySymmetricStudent.symmetric_set(dim, [u])
-            sp2 = FullySymmetricStudent.symmetric_set(dim, [u, u])
+            sp0 = FullySymmetricStudentTransform.symmetric_set(dim, [])
+            sp1 = FullySymmetricStudentTransform.symmetric_set(dim, [u])
+            sp2 = FullySymmetricStudentTransform.symmetric_set(dim, [u, u])
 
             return np.hstack((sp0, sp1, sp2))
 
@@ -681,12 +608,12 @@ class FullySymmetricStudent(SigmaPointTransform):
 
             if len(gen) > 1:
                 if np.abs(gen[0] - gen[1]) < eps:
-                    V = FullySymmetricStudent.symmetric_set(dim-i-1, gen[1:])
+                    V = FullySymmetricStudentTransform.symmetric_set(dim - i - 1, gen[1:])
                     for j in range(V.shape[1]):
                         u[i+1:, 0] = V[:, j]
                         sp = np.hstack((sp, u, -u))
                 else:
-                    V = FullySymmetricStudent.symmetric_set(dim-1, gen[1:])
+                    V = FullySymmetricStudentTransform.symmetric_set(dim - 1, gen[1:])
                     for j in range(V.shape[1]):
                         u[uind != i, 0] = V[:, j]
                         sp = np.hstack((sp, u, -u))
@@ -694,3 +621,76 @@ class FullySymmetricStudent(SigmaPointTransform):
                 sp = np.hstack((sp, u, -u))
 
         return sp
+
+
+class SigmaPointTruncTransform(SigmaPointTransform):
+    """
+    Sigma-point transform respecting effective input dimensionality.
+
+    Notes
+    -----
+    Created mainly for experimental purposes!
+    Computing input-output cross-covariance is problematic and needs further thinking.
+    """
+
+    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
+        mean = mean[:, na]
+
+        # consider only effective dimension
+        mean_eff = mean[:self.dim_eff]
+        cov_eff = cov[:self.dim_eff, :self.dim_eff]
+
+        # form sigma-points from unit sigma-points
+        x_eff = mean_eff + cholesky(cov_eff).dot(self.unit_sp_eff)
+        x = mean + cholesky(cov).dot(self.unit_sp)
+
+        # push sigma-points through non-linearity
+        fx_eff = np.apply_along_axis(f, 0, x_eff, fcn_pars)
+        fx = np.apply_along_axis(f, 0, x, fcn_pars)
+
+        # output mean
+        mean_f = fx_eff.dot(self.wm)
+        # output covariance
+        dfx_eff = fx_eff - mean_f[:, na]
+        dfx = fx - mean_f[:, na]
+        cov_f = dfx_eff.dot(self.Wc).dot(dfx_eff.T)
+        # input-output covariance
+        cov_fx = dfx.dot(self.Wcc).dot((x - mean).T)
+        # cov_fx = None
+        return mean_f, cov_f, cov_fx
+
+
+class SphericalRadialTruncatedTransform(SigmaPointTruncTransform):
+    def __init__(self, dim, dim_eff):
+        self.dim, self.dim_eff = dim, dim_eff
+        # weights & points for transformed mean and covariance
+        self.wm = SphericalRadialTransform.weights(dim_eff)
+        self.Wc = np.diag(self.wm)
+        self.unit_sp_eff = SphericalRadialTransform.unit_sigma_points(dim_eff)
+        # weights & points for input-output covariance
+        self.Wcc = np.diag(SphericalRadialTransform.weights(dim))
+        self.unit_sp = SphericalRadialTransform.unit_sigma_points(dim)
+
+
+class UnscentedTruncatedTransform(SigmaPointTruncTransform):
+    def __init__(self, dim, dim_eff, kappa=None, alpha=1.0, beta=2.0):
+        self.dim, self.dim_eff = dim, dim_eff
+        # weights & points for transformed mean and covariance
+        self.wm, wc = UnscentedTransform.weights(dim_eff, kappa, alpha, beta)
+        self.Wc = np.diag(wc)
+        self.unit_sp_eff = UnscentedTransform.unit_sigma_points(dim_eff, kappa, alpha)
+        # weights & points for input-output covariance
+        self.Wcc = np.diag(UnscentedTransform.weights(dim, kappa, alpha, beta)[1])
+        self.unit_sp = UnscentedTransform.unit_sigma_points(dim, kappa, alpha)
+
+
+class GaussHermiteTruncatedTransform(SigmaPointTruncTransform):
+    def __init__(self, dim, dim_eff, degree=3):
+        self.dim, self.dim_eff = dim, dim_eff
+        # weights & points for transformed mean and covariance
+        self.wm = GaussHermiteTransform.weights(dim_eff, degree)
+        self.Wc = np.diag(self.wm)
+        self.unit_sp_eff = GaussHermiteTransform.unit_sigma_points(dim_eff, degree)
+        # weights & points for input-output covariance
+        self.Wcc = np.diag(GaussHermiteTransform.weights(dim, degree))
+        self.unit_sp = GaussHermiteTransform.unit_sigma_points(dim, degree)

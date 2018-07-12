@@ -7,7 +7,8 @@ from scipy.optimize import minimize
 from scipy.special import factorial, factorial2
 
 from .bqkern import RBF, RQ, RBFStudent
-from ssmtoybox.mtran import SphericalRadial, Unscented, GaussHermite, FullySymmetricStudent
+from ssmtoybox.mtran import SphericalRadialTransform, UnscentedTransform, GaussHermiteTransform, \
+    FullySymmetricStudentTransform
 from ssmtoybox.utils import vandermonde, n_sum_k
 
 
@@ -359,13 +360,13 @@ class Model(object, metaclass=ABCMeta):
 
         # create chosen points
         if points == 'sr':
-            return SphericalRadial.unit_sigma_points(dim)
+            return SphericalRadialTransform.unit_sigma_points(dim)
         elif points == 'ut':
-            return Unscented.unit_sigma_points(dim, **point_par)
+            return UnscentedTransform.unit_sigma_points(dim, **point_par)
         elif points == 'gh':
-            return GaussHermite.unit_sigma_points(dim, **point_par)
+            return GaussHermiteTransform.unit_sigma_points(dim, **point_par)
         elif points == 'fs':
-            return FullySymmetricStudent.unit_sigma_points(dim, **point_par)
+            return FullySymmetricStudentTransform.unit_sigma_points(dim, **point_par)
 
     @staticmethod
     def get_kernel(dim, kernel, par):
@@ -409,7 +410,7 @@ class Model(object, metaclass=ABCMeta):
             return RQ(dim, par)
 
 
-class GaussianProcess(Model):  # TODO: rename to GaussianProcessModel, same for TP
+class GaussianProcessModel(Model):
     """
     Gaussian process regression model of the integrand in the Bayesian quadrature.
     """
@@ -436,7 +437,7 @@ class GaussianProcess(Model):  # TODO: rename to GaussianProcessModel, same for 
             Parameters of the sigma-point set.
         """
 
-        super(GaussianProcess, self).__init__(dim, kern_par, kern_str, point_str, point_par)
+        super(GaussianProcessModel, self).__init__(dim, kern_par, kern_str, point_str, point_par)
 
     def predict(self, test_data, fcn_obs, x_obs=None, par=None):
         """
@@ -1042,7 +1043,7 @@ class BayesSardModel(Model):
         pass
 
 
-class StudentTProcess(GaussianProcess):
+class StudentTProcessModel(GaussianProcessModel):
     """
     Student t process regression model of the integrand in the Bayesian quadrature.
     """
@@ -1072,7 +1073,7 @@ class StudentTProcess(GaussianProcess):
             Degrees of freedom.
         """
 
-        super(StudentTProcess, self).__init__(dim, kern_par, kern_str, point_str, point_par)
+        super(StudentTProcessModel, self).__init__(dim, kern_par, kern_str, point_str, point_par)
         nu = 3.0 if nu < 2 else nu  # nu > 2
         self.nu = nu
 
@@ -1113,7 +1114,7 @@ class StudentTProcess(GaussianProcess):
         if x_obs is None:
             x_obs = self.points
 
-        mean, var = super(StudentTProcess, self).predict(test_data, fcn_obs, x_obs, par)
+        mean, var = super(StudentTProcessModel, self).predict(test_data, fcn_obs, x_obs, par)
         iK = self.kernel.eval_inv_dot(par, self.points)
         scale = (nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (nu - 2 + self.num_pts)
         return mean, scale * var
@@ -1136,7 +1137,7 @@ class StudentTProcess(GaussianProcess):
             Expected model variance.
         """
 
-        gp_emv = super(StudentTProcess, self).exp_model_variance(par)
+        gp_emv = super(StudentTProcessModel, self).exp_model_variance(par)
         fcn_obs = np.squeeze(args[0])
         iK = self.kernel.exp_x_kxkx(par, par, self.points)
         scale = (self.nu - 2 + fcn_obs.dot(iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
@@ -1163,7 +1164,7 @@ class StudentTProcess(GaussianProcess):
         par = self.kernel.get_parameters(par)
         iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
         fcn_obs = np.squeeze(args[0])
-        gp_emv = super(StudentTProcess, self).integral_var(par)
+        gp_emv = super(StudentTProcessModel, self).integral_var(par)
         scale = (self.nu - 2 + fcn_obs.dot(iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
         return scale * gp_emv
 

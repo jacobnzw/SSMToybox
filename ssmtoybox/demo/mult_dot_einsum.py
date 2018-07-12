@@ -3,7 +3,7 @@ import numpy.linalg as la
 from scipy.linalg import cho_factor, cho_solve
 from ssmtoybox.ssmod import ReentryVehicleRadarTrackingGaussSSM
 from ssmtoybox.bq.bqmtran import GaussianProcessTransform
-from ssmtoybox.mtran import MonteCarlo
+from ssmtoybox.mtran import MonteCarloTransform
 from unittest import TestCase
 
 
@@ -63,7 +63,7 @@ class MultTest(TestCase):
         tf_so = GaussianProcessTransform(dim_in, ker_par_mo, point_str='sr')
 
         # Monte-Carlo for ground truth
-        tf_mc = MonteCarlo(dim_in, 1000)
+        tf_mc = MonteCarloTransform(dim_in, 1000)
         mean_mc, cov_mc, ccov_mc = tf_mc.apply(f, mean_in, cov_in, None)
         C_MC = cov_mc + np.outer(mean_mc, mean_mc.T)
 

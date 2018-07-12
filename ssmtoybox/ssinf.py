@@ -6,8 +6,8 @@ from scipy.stats import multivariate_normal
 from numpy import newaxis as na
 from ssmtoybox.ssmod import StateSpaceModel, StudentStateSpaceModel
 from ssmtoybox.bq.bqmtran import GaussianProcessTransform, GPQMO, StudentTProcessTransform, TPQMO, BayesSardTransform
-from ssmtoybox.mtran import MomentTransform, Taylor1stOrder, TaylorGPQD, SphericalRadial, SphericalRadialTrunc, \
-    Unscented, UnscentedTrunc, GaussHermite, GaussHermiteTrunc
+from ssmtoybox.mtran import MomentTransform, LinearizationTransform, TaylorGPQDTransform, SphericalRadialTransform, SphericalRadialTruncatedTransform, \
+    UnscentedTransform, UnscentedTruncatedTransform, GaussHermiteTransform, GaussHermiteTruncatedTransform
 
 
 class StateSpaceInference(metaclass=ABCMeta):
@@ -765,8 +765,8 @@ class ExtendedKalman(GaussianInference):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        tf = Taylor1stOrder(nq)
-        th = Taylor1stOrder(nr)
+        tf = LinearizationTransform(nq)
+        th = LinearizationTransform(nr)
         super(ExtendedKalman, self).__init__(sys, tf, th)
 
 
@@ -790,8 +790,8 @@ class ExtendedKalmanGPQD(GaussianInference):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        tf = TaylorGPQD(nq, alpha, el)
-        th = TaylorGPQD(nr, alpha, el)
+        tf = TaylorGPQDTransform(nq, alpha, el)
+        th = TaylorGPQDTransform(nr, alpha, el)
         super(ExtendedKalmanGPQD, self).__init__(sys, tf, th)
 
 
@@ -809,8 +809,8 @@ class CubatureKalman(GaussianInference):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        tf = SphericalRadial(nq)
-        th = SphericalRadial(nr)
+        tf = SphericalRadialTransform(nq)
+        th = SphericalRadialTransform(nr)
         super(CubatureKalman, self).__init__(sys, tf, th)
 
 
@@ -828,8 +828,8 @@ class CubatureTruncKalman(GaussianInference):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        tf = SphericalRadial(nq)
-        th = SphericalRadialTrunc(nr, sys.rD)
+        tf = SphericalRadialTransform(nq)
+        th = SphericalRadialTruncatedTransform(nr, sys.rD)
         super(CubatureTruncKalman, self).__init__(sys, tf, th)
 
 
@@ -847,8 +847,8 @@ class UnscentedKalman(GaussianInference):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        tf = Unscented(nq, kappa=kappa, alpha=alpha, beta=beta)
-        th = Unscented(nr, kappa=kappa, alpha=alpha, beta=beta)
+        tf = UnscentedTransform(nq, kappa=kappa, alpha=alpha, beta=beta)
+        th = UnscentedTransform(nr, kappa=kappa, alpha=alpha, beta=beta)
         super(UnscentedKalman, self).__init__(sys, tf, th)
 
 
@@ -866,8 +866,8 @@ class UnscentedTruncKalman(GaussianInference):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        tf = Unscented(nq, kappa=kappa, alpha=alpha, beta=beta)
-        th = UnscentedTrunc(nr, sys.rD, kappa=kappa, alpha=alpha, beta=beta)
+        tf = UnscentedTransform(nq, kappa=kappa, alpha=alpha, beta=beta)
+        th = UnscentedTruncatedTransform(nr, sys.rD, kappa=kappa, alpha=alpha, beta=beta)
         super(UnscentedTruncKalman, self).__init__(sys, tf, th)
 
 
@@ -888,8 +888,8 @@ class GaussHermiteKalman(GaussianInference):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        tf = GaussHermite(nq, degree=deg)
-        th = GaussHermite(nr, degree=deg)
+        tf = GaussHermiteTransform(nq, degree=deg)
+        th = GaussHermiteTransform(nr, degree=deg)
         super(GaussHermiteKalman, self).__init__(sys, tf, th)
 
 
@@ -910,8 +910,8 @@ class GaussHermiteTruncKalman(GaussianInference):
         assert isinstance(sys, StateSpaceModel)
         nq = sys.xD if sys.q_additive else sys.xD + sys.qD
         nr = sys.xD if sys.r_additive else sys.xD + sys.rD
-        tf = GaussHermite(nq, degree=deg)
-        th = GaussHermiteTrunc(nr, sys.rD, degree=deg)
+        tf = GaussHermiteTransform(nq, degree=deg)
+        th = GaussHermiteTruncatedTransform(nr, sys.rD, degree=deg)
         super(GaussHermiteTruncKalman, self).__init__(sys, tf, th)
 
 

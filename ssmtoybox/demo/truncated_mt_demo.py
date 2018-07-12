@@ -1,4 +1,4 @@
-from ssmtoybox.mtran import MonteCarlo, Unscented, UnscentedTrunc
+from ssmtoybox.mtran import MonteCarloTransform, UnscentedTransform, UnscentedTruncatedTransform
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
@@ -59,7 +59,7 @@ def mt_trunc_demo(mt_trunc, mt, dim=None, full_input_cov=True, **kwargs):
         cov_eff = A.dot(cov_eff).dot(A.T)
 
     # use MC transform with lots of samples to compute the true transformed moments
-    tmc = MonteCarlo(d_eff, n=1e4)
+    tmc = MonteCarloTransform(d_eff, n=1e4)
     M_mc, C_mc, cc_mc = tmc.apply(f, mean_eff, cov_eff, None)
     # transformed samples
     x = np.random.multivariate_normal(mean_eff, cov_eff, size=int(1e3)).T
@@ -206,5 +206,5 @@ def ukf_trunc_demo(mc_sims=50):
 
 
 if __name__ == '__main__':
-    # mt_trunc_demo(UnscentedTrunc, Unscented, [2, 5, 10, 15], kappa=0, full_input_cov=True)
+    # mt_trunc_demo(UnscentedTruncatedTransform, UnscentedTransform, [2, 5, 10, 15], kappa=0, full_input_cov=True)
     ukf_trunc_demo(mc_sims=100)

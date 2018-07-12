@@ -19,7 +19,7 @@ import pandas as pd
 from ssmtoybox.demo.icinco_demo import evaluate_performance
 from ssmtoybox.ssinf import ExtendedKalman, ExtendedKalmanGPQD
 from ssmtoybox.ssmod import UNGMGaussSSM
-from ssmtoybox.mtran import Unscented
+from ssmtoybox.mtran import UnscentedTransform
 
 steps, mc = 50, 10  # time steps, mc simulations
 # initialize SSM and generate some data
@@ -27,7 +27,7 @@ ssm = UNGMGaussSSM()
 x, z = ssm.simulate(steps, mc)
 # use only the central sigma-point
 usp_0 = np.zeros((ssm.xD, 1))
-usp_ut = Unscented.unit_sigma_points(ssm.xD)
+usp_ut = UnscentedTransform.unit_sigma_points(ssm.xD)
 # set the RBF kernel hyperparameters
 hyp_rbf = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(ssm.xD, ), 'noise_var': 1e-8}
 hyp_rbf_ut = {'sig_var': 8.0, 'lengthscale': 0.5 * np.ones((1,)), 'noise_var': 1e-16}

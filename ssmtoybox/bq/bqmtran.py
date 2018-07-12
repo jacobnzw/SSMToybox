@@ -259,7 +259,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         """
 
         # import must be after SigmaPointTransform
-        from .bqmod import GaussianProcess, StudentTProcess, GaussianProcessMO, StudentTProcessMO, BayesSardModel
+        from .bqmod import GaussianProcessModel, StudentTProcessModel, GaussianProcessMO, StudentTProcessMO, BayesSardModel
         model = model.lower()
 
         # make sure kern_str is supported
@@ -269,9 +269,9 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
         # initialize the chosen model
         if model == 'gp':
-            return GaussianProcess(dim_in, kern_par, kern_str, point_str, point_par)
+            return GaussianProcessModel(dim_in, kern_par, kern_str, point_str, point_par)
         elif model == 'tp':
-            return StudentTProcess(dim_in, kern_par, kern_str, point_str, point_par, **kwargs)
+            return StudentTProcessModel(dim_in, kern_par, kern_str, point_str, point_par, **kwargs)
         elif model == 'gp-mo':
             return GaussianProcessMO(dim_in, dim_out, kern_par, kern_str, point_str, point_par)
         elif model == 'tp-mo':

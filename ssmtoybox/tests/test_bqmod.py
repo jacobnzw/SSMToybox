@@ -5,7 +5,7 @@ import scipy.linalg as la
 import matplotlib.pyplot as plt
 from numpy import newaxis as na
 
-from ssmtoybox.bq.bqmod import GaussianProcess, StudentTProcess, BayesSardModel
+from ssmtoybox.bq.bqmod import GaussianProcessModel, StudentTProcessModel, BayesSardModel
 from ssmtoybox.utils import vandermonde
 
 
@@ -27,27 +27,27 @@ class GPModelTest(TestCase):
         cls.pt_par_ut = {'alpha': 1.0}
 
     def test_init(self):
-        GaussianProcess(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
-        GaussianProcess(5, self.ker_par_5d, 'rbf', 'ut', self.pt_par_ut)
+        GaussianProcessModel(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
+        GaussianProcessModel(5, self.ker_par_5d, 'rbf', 'ut', self.pt_par_ut)
 
     def test_plotting(self):
-        model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
+        model = GaussianProcessModel(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
         xtest = np.linspace(-5, 5, 50)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
         model.plot_model(xtest, y, fcn_true=f)
 
     def test_exp_model_variance(self):
-        model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
+        model = GaussianProcessModel(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
         model.bq_weights(self.ker_par_1d)
         self.assertTrue(model.exp_model_variance(self.ker_par_1d) >= 0)
 
     def test_integral_variance(self):
-        model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
+        model = GaussianProcessModel(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
         self.assertTrue(model.integral_var(self.ker_par_1d) >= 0)
 
     def test_log_marginal_likelihood(self):
-        model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
+        model = GaussianProcessModel(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
         y = fcn(model.points)
         lhyp = np.log([1.0, 3.0])
         f, df = model.neg_log_marginal_likelihood(lhyp, y.T, model.points, 1e-8*np.eye(model.num_pts))
@@ -85,7 +85,7 @@ class GPModelTest(TestCase):
         return 0.5 * np.trace((iKdK - a_out_a.dot(dK_dTheta)))  # (num_par, )
 
     def test_nlml_gradient(self):
-        model = GaussianProcess(5, self.ker_par_5d, 'rbf', 'ut', self.pt_par_ut)
+        model = GaussianProcessModel(5, self.ker_par_5d, 'rbf', 'ut', self.pt_par_ut)
         y = fcn(model.points)
         lhyp = np.log([1.0] + 5*[3.0])
 
@@ -158,7 +158,7 @@ class GPModelTest(TestCase):
         self.assertTrue(err <= 1e-5, 'Gradient error: {:.4f}'.format(err))
 
     def test_hypers_optim(self):
-        model = GaussianProcess(1, self.ker_par_1d, 'rbf', 'gh', point_par={'degree': 15})
+        model = GaussianProcessModel(1, self.ker_par_1d, 'rbf', 'gh', point_par={'degree': 15})
         xtest = np.linspace(-7, 7, 100)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
@@ -206,7 +206,7 @@ class GPModelTest(TestCase):
         func = ssm.dyn_eval
         dim_in, dim_out = ssm.xD, ssm.xD
 
-        model = GaussianProcess(dim_in, self.ker_par_5d, 'rbf', 'sr')  # , point_hyp={'degree': 10})
+        model = GaussianProcessModel(dim_in, self.ker_par_5d, 'rbf', 'sr')  # , point_hyp={'degree': 10})
         x = ssm.get_pars('x0_mean')[0][:, na] + model.points  # ssm.get_pars('x0_cov')[0].dot(model.points)
         y = np.apply_along_axis(func, 0, x, None)  # (d_out, n**2)
 
@@ -364,14 +364,14 @@ class BayesSardModelTest(TestCase):
         self.assertLessEqual(np.abs(kxpx - kxpx_mc).max(), tol)
 
     def test_weights(self):
-        from ssmtoybox.mtran import Unscented, GaussHermite
+        from ssmtoybox.mtran import UnscentedTransform, GaussHermiteTransform
 
         # UT weights in 1D
         model = BayesSardModel(1, self.ker_par_1d, point_str='ut', point_par=self.pt_par_ut)
         alpha = np.array([[0, 1, 2]])
         w, wc, wcc, emv, ivar = model.bq_weights(self.ker_par_1d, alpha)
         # UT weights in 1D reproduced?
-        self.assertTrue(np.allclose(w, Unscented.weights(1)[0]))
+        self.assertTrue(np.allclose(w, UnscentedTransform.weights(1)[0]))
         self.assertGreaterEqual(emv, 0)
         self.assertGreaterEqual(ivar, 0)
         # test positive definiteness
@@ -387,7 +387,7 @@ class BayesSardModelTest(TestCase):
         model = BayesSardModel(2, par, point_str='ut', point_par=self.pt_par_ut)
         w, wc, wcc, emv, ivar = model.bq_weights(par, alpha)
         # UT weights reproduced in 2D?
-        self.assertTrue(np.allclose(w, Unscented.weights(2)[0]))
+        self.assertTrue(np.allclose(w, UnscentedTransform.weights(2)[0]))
         self.assertGreaterEqual(emv, 0)
         self.assertGreaterEqual(ivar, 0)
         # test positive definiteness
@@ -403,7 +403,7 @@ class BayesSardModelTest(TestCase):
                           [0, 0, 1, 1, 0, 2, 2, 1, 2]])
         par = np.array([[1.0, 1, 1]])
         w, wc, wcc, emv, ivar = model.bq_weights(par, alpha)
-        self.assertTrue(np.allclose(w, GaussHermite.weights(2, 3)))
+        self.assertTrue(np.allclose(w, GaussHermiteTransform.weights(2, 3)))
         self.assertGreaterEqual(emv, 0)
         self.assertGreaterEqual(ivar, 0)
         # test positive definiteness
@@ -422,24 +422,24 @@ class TPModelTest(TestCase):
         cls.pt_par_ut = {'alpha': 1.0}
 
     def test_init(self):
-        StudentTProcess(1, self.ker_par_1d)
-        StudentTProcess(5, self.ker_par_5d, point_par=self.pt_par_ut)
+        StudentTProcessModel(1, self.ker_par_1d)
+        StudentTProcessModel(5, self.ker_par_5d, point_par=self.pt_par_ut)
 
     def test_plotting(self):
-        model = StudentTProcess(1, self.ker_par_1d)
+        model = StudentTProcessModel(1, self.ker_par_1d)
         xtest = np.linspace(-5, 5, 50)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
         model.plot_model(xtest, y, fcn_true=f)
 
     def test_exp_model_variance(self):
-        model = StudentTProcess(1, self.ker_par_1d)
+        model = StudentTProcessModel(1, self.ker_par_1d)
         model.bq_weights(self.ker_par_1d)
         y = fcn(model.points)
         self.assertTrue(model.exp_model_variance(self.ker_par_1d, y) >= 0)
 
     def test_integral_variance(self):
-        model = StudentTProcess(1, self.ker_par_1d)
+        model = StudentTProcessModel(1, self.ker_par_1d)
         y = fcn(model.points)
         self.assertTrue(model.integral_variance(self.ker_par_1d, y) >= 0)
 
@@ -484,7 +484,7 @@ class TPModelTest(TestCase):
         return 0.5 * np.trace((num_out * iKdK - a_out_a.dot(dK_dTheta)))  # (num_par, )
 
     def test_nlml_gradient(self):
-        model = StudentTProcess(5, self.ker_par_5d, 'rbf', 'ut', self.pt_par_ut)
+        model = StudentTProcessModel(5, self.ker_par_5d, 'rbf', 'ut', self.pt_par_ut)
         y = fcn(model.points)
         lhyp = np.log([1.0] + 5 * [3.0])
         jitter = 1e-8 * np.eye(model.num_pts)
@@ -496,7 +496,7 @@ class TPModelTest(TestCase):
         self.assertTrue(err <= 1e-5, 'Gradient error: {:.4f}'.format(err))
 
     def test_hypers_optim(self):
-        model = StudentTProcess(1, self.ker_par_1d, 'rbf', 'gh', point_par={'degree': 10})
+        model = StudentTProcessModel(1, self.ker_par_1d, 'rbf', 'gh', point_par={'degree': 10})
         xtest = np.linspace(-7, 7, 100)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
@@ -526,7 +526,7 @@ class TPModelTest(TestCase):
         func = ssm.dyn_eval
         dim_in, dim_out = ssm.xD, ssm.xD
 
-        model = StudentTProcess(dim_in, self.ker_par_5d, 'rbf', 'ut', nu=50.0)  # , point_hyp={'degree': 10})
+        model = StudentTProcessModel(dim_in, self.ker_par_5d, 'rbf', 'ut', nu=50.0)  # , point_hyp={'degree': 10})
         x = ssm.get_pars('x0_mean')[0][:, na] + model.points  # ssm.get_pars('x0_cov')[0].dot(model.points)
         y = np.apply_along_axis(func, 0, x, None)  # (d_out, n**2)
 
