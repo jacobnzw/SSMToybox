@@ -48,7 +48,7 @@ algorithms = (
     # UnscentedKalman(ssm, kappa=0.0),
     # GPQ-UT w/ UT sigma-points, should be same as UKF
     # GPQ-RBF w/ UT sigma-points
-    # GPQKalman(ssm, usp_ut, usp_ut, hyp_rbf_ut, hyp_rbf_ut),
+    # GaussianProcessKalman(ssm, usp_ut, usp_ut, hyp_rbf_ut, hyp_rbf_ut),
     # GPQ+D RBF kernel w/ UT sigma-points (derivative at the central point only)
     # GPQuadDerRBFKalman(ssm, usp_ut, usp_ut, hyp_rbf_ut, hyp_rbf_ut, which_der=der_mask),
 )

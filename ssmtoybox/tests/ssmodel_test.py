@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from ssmtoybox.ssinf import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GPQKalman, TPQKalman
+from ssmtoybox.ssinf import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GaussianProcessKalman, TPQKalman
 from ssmtoybox.ssmod import Pendulum, UNGM, UNGMnonadd
 
 
@@ -40,7 +40,7 @@ class TestUNGM(unittest.TestCase):
             UnscentedKalman(ssm, kappa=0.0),
             CubatureKalman(ssm),
             GaussHermiteKalman(ssm),
-            GPQKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
+            GaussianProcessKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
             TPQKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
         )
         for inf in inf_method:
@@ -59,7 +59,7 @@ class TestUNGM(unittest.TestCase):
             UnscentedKalman(ssm),
             CubatureKalman(ssm),
             GaussHermiteKalman(ssm),
-            GPQKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
+            GaussianProcessKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
             TPQKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
         )
         for inf in inf_method:
@@ -86,7 +86,7 @@ class TestPendulum(unittest.TestCase):
             UnscentedKalman(ssm),
             CubatureKalman(ssm),
             GaussHermiteKalman(ssm),
-            GPQKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
+            GaussianProcessKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
             TPQKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
         )
         for inf in inf_method:

@@ -3,7 +3,7 @@ from unittest import TestCase
 import numpy as np
 import numpy.linalg as la
 
-from ssmtoybox.ssinf import GPQMKalman, BSQKalman
+from ssmtoybox.ssinf import GPQMKalman, BayesSardKalman
 from ssmtoybox.ssmod import Pendulum, UNGM
 
 
@@ -12,13 +12,13 @@ class BSQKalmanTest(TestCase):
         ssm = UNGM()
         kpar = np.array([[1, 1]], dtype=np.float)
         alpha = np.array([[0, 1, 2]])
-        alg = BSQKalman(ssm, kpar, kpar, alpha, alpha, points='ut')
+        alg = BayesSardKalman(ssm, kpar, kpar, alpha, alpha, points='ut')
 
     def test_filtering_ungm(self):
         ssm = UNGM()
         kpar = np.array([[1, 1]], dtype=np.float)
         alpha = np.array([[0, 1, 2]])
-        alg = BSQKalman(ssm, kpar, kpar, alpha, alpha, points='ut')
+        alg = BayesSardKalman(ssm, kpar, kpar, alpha, alpha, points='ut')
         x, y = ssm.simulate(100)
         alg.forward_pass(y[..., 0])
 
@@ -27,7 +27,7 @@ class BSQKalmanTest(TestCase):
         kpar = np.array([[1, 1, 1]], dtype=np.float)
         alpha = np.array([[0, 1, 0, 2, 0],
                           [0, 0, 1, 0, 2]])
-        alg = BSQKalman(ssm, kpar, kpar, alpha, alpha, points='ut')
+        alg = BayesSardKalman(ssm, kpar, kpar, alpha, alpha, points='ut')
         x, y = ssm.simulate(100)
         alg.forward_pass(y[..., 0])
 

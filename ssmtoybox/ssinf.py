@@ -915,7 +915,7 @@ class GaussHermiteTruncKalman(GaussianInference):
         super(GaussHermiteTruncKalman, self).__init__(sys, tf, th)
 
 
-class GPQKalman(GaussianInference):
+class GaussianProcessKalman(GaussianInference):
     """
     Gaussian process quadrature Kalman filter (GPQKF) and smoother (see [1]_).
 
@@ -967,12 +967,47 @@ class GPQKalman(GaussianInference):
         nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
         t_dyn = GaussianProcessTransform(nq, kern_par_dyn, kernel, points, point_hyp)
         t_obs = GaussianProcessTransform(nr, kern_par_obs, kernel, points, point_hyp)
-        super(GPQKalman, self).__init__(ssm, t_dyn, t_obs)
+        super(GaussianProcessKalman, self).__init__(ssm, t_dyn, t_obs)
 
 
-class BSQKalman(GaussianInference):
+class BayesSardKalman(GaussianInference):
     """
     Bayes-Sard quadrature Kalman filter (BSQKF) and smoother.
+
+    Parameters
+    ----------
+    ssm : GaussianStateSpaceModel
+        State-space model to perform inference on.
+
+    kern_par_dyn : ndarray
+        Kernel parameters for GPQ transformation of the state moments.
+
+    kern_par_obs : ndarray
+        Kernel parameters for GPQ transformation of the measurement moments.
+
+    mulind_dyn : int or ndarray, optional
+    mulind_obs : int or ndarray, optional
+        Multi-indices for dynamics and observation models.
+
+        ``int``
+            Equivalent to multi-index defining all monomials of total degree less then or equal to the supplied int.
+        ``ndarray``
+            Matrix, where columns are multi-indices defining the basis functions (monomials) of the polynomial space.
+
+    points : str {'sr', 'ut', 'gh', 'fs'}, optional
+        Sigma-point set:
+
+        ``sr``
+            Spherical-radial sigma-points (originally used in CKF).
+        ``ut``
+            Unscented transform sigma-points (originally used in UKF).
+        ``gh``
+            Gauss-Hermite sigma-points (originally used in GHKF).
+        ``fs``
+            Fully-symmetric sigma-points [3]_ (originally used in [2]_).
+
+    point_hyp : dict, optional
+        Hyper-parameters of the sigma-point set.
     """
     def __init__(self, ssm, kern_par_dyn, kern_par_obs, mulind_dyn=2, mulind_obs=2, points='ut', point_hyp=None):
         assert isinstance(ssm, StateSpaceModel)
@@ -980,7 +1015,7 @@ class BSQKalman(GaussianInference):
         nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
         t_dyn = BayesSardTransform(nq, kern_par_dyn, mulind_dyn, points, point_hyp)
         t_obs = BayesSardTransform(nr, kern_par_obs, mulind_obs, points, point_hyp)
-        super(BSQKalman, self).__init__(ssm, t_dyn, t_obs)
+        super(BayesSardKalman, self).__init__(ssm, t_dyn, t_obs)
 
 
 class GPQMOKalman(GaussianInference):
