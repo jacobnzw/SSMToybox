@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from ssmtoybox.ssinf import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GaussianProcessKalman, TPQKalman
-from ssmtoybox.ssmod import Pendulum, UNGM, UNGMnonadd
+from ssmtoybox.ssmod import PendulumGaussSSM, UNGMGaussSSM, UNGMNonAdditiveGaussSSM
 
 
 def default_bq_hypers(sys):
@@ -23,8 +23,8 @@ class TestUNGM(unittest.TestCase):
         pass
 
     def test_simulate(self):
-        ungm = UNGM()
-        ungmna = UNGMnonadd()
+        ungm = UNGMGaussSSM()
+        ungmna = UNGMNonAdditiveGaussSSM()
         ungm.simulate(50, mc_sims=20)
         ungmna.simulate(50, mc_sims=20)
 
@@ -32,7 +32,7 @@ class TestUNGM(unittest.TestCase):
         """
         Test bunch of filters on Univariate Non-linear Growth Model (with additive noise)
         """
-        ssm = UNGM()
+        ssm = UNGMGaussSSM()
         x, z = ssm.simulate(100, mc_sims=1)
         hyp_dyn, hyp_meas = default_bq_hypers(ssm)
         inf_method = (
@@ -51,7 +51,7 @@ class TestUNGM(unittest.TestCase):
         """
         Test bunch of filters on Univariate Non-linear Growth Model (with NON-additive noise)
         """
-        ssm = UNGMnonadd(x0_mean=0.1)
+        ssm = UNGMNonAdditiveGaussSSM(x0_mean=0.1)
         x, z = ssm.simulate(100, mc_sims=1)
         hyp_dyn, hyp_meas = default_bq_hypers(ssm)
         inf_method = (
@@ -78,7 +78,7 @@ class TestPendulum(unittest.TestCase):
         """
         Test bunch of filters on a pendulum example
         """
-        ssm = Pendulum()
+        ssm = PendulumGaussSSM()
         x, z = ssm.simulate(100, mc_sims=1)
         hyp_dyn, hyp_meas = default_bq_hypers(ssm)
         inf_method = (

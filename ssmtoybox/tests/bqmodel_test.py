@@ -137,8 +137,8 @@ class GPModelTest(TestCase):
     def test_total_nlml_gradient(self):
 
         # nonlinear vector function from some SSM
-        from ssmtoybox.ssmod import CoordinatedTurnRadar
-        ssm = CoordinatedTurnRadar()
+        from ssmtoybox.ssmod import CoordinatedTurnRadarGaussSSM
+        ssm = CoordinatedTurnRadarGaussSSM()
 
         # generate inputs
         num_x = 20
@@ -201,8 +201,8 @@ class GPModelTest(TestCase):
         # plt.show()
 
     def test_hypers_optim_multioutput(self):
-        from ssmtoybox.ssmod import CoordinatedTurnRadar
-        ssm = CoordinatedTurnRadar()
+        from ssmtoybox.ssmod import CoordinatedTurnRadarGaussSSM
+        ssm = CoordinatedTurnRadarGaussSSM()
         func = ssm.dyn_eval
         dim_in, dim_out = ssm.xD, ssm.xD
 
@@ -521,8 +521,8 @@ class TPModelTest(TestCase):
         model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2)
 
     def test_hypers_optim_multioutput(self):
-        from ssmtoybox.ssmod import CoordinatedTurnRadar
-        ssm = CoordinatedTurnRadar()
+        from ssmtoybox.ssmod import CoordinatedTurnRadarGaussSSM
+        ssm = CoordinatedTurnRadarGaussSSM()
         func = ssm.dyn_eval
         dim_in, dim_out = ssm.xD, ssm.xD
 

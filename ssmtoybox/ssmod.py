@@ -784,7 +784,7 @@ class StudentStateSpaceModel(StateSpaceModel):
         return multivariate_t(x0_mean, x0_cov, x0_dof, size).T
 
 
-class FrequencyDemodulation(GaussianStateSpaceModel):
+class FrequencyDemodulationGaussSSM(GaussianStateSpaceModel):
     """
     Frequency demodulation SSM from [Pakki]_.
 
@@ -818,7 +818,7 @@ class FrequencyDemodulation(GaussianStateSpaceModel):
             'r_cov': 2e-3 * np.eye(self.rD),
             'q_gain': np.eye(self.qD),
         }
-        super(FrequencyDemodulation, self).__init__(**kwargs)
+        super(FrequencyDemodulationGaussSSM, self).__init__(**kwargs)
 
     def dyn_fcn(self, x, q, pars):
         return np.array([self.mu * x[0], np.arctan(self.lam * x[1] + x[0])]) + q
@@ -836,7 +836,7 @@ class FrequencyDemodulation(GaussianStateSpaceModel):
         pass
 
 
-class VanDerPol(GaussianStateSpaceModel):
+class VanDerPolOscillator2DGaussSSM(GaussianStateSpaceModel):
     """
     Van der Pol oscillator in 2D.
 
@@ -862,7 +862,7 @@ class VanDerPol(GaussianStateSpaceModel):
             'r_cov': np.array([[3e-3]]),
             'q_gain': np.eye(2)
         }
-        super(VanDerPol, self).__init__(**req_kwargs)
+        super(VanDerPolOscillator2DGaussSSM, self).__init__(**req_kwargs)
 
     def dyn_fcn(self, x, q, pars):
         return np.array([x[0] + self.dt*x[1], x[1] + self.dt*(self.alpha*x[1]*(1 - x[0]**2) - x[0])])
@@ -880,7 +880,7 @@ class VanDerPol(GaussianStateSpaceModel):
         pass
 
 
-class Pendulum(GaussianStateSpaceModel):
+class PendulumGaussSSM(GaussianStateSpaceModel):
     """
     Pendulum in 2D.
     """
@@ -908,7 +908,7 @@ class Pendulum(GaussianStateSpaceModel):
             'r_cov': np.atleast_2d(r_cov),
             'q_gain': np.eye(2)
         }
-        super(Pendulum, self).__init__(**req_kwargs)
+        super(PendulumGaussSSM, self).__init__(**req_kwargs)
 
     def dyn_fcn(self, x, q, pars):
         return np.array([x[0] + x[1] * self.dt, x[1] - self.g * self.dt * np.sin(x[0])]) + q
@@ -927,7 +927,7 @@ class Pendulum(GaussianStateSpaceModel):
         return np.array([np.cos(x[0]), 0.0])
 
 
-class CoordinatedTurnBOT(GaussianStateSpaceModel):
+class CoordinatedTurnBearingsOnlyTrackingGaussSSM(GaussianStateSpaceModel):
     """
     Bearings only target tracking in 2D using multiple sensors as in [3]_.
 
@@ -992,7 +992,7 @@ class CoordinatedTurnBOT(GaussianStateSpaceModel):
             'r_mean': np.zeros(self.rD),
             'r_cov': 10e-3 * np.eye(self.rD)  # 10e-3 rad == 10 mrad
         }
-        super(CoordinatedTurnBOT, self).__init__(**kwargs)
+        super(CoordinatedTurnBearingsOnlyTrackingGaussSSM, self).__init__(**kwargs)
 
     def dyn_fcn(self, x, q, *args):
         """
@@ -1050,7 +1050,7 @@ class CoordinatedTurnBOT(GaussianStateSpaceModel):
         pass
 
 
-class CoordinatedTurnRadar(GaussianStateSpaceModel):
+class CoordinatedTurnRadarGaussSSM(GaussianStateSpaceModel):
     """
     Tracking of a maneuvering target in 2D using radar measurements.
 
@@ -1119,7 +1119,7 @@ class CoordinatedTurnRadar(GaussianStateSpaceModel):
             'r_mean': np.zeros(self.rD),
             'r_cov': 1e-2 * np.eye(self.rD)  # 1e-2 rad == 10 mrad
         }
-        super(CoordinatedTurnRadar, self).__init__(**kwargs)
+        super(CoordinatedTurnRadarGaussSSM, self).__init__(**kwargs)
 
     def dyn_fcn(self, x, q, *args):
         """
@@ -1188,7 +1188,7 @@ class CoordinatedTurnRadar(GaussianStateSpaceModel):
         pass
 
 
-class ReentryRadar(GaussianStateSpaceModel):
+class ReentryVehicleRadarTrackingGaussSSM(GaussianStateSpaceModel):
     """
     Radar tracking of the reentry vehicle entering Earth's atmosphere as described in [1]_.
 
@@ -1252,7 +1252,7 @@ class ReentryRadar(GaussianStateSpaceModel):
                                [0, 0.17e-3 ** 2]]),
             'q_gain': np.vstack((np.zeros((2, 3)), np.eye(3)))
         }
-        super(ReentryRadar, self).__init__(**kwargs)
+        super(ReentryVehicleRadarTrackingGaussSSM, self).__init__(**kwargs)
 
     def dyn_fcn(self, x, q, pars):
         """
@@ -1326,7 +1326,7 @@ class ReentryRadar(GaussianStateSpaceModel):
         pass
 
 
-class ReentryRadarSimple(GaussianStateSpaceModel):
+class ReentryVehicleRadarTrackingSimpleGaussSSM(GaussianStateSpaceModel):
     """
     Simplified model of the reentry vehicle entering Earth's atmosphere.
 
@@ -1383,7 +1383,7 @@ class ReentryRadarSimple(GaussianStateSpaceModel):
             'r_cov': np.array([[0.03048**2]]),
             'q_gain': np.vstack(np.eye(3))
         }
-        super(ReentryRadarSimple, self).__init__(**kwargs)
+        super(ReentryVehicleRadarTrackingSimpleGaussSSM, self).__init__(**kwargs)
 
     def dyn_fcn(self, x, q, pars):
         """
@@ -1443,7 +1443,7 @@ class ReentryRadarSimple(GaussianStateSpaceModel):
         pass
 
 
-class UNGM(GaussianStateSpaceModel):
+class UNGMGaussSSM(GaussianStateSpaceModel):
     """
     Univariate Non-linear Growth Model frequently used as a benchmark.
     """
@@ -1457,7 +1457,7 @@ class UNGM(GaussianStateSpaceModel):
     r_additive = True
 
     def __init__(self, x0_mean=0.0, x0_cov=1.0, q_mean=0.0, q_cov=10.0, r_mean=0.0, r_cov=1.0, **kwargs):
-        super(UNGM, self).__init__(**kwargs)
+        super(UNGMGaussSSM, self).__init__(**kwargs)
         self.set_pars('x0_mean', np.atleast_1d(x0_mean))
         self.set_pars('x0_cov', np.atleast_2d(x0_cov))
         self.set_pars('q_mean', np.atleast_1d(q_mean))
@@ -1482,7 +1482,7 @@ class UNGM(GaussianStateSpaceModel):
         return np.asarray([0.1 * x[0]])
 
 
-class UNGMnonadd(GaussianStateSpaceModel):
+class UNGMNonAdditiveGaussSSM(GaussianStateSpaceModel):
     """
     Univariate Non-linear Growth Model with non-additive noise for testing.
     """
@@ -1497,7 +1497,7 @@ class UNGMnonadd(GaussianStateSpaceModel):
     r_additive = False
 
     def __init__(self, x0_mean=0.0, x0_cov=1.0, q_mean=0.0, q_cov=10.0, r_mean=0.0, r_cov=1.0, **kwargs):
-        super(UNGMnonadd, self).__init__(**kwargs)
+        super(UNGMNonAdditiveGaussSSM, self).__init__(**kwargs)
         self.set_pars('x0_mean', np.atleast_1d(x0_mean))
         self.set_pars('x0_cov', np.atleast_2d(x0_cov))
         self.set_pars('q_mean', np.atleast_1d(q_mean))

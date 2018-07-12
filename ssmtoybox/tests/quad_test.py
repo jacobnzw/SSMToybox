@@ -2,7 +2,7 @@ from unittest import TestCase
 
 import numpy as np
 from ssmtoybox.mtran import MonteCarlo, SphericalRadialTrunc, FullySymmetricStudent
-from ssmtoybox.ssmod import UNGM
+from ssmtoybox.ssmod import UNGMGaussSSM
 
 
 def sum_of_squares(x, pars, dx=False):
@@ -34,7 +34,7 @@ class MonteCarloTest(TestCase):
     def test_crash(self):
         d = 1
         tmc = MonteCarlo(d, n=1e4)
-        f = UNGM().dyn_eval
+        f = UNGMGaussSSM().dyn_eval
         mean = np.zeros(d)
         cov = np.eye(d)
         # does it crash ?
@@ -88,7 +88,7 @@ class FullySymmetricStudentTest(TestCase):
     def test_crash(self):
         dim = 1
         mt = FullySymmetricStudent(dim, degree=3)
-        f = UNGM().dyn_eval
+        f = UNGMGaussSSM().dyn_eval
         mean = np.zeros(dim)
         cov = np.eye(dim)
         # does it crash ?

@@ -5,7 +5,7 @@ from scipy.stats import multivariate_normal
 from scipy.linalg import cho_factor, cho_solve
 from numpy.linalg import cholesky
 from ssmtoybox.ssinf import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GaussianProcessKalman
-from ssmtoybox.ssmod import UNGM
+from ssmtoybox.ssmod import UNGMGaussSSM
 from ssmtoybox.utils import bootstrap_var, squared_error, neg_log_likelihood, log_cred_ratio, mse_matrix
 import matplotlib.pyplot as plt
 import time
@@ -77,7 +77,7 @@ def print_table(data, row_labels=None, col_labels=None, latex=False):
 
 def tables():
     steps, mc = 500, 100
-    ssm = UNGM()  # initialize UNGM model
+    ssm = UNGMGaussSSM()  # initialize UNGM model
     x, z = ssm.simulate(steps, mc_sims=mc)  # generate some data
 
     kern_par_sr = np.array([[1.0, 0.3 * ssm.xD]])
@@ -159,7 +159,7 @@ def tables():
 
 def hypers_demo(lscale=[1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1, 3, 1e1, 3e1]):
     steps, mc = 500, 20
-    ssm = UNGM()  # initialize UNGM model
+    ssm = UNGMGaussSSM()  # initialize UNGM model
     x, z = ssm.simulate(steps, mc_sims=mc)  # generate some data
     num_el = len(lscale)
     # lscale = [1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1, 3, 1e1, 3e1]  # , 1e2, 3e2]

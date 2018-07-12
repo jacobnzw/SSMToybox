@@ -603,7 +603,7 @@ class GaussianSystem(System):
         return np.random.multivariate_normal(x0_mean, x0_cov, size).T
 
 
-class ReentryRadar(GaussianSystem):
+class ReentryVehicleRadarTrackingGaussSystem(GaussianSystem):
     """
     Radar tracking of the reentry vehicle as described in [Julier2004]_.
     Vehicle is entering Earth's atmosphere at high altitude and with great speed, ground radar is tracking it.
@@ -655,7 +655,7 @@ class ReentryRadar(GaussianSystem):
                                [0, 0.17e-3 ** 2]]),
             'q_gain': np.vstack((np.zeros((2, 3)), np.eye(3)))
         }
-        super(ReentryRadar, self).__init__(**kwargs)
+        super(ReentryVehicleRadarTrackingGaussSystem, self).__init__(**kwargs)
 
     def dyn_fcn(self, x, q, pars):
         # scaled ballistic coefficient
@@ -691,7 +691,7 @@ class ReentryRadar(GaussianSystem):
         pass
 
 
-class ReentryRadarSimple(GaussianSystem):
+class ReentryVehicleRadarTrackingSimpleGaussSystem(GaussianSystem):
     """
     Radar tracking of the reentry vehicle as described in [Julier2000]_.
     High velocity projectile is entering atmosphere, radar positioned 100,000ft above Earth's surface (and 100,
@@ -740,7 +740,7 @@ class ReentryRadarSimple(GaussianSystem):
             'r_cov': np.array([[0.03048**2]]),
             'q_factor': np.vstack(np.eye(3))
         }
-        super(ReentryRadarSimple, self).__init__(**kwargs)
+        super(ReentryVehicleRadarTrackingSimpleGaussSystem, self).__init__(**kwargs)
 
     def dyn_fcn(self, x, q, pars):
         return np.array([-x[1] + q[0],
@@ -766,7 +766,7 @@ def radar_tracking_demo():
     import matplotlib.pyplot as plt
     from matplotlib.gridspec import GridSpec
 
-    sys = ReentryRadar()
+    sys = ReentryVehicleRadarTrackingGaussSystem()
     mc = 10
     x = sys.simulate_trajectory(method='rk4', dt=0.05, duration=200, mc_sims=mc)
     y = sys.simulate_measurements(x[..., 0])

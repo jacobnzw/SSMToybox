@@ -18,12 +18,12 @@ import pandas as pd
 
 from ssmtoybox.demo.icinco_demo import evaluate_performance
 from ssmtoybox.ssinf import ExtendedKalman, ExtendedKalmanGPQD
-from ssmtoybox.ssmod import UNGM
+from ssmtoybox.ssmod import UNGMGaussSSM
 from ssmtoybox.mtran import Unscented
 
 steps, mc = 50, 10  # time steps, mc simulations
 # initialize SSM and generate some data
-ssm = UNGM()
+ssm = UNGMGaussSSM()
 x, z = ssm.simulate(steps, mc)
 # use only the central sigma-point
 usp_0 = np.zeros((ssm.xD, 1))

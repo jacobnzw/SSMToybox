@@ -1,7 +1,7 @@
 import numpy as np
 import numpy.linalg as la
 from scipy.linalg import cho_factor, cho_solve
-from ssmtoybox.ssmod import ReentryRadar
+from ssmtoybox.ssmod import ReentryVehicleRadarTrackingGaussSSM
 from ssmtoybox.bq.bqmtran import GaussianProcessTransform
 from ssmtoybox.mtran import MonteCarlo
 from unittest import TestCase
@@ -51,7 +51,7 @@ class MultTest(TestCase):
         # attempt to compute the transformed covariance using cholesky decomposition
 
         # integrand
-        ssm = ReentryRadar()
+        ssm = ReentryVehicleRadarTrackingGaussSSM()
         f = ssm.dyn_eval
         dim_in, dim_out = ssm.xD, 1
 

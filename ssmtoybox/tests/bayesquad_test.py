@@ -4,13 +4,14 @@ import numpy as np
 import numpy.linalg as la
 
 from ssmtoybox.bq.bqmtran import GaussianProcessTransform, GPQMO, BayesSardTransform
-from ssmtoybox.ssmod import Pendulum, CoordinatedTurnBOT, ReentryRadar, UNGM
+from ssmtoybox.ssmod import PendulumGaussSSM, CoordinatedTurnBearingsOnlyTrackingGaussSSM, \
+    ReentryVehicleRadarTrackingGaussSSM, UNGMGaussSSM
 
 np.set_printoptions(precision=4)
 
 
 class GPQuadTest(TestCase):
-    models = [UNGM, Pendulum]
+    models = [UNGMGaussSSM, PendulumGaussSSM]
 
     def test_weights_rbf(self):
         dim = 1
@@ -96,7 +97,7 @@ class BSQTransformTest(TestCase):
 
 
 class GPQMOTest(TestCase):
-    models = [UNGM, Pendulum]
+    models = [UNGMGaussSSM, PendulumGaussSSM]
 
     def test_weights_rbf(self):
         dim_in, dim_out = 1, 1
@@ -117,7 +118,7 @@ class GPQMOTest(TestCase):
         self.assertTrue(np.allclose(wc, wc.swapaxes(0, 1).swapaxes(2, 3)), "Covariance weight matrix not symmetric.")
 
     def test_apply(self):
-        ssm = Pendulum()
+        ssm = PendulumGaussSSM()
         f = ssm.dyn_eval
         dim_in, dim_out = ssm.xD, ssm.xD
         ker_par = np.hstack((np.ones((dim_out, 1)), 3*np.ones((dim_out, dim_in))))
@@ -138,7 +139,7 @@ class GPQMOTest(TestCase):
 
     def test_single_vs_multi_output(self):
         # results of the GPQ and GPQMO should be same if parameters properly chosen, GPQ is a special case of GPQMO
-        ssm = ReentryRadar()
+        ssm = ReentryVehicleRadarTrackingGaussSSM()
         f = ssm.dyn_eval
         dim_in, dim_out = ssm.xD, ssm.xD
 
@@ -170,7 +171,7 @@ class GPQMOTest(TestCase):
     def test_optimize_1D(self):
         # test on simple 1D example, plot the fit
         steps = 100
-        ssm = UNGM()
+        ssm = UNGMGaussSSM()
         x, y = ssm.simulate(steps)
 
         f = ssm.meas_eval
@@ -193,7 +194,7 @@ class GPQMOTest(TestCase):
 
     def test_optimize(self):
         steps = 350
-        ssm = CoordinatedTurnBOT(dt=1.0)
+        ssm = CoordinatedTurnBearingsOnlyTrackingGaussSSM(dt=1.0)
         x, y = ssm.simulate(steps)
 
         f = ssm.dyn_eval
