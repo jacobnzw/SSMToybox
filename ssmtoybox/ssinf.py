@@ -974,12 +974,12 @@ class BSQKalman(GaussianInference):
     """
     Bayes-Sard quadrature Kalman filter (BSQKF) and smoother.
     """
-    def __init__(self, ssm, kern_par_dyn, kern_par_obs, tdeg_dyn=2, tdeg_obs=2, points='ut', point_hyp=None):
+    def __init__(self, ssm, kern_par_dyn, kern_par_obs, mulind_dyn=2, mulind_obs=2, points='ut', point_hyp=None):
         assert isinstance(ssm, StateSpaceModel)
         nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
         nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
-        t_dyn = BayesSardTransform(nq, kern_par_dyn, tdeg_dyn, points, point_hyp)
-        t_obs = BayesSardTransform(nr, kern_par_obs, tdeg_obs, points, point_hyp)
+        t_dyn = BayesSardTransform(nq, kern_par_dyn, mulind_dyn, points, point_hyp)
+        t_obs = BayesSardTransform(nr, kern_par_obs, mulind_obs, points, point_hyp)
         super(BSQKalman, self).__init__(ssm, t_dyn, t_obs)
 
 

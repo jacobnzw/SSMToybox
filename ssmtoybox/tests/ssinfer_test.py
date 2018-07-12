@@ -11,17 +11,25 @@ class BSQKalmanTest(TestCase):
     def test_init(self):
         ssm = UNGM()
         kpar = np.array([[1, 1]], dtype=np.float)
-        alg = BSQKalman(ssm, kpar, kpar)
+        alpha = np.array([[0, 1, 2]])
+        alg = BSQKalman(ssm, kpar, kpar, alpha, alpha, points='ut')
 
     def test_filtering_ungm(self):
         ssm = UNGM()
         kpar = np.array([[1, 1]], dtype=np.float)
-        alg = BSQKalman(ssm, kpar, kpar, points='ut')
+        alpha = np.array([[0, 1, 2]])
+        alg = BSQKalman(ssm, kpar, kpar, alpha, alpha, points='ut')
         x, y = ssm.simulate(100)
         alg.forward_pass(y[..., 0])
 
     def test_filtering_pendulum(self):
-        pass
+        ssm = Pendulum()
+        kpar = np.array([[1, 1, 1]], dtype=np.float)
+        alpha = np.array([[0, 1, 0, 2, 0],
+                          [0, 0, 1, 0, 2]])
+        alg = BSQKalman(ssm, kpar, kpar, alpha, alpha, points='ut')
+        x, y = ssm.simulate(100)
+        alg.forward_pass(y[..., 0])
 
 
 class GPQMarginalizedTest(TestCase):
