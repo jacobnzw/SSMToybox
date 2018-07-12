@@ -916,7 +916,7 @@ class BayesSardModel(Model):
                              ' of the sigma-points.'.format(multi_ind.shape[0], self.dim_in))
 
         # inverse kernel matrix and Vandermonde matrix
-        iK = self.kernel.eval_inv_dot(par, x, scaling=False)  # TODO: make sure scaling=False is OK for both cases.
+        iK = self.kernel.eval_inv_dot(par, x, scaling=False)
         V = vandermonde(multi_ind, x)
         iViKV = la.cho_solve(la.cho_factor(V.T.dot(iK).dot(V) + 1e-8 * np.eye(num_basis)), np.eye(num_basis))
         # expectations of multivariate polynomials
@@ -940,9 +940,9 @@ class BayesSardModel(Model):
             w_cc = xpx.dot(iV)
 
             # expected model variance and integral variance
-            kxx = self.kernel.exp_x_kxx(par)
+            kscale2 = self.kernel.scale.squeeze()**2
             # pxpx.dot(iViKV) == w_c.dot(K)
-            self.model_var = kxx - np.trace(kxpx.T.dot(iV.T) + kxpx.dot(iV) - pxpx.dot(iViKV))
+            self.model_var = kscale2 * (1 - np.trace(kxpx.T.dot(iV.T) + kxpx.dot(iV) - pxpx.dot(iViKV)))
             self.integral_var = kxy - q.T.dot(iV.T).dot(px) - px.T.dot(iV).dot(q) + px.T.dot(iViKV).dot(px)
 
         elif num_basis < self.num_pts:
@@ -962,8 +962,8 @@ class BayesSardModel(Model):
             w_cc = (R - D.dot(A.T)).dot(iK)
 
             # expected model variance and integral variance
-            kxx = self.kernel.scale.squeeze() ** 2
-            self.model_var = kxx * (1 - np.trace(Q.dot(iK)) + np.trace(B.dot(iViKV)))
+            kscale2 = self.kernel.scale.squeeze() ** 2
+            self.model_var = kscale2 * (1 - np.trace(Q.dot(iK)) + np.trace(B.dot(iViKV)))
             self.integral_var = kxy - q.T.dot(iK).dot(q) + b.T.dot(iViKV).dot(b)
 
         else:
