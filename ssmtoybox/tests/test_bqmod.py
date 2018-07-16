@@ -377,6 +377,35 @@ class BayesSardModelTest(TestCase):
         except la.LinAlgError:
             self.fail("Weights not positive definite. Min eigval: {}".format(la.eigvalsh(wc).min()))
 
+        # UT weights in 1D, different kappa and alpha
+        model = BayesSardModel(1, self.ker_par_1d, point_str='ut', point_par={'kappa': 2, 'alpha': 1})
+        alpha = np.array([[0, 1, 2]])
+        w, wc, wcc, emv, ivar = model.bq_weights(self.ker_par_1d, alpha)
+        # UT weights in 1D reproduced?
+        self.assertTrue(np.allclose(w, UnscentedTransform.weights(1, kappa=2, alpha=1)[0]))
+        self.assertGreaterEqual(emv, 0)
+        self.assertGreaterEqual(ivar, 0)
+        # test positive definiteness
+        try:
+            la.cholesky(wc)
+        except la.LinAlgError:
+            self.fail("Weights not positive definite. Min eigval: {}".format(la.eigvalsh(wc).min()))
+
+    def test_weights_sr_1d(self):
+        # SR weights == UT weights for kappa=0 and alpha=1
+        model = BayesSardModel(1, self.ker_par_1d, point_str='ut', point_par={'kappa': 0, 'alpha': 1})
+        alpha = np.array([[0, 1, 2]])
+        w, wc, wcc, emv, ivar = model.bq_weights(self.ker_par_1d, alpha)
+        # UT weights in 1D reproduced?
+        self.assertTrue(np.allclose(w[1:], SphericalRadialTransform.weights(1)))
+        self.assertGreaterEqual(emv, 0)
+        self.assertGreaterEqual(ivar, 0)
+        # test positive definiteness
+        try:
+            la.cholesky(wc)
+        except la.LinAlgError:
+            self.fail("Weights not positive definite. Min eigval: {}".format(la.eigvalsh(wc).min()))
+
     def test_weights_gh5_1d(self):
         # GH-5 weights in 1D
         model = BayesSardModel(1, self.ker_par_1d, point_str='gh', point_par={'degree': 5})
