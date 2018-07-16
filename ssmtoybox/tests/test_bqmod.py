@@ -6,13 +6,12 @@ import matplotlib.pyplot as plt
 from numpy import newaxis as na
 
 from ssmtoybox.bq.bqmod import GaussianProcessModel, StudentTProcessModel, BayesSardModel
+from ssmtoybox.mtran import UnscentedTransform, GaussHermiteTransform, SphericalRadialTransform
 from ssmtoybox.utils import vandermonde
 
 
 fcn = lambda x: np.sin((x + 1) ** -1)
 # fcn = lambda x: 0.5 * x + 25 * x / (1 + x ** 2)
-
-
 # fcn = lambda x: np.sin(x)
 fcn = lambda x: 0.05*x ** 2
 # fcn = lambda x: x
@@ -352,7 +351,7 @@ class BayesSardModelTest(TestCase):
             kxpx_mc = cma_mc(k[..., na] * p[:, na, :], kxpx_mc, i*batch_size, axis=0)
 
         # compare MC approximates with analytic expressions
-        tol = 1e-3
+        tol = 5e-3
         print('Maximum absolute difference using {:d} samples.'.format(batch_size*num_iter))
         print('px {:.2e}'.format(np.abs(px - px_mc).max()))
         print('xpx {:.2e}'.format(np.abs(xpx - xpx_mc).max()))
@@ -363,9 +362,7 @@ class BayesSardModelTest(TestCase):
         self.assertLessEqual(np.abs(pxpx - pxpx_mc).max(), tol)
         self.assertLessEqual(np.abs(kxpx - kxpx_mc).max(), tol)
 
-    def test_weights(self):
-        from ssmtoybox.mtran import UnscentedTransform, GaussHermiteTransform
-
+    def test_weights_ut_1d(self):
         # UT weights in 1D
         model = BayesSardModel(1, self.ker_par_1d, point_str='ut', point_par=self.pt_par_ut)
         alpha = np.array([[0, 1, 2]])
@@ -380,6 +377,7 @@ class BayesSardModelTest(TestCase):
         except la.LinAlgError:
             self.fail("Weights not positive definite. Min eigval: {}".format(la.eigvalsh(wc).min()))
 
+    def test_weights_gh5_1d(self):
         # GH-5 weights in 1D
         model = BayesSardModel(1, self.ker_par_1d, point_str='gh', point_par={'degree': 5})
         alpha = np.array([[0, 1, 2, 3, 4]])
@@ -394,6 +392,7 @@ class BayesSardModelTest(TestCase):
         except la.LinAlgError:
             self.fail("Weights not positive definite. Min eigval: {}".format(la.eigvalsh(wc).min()))
 
+    def test_weights_ut_2d(self):
         # UT weights in 2D
         par = np.array([[1.0, 1.0, 1]])
         alpha = np.array([[0, 1, 0, 2, 0],
@@ -410,6 +409,7 @@ class BayesSardModelTest(TestCase):
         except la.LinAlgError:
             self.fail("Weights not positive definite. Min eigval: {}".format(la.eigvalsh(wc).min()))
 
+    def test_weights_gh3_2d(self):
         # GH-3 weights in 2D
         # there are 6 multivariate polynomials in 2D, UT has only 5 points in 2D
         model = BayesSardModel(2, self.ker_par_2d, point_str='gh', point_par={'degree': 3})
