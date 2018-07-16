@@ -380,6 +380,20 @@ class BayesSardModelTest(TestCase):
         except la.LinAlgError:
             self.fail("Weights not positive definite. Min eigval: {}".format(la.eigvalsh(wc).min()))
 
+        # GH-5 weights in 1D
+        model = BayesSardModel(1, self.ker_par_1d, point_str='gh', point_par={'degree': 5})
+        alpha = np.array([[0, 1, 2, 3, 4]])
+        w, wc, wcc, emv, ivar = model.bq_weights(self.ker_par_1d, alpha)
+        # GH-5 weights in 1D reproduced?
+        self.assertTrue(np.allclose(w, GaussHermiteTransform.weights(1, degree=5)))
+        self.assertGreaterEqual(emv, 0)
+        self.assertGreaterEqual(ivar, 0)
+        # test positive definiteness
+        try:
+            la.cholesky(wc)
+        except la.LinAlgError:
+            self.fail("Weights not positive definite. Min eigval: {}".format(la.eigvalsh(wc).min()))
+
         # UT weights in 2D
         par = np.array([[1.0, 1.0, 1]])
         alpha = np.array([[0, 1, 0, 2, 0],
