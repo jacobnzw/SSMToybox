@@ -455,6 +455,20 @@ class BayesSardModelTest(TestCase):
         except la.LinAlgError:
             self.fail("Weights not positive definite. Min eigval: {}".format(la.eigvalsh(wc).min()))
 
+    def test_weights_ut_5d(self):
+        model = BayesSardModel(5, np.array([[1.0, 25, 25, 25, 25, 25]]), point_str='ut')
+        alpha = np.hstack((np.zeros((5, 1)), np.eye(5), 2 * np.eye(5))).astype(np.int)
+        par = np.array([[1.0, 25, 25, 25, 25, 25]])
+        w, wc, wcc, emv, ivar = model.bq_weights(par, alpha)
+        # self.assertTrue(np.allclose(w, UnscentedTransform.weights(5, beta=0)[0]))
+        self.assertGreaterEqual(emv, 0)
+        self.assertGreaterEqual(ivar, 0)
+        # test positive definiteness
+        try:
+            la.cholesky(wc)
+        except la.LinAlgError:
+            self.fail("Weights not positive definite. Min eigval: {}".format(la.eigvalsh(wc).min()))
+
 
 class TPModelTest(TestCase):
 
