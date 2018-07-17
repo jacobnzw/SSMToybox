@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import matplotlib.pyplot as plt
 from collections import OrderedDict
 
 from ssmtoybox.mtran import UnscentedTransform, SphericalRadialTransform, MonteCarloTransform
@@ -23,28 +24,28 @@ def polar2cartesian_skl_demo():
     theta_pt = np.linspace(theta_min, theta_max, num_mean)
     r_pt = r_spiral(theta_pt)
 
-    # samples from normal RVs centered on the points of the spiral
-    mean = np.array([r_pt, theta_pt])
+    # setup input moments: means are placed on the points of the spiral
+    num_cov = 10  # num_cov covariances are considered for each mean
     r_std = 0.5
-
-    # multiple azimuth covariances in increasing order
-    num_cov = 10
     theta_std = np.deg2rad(np.linspace(6, 36, num_cov))
+    mean = np.array([r_pt, theta_pt])
     cov = np.zeros((num_dim, num_dim, num_cov))
     for i in range(num_cov):
         cov[..., i] = np.diag([r_std**2, theta_std[i]**2])
 
-    # COMPARE moment transforms # TODO: polar2cartesian transformation, UT vs. BSQ (vs. GPQ)
+    # COMPARE moment transforms
     ker_par = np.array([[1.0, 60, 6]])
-    moment_tforms = OrderedDict([
-        ('gpq-sr', GaussianProcessTransform(num_dim, ker_par, kernel='rbf', points='sr')),
-        ('sr', SphericalRadialTransform(num_dim)),
+    mul_ind = np.hstack((np.zeros((num_dim, 1)), np.eye(num_dim), 2*np.eye(num_dim))).astype(np.int)
+    tforms = OrderedDict([
+        ('bsq-ut', BayesSardTransform(num_dim, ker_par, mul_ind, point_str='ut', point_par={'kappa': 2, 'alpha': 1})),
+        # ('gpq-ut', GaussianProcessTransform(num_dim, ker_par, point_str='ut', point_par={'alpha': 1})),
+        ('ut', UnscentedTransform(num_dim, kappa=2, alpha=1, beta=0)),
     ])
     baseline_mtf = MonteCarloTransform(num_dim, n=10000)
-    num_tforms = len(moment_tforms)
+    num_tforms = len(tforms)
 
     # initialize storage of SKL scores
-    skl_dict = dict([(mt_str, np.zeros((num_mean, num_cov))) for mt_str in moment_tforms.keys()])
+    skl_dict = dict([(mt_str, np.zeros((num_mean, num_cov))) for mt_str in tforms.keys()])
 
     # for each mean
     for i in range(num_mean):
@@ -56,36 +57,40 @@ def polar2cartesian_skl_demo():
             # calculate baseline using Monte Carlo
             mean_out_mc, cov_out_mc, cc = baseline_mtf.apply(polar2cartesian, mean_in, cov_in, None)
 
-            # for each MT
-            for mt_str in moment_tforms.keys():
+            # for each moment transform
+            for mt_str in tforms.keys():
 
                 # calculate the transformed moments
-                mean_out, cov_out, cc = moment_tforms[mt_str].apply(polar2cartesian, mean_in, cov_in, None)
+                mean_out, cov_out, cc = tforms[mt_str].apply(polar2cartesian, mean_in, cov_in, None)
 
                 # compute SKL
                 skl_dict[mt_str][i, j] = symmetrized_kl_divergence(mean_out_mc, cov_out_mc, mean_out, cov_out)
 
     # PLOT the SKL score for each MT and position on the spiral
     plt.style.use('seaborn-deep')
-    printfig = FigurePrint()
+    # printfig = FigurePrint()
     fig = plt.figure()
 
     # Average over mean indexes
     ax1 = fig.add_subplot(121)
     index = np.arange(num_mean)+1
-    for mt_str in moment_tforms.keys():
+    for mt_str in tforms.keys():
         ax1.plot(index, skl_dict[mt_str].mean(axis=1), marker='o', label=mt_str.upper())
     ax1.set_xlabel('Position index')
     ax1.set_ylabel('SKL')
 
     # Average over azimuth variances
     ax2 = fig.add_subplot(122, sharey=ax1)
-    for mt_str in moment_tforms.keys():
+    for mt_str in tforms.keys():
         ax2.plot(np.rad2deg(theta_std), skl_dict[mt_str].mean(axis=0), marker='o', label=mt_str.upper())
     ax2.set_xlabel('Azimuth STD [$ \circ $]')
     ax2.legend()
     fig.tight_layout(pad=0)
+    plt.show()
 
     # save figure
-    printfig.savefig('polar2cartesian_skl')
+    # printfig.savefig('polar2cartesian_skl')
 
+
+if __name__ == '__main__':
+    polar2cartesian_skl_demo()
