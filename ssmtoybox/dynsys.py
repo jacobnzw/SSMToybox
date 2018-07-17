@@ -738,7 +738,7 @@ class ReentryVehicleRadarTrackingSimpleGaussSystem(GaussianSystem):
                                [0, 0, 0]]),
             'r_mean': np.zeros(self.rD),
             'r_cov': np.array([[0.03048**2]]),
-            'q_factor': np.vstack(np.eye(3))
+            'q_gain': np.vstack(np.eye(3))
         }
         super(ReentryVehicleRadarTrackingSimpleGaussSystem, self).__init__(**kwargs)
 
