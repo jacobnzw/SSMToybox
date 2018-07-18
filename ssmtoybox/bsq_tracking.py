@@ -224,14 +224,18 @@ def reentry_demo():
     # x_ref = x.mean(axis=2)
 
     # Initialize filters
-    par_dyn = np.array([[1.0, 25, 25, 25, 25, 25]])  # TODO: use less extreme values to get positive EMV/IVAR
-    par_obs = np.array([[1.0, 25, 25, 1e4, 1e4, 1e4]])
+    par_dyn = np.array([[1.0, 1, 1, 1, 1, 1]])
+    par_obs = np.array([[1.0, 0.9, 0.9, 1e4, 1e4, 1e4]])  # np.atleast_2d(np.ones(6))
     mul_ut = np.hstack((np.zeros((ssm.xD, 1)), np.eye(ssm.xD), 2 * np.eye(ssm.xD))).astype(np.int)
     alg = (
         # GaussianProcessKalman(ssm, par_dyn, par_obs, kernel='rbf', points='ut'),
         BayesSardKalman(ssm, par_dyn, par_obs, mul_ut, mul_ut, points='ut'),
         UnscentedKalman(ssm, beta=0),
     )
+
+    print('BSQ EMV | \tdyn: {:.2e}\tobs: {:.2e}'.format(alg[0].tf_dyn.model.model_var, alg[0].tf_meas.model.model_var))
+    alg[0].tf_dyn.model.model_var = 0.001*np.eye(5)
+    alg[0].tf_meas.model.model_var = 1e-8*np.eye(2)
 
     # Are both filters using the same sigma-points?
     # assert np.array_equal(alg[0].tf_dyn.model.points, alg[1].tf_dyn.unit_sp)
