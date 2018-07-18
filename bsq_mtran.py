@@ -13,7 +13,7 @@ def polar2cartesian(x, pars):
 
 
 def polar2cartesian_skl_demo():
-    num_dim = 2
+    dim = 2
 
     # create spiral in polar domain
     r_spiral = lambda x: 10 * x
@@ -29,19 +29,19 @@ def polar2cartesian_skl_demo():
     r_std = 0.5
     theta_std = np.deg2rad(np.linspace(6, 36, num_cov))
     mean = np.array([r_pt, theta_pt])
-    cov = np.zeros((num_dim, num_dim, num_cov))
+    cov = np.zeros((dim, dim, num_cov))
     for i in range(num_cov):
         cov[..., i] = np.diag([r_std**2, theta_std[i]**2])
 
     # COMPARE moment transforms
     ker_par = np.array([[1.0, 60, 6]])
-    mul_ind = np.hstack((np.zeros((num_dim, 1)), np.eye(num_dim), 2*np.eye(num_dim))).astype(np.int)
+    mul_ind = np.hstack((np.zeros((dim, 1)), np.eye(dim), 2*np.eye(dim))).astype(np.int)
     tforms = OrderedDict([
-        ('bsq-ut', BayesSardTransform(num_dim, ker_par, mul_ind, point_str='ut', point_par={'kappa': 2, 'alpha': 1})),
-        # ('gpq-ut', GaussianProcessTransform(num_dim, ker_par, point_str='ut', point_par={'alpha': 1})),
-        ('ut', UnscentedTransform(num_dim, kappa=2, alpha=1, beta=0)),
+        ('bsq-ut', BayesSardTransform(dim, dim, ker_par, mul_ind, point_str='ut', point_par={'kappa': 2, 'alpha': 1})),
+        ('gpq-ut', GaussianProcessTransform(dim, dim, ker_par, point_str='ut', point_par={'alpha': 1})),
+        ('ut', UnscentedTransform(dim, kappa=2, alpha=1, beta=0)),
     ])
-    baseline_mtf = MonteCarloTransform(num_dim, n=10000)
+    baseline_mtf = MonteCarloTransform(dim, n=10000)
     num_tforms = len(tforms)
 
     # initialize storage of SKL scores
