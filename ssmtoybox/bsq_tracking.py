@@ -233,9 +233,17 @@ def reentry_demo():
         UnscentedKalman(ssm, beta=0),
     )
 
-    print('BSQ EMV | \tdyn: {:.2e}\tobs: {:.2e}'.format(alg[0].tf_dyn.model.model_var, alg[0].tf_meas.model.model_var))
-    alg[0].tf_dyn.model.model_var = 0.001*np.eye(5)
-    alg[0].tf_meas.model.model_var = 1e-8*np.eye(2)
+    kpdyn = np.array([[1.0, 1, 1e3, 1, 1e3, 1e3],
+                      [1.0, 1e3, 1, 1e3, 1, 1e3],
+                      [1.0, 1, 1, 1, 1, 1],
+                      [1.0, 1, 1, 1, 1, 1],
+                      [1.0, 1e3, 1e3, 1e3, 1e3, 1]])
+    alg[0].tf_dyn.model.model_var = multivariate_emv(alg[0].tf_dyn, kpdyn, mul_ut)  # 0.001*np.eye(5)
+    kpobs = np.array([[1.0, 1, 1, 1e2, 1e2, 1e2],
+                      [1.0, 1.4, 1.4, 1e2, 1e2, 1e2]])
+    alg[0].tf_meas.model.model_var = 1e-8*np.eye(2)  #multivariate_emv(alg[0].tf_meas, kpobs, mul_ut)  # 1e-8*np.eye(2)
+    print('BSQ EMV\ndyn: {} \nobs: {}'.format(alg[0].tf_dyn.model.model_var.diagonal(),
+                                              alg[0].tf_meas.model.model_var.diagonal()))
 
     # Are both filters using the same sigma-points?
     # assert np.array_equal(alg[0].tf_dyn.model.points, alg[1].tf_dyn.unit_sp)
@@ -277,10 +285,10 @@ def reentry_demo():
     lcr = np.zeros((steps, mc_sims, num_alg))
     for a in range(num_alg):
         for k in range(steps):
-            mse = mse_matrix(x[:4, k, :], mean[:4, k, :, a])
+            mse = mse_matrix(x[:2, k, :], mean[:2, k, :, a])
             for imc in range(mc_sims):
                 error2[:, k, imc, a] = squared_error(x[:, k, imc], mean[:, k, imc, a])
-                lcr[k, imc, a] = log_cred_ratio(x[:4, k, imc], mean[:4, k, imc, a], cov[:4, :4, k, imc, a], mse)
+                lcr[k, imc, a] = log_cred_ratio(x[:2, k, imc], mean[:2, k, imc, a], cov[:2, :2, k, imc, a], mse)
 
     # Averaged RMSE and Inclination Indicator in time
     pos_rmse_vs_time = np.sqrt((error2[:2, ...]).sum(axis=0)).mean(axis=1)
@@ -301,6 +309,27 @@ def reentry_demo():
 
     print('Average RMSE: {}'.format(pos_rmse_vs_time.mean(axis=0)))
     print('Average I2: {}'.format(inc_ind_vs_time.mean(axis=0)))
+
+
+def multivariate_emv(tf, par, multi_ind):
+    import scipy.linalg as la
+    from ssmtoybox.utils import vandermonde
+    dim, num_basis = multi_ind.shape
+    num_out, num_par = par.shape
+    x = tf.model.points
+    emv = np.eye(num_out)
+    for i in range(num_out):
+        # inverse kernel matrix and Vandermonde matrix
+        iK = tf.model.kernel.eval_inv_dot(par[i, :], x, scaling=False)
+        V = vandermonde(multi_ind, x)
+        iV = la.solve(V, np.eye(num_basis))
+        iViKV = la.cho_solve(la.cho_factor(V.T.dot(iK).dot(V) + 1e-8 * np.eye(num_basis)), np.eye(num_basis))
+        # expectations of multivariate polynomials
+        pxpx = tf.model._exp_x_pxpx(multi_ind)
+        kxpx = tf.model._exp_x_kxpx(par[i, :], multi_ind, x)
+        # kernel expectations
+        emv[i, i] = par[i, 0] * (1 - np.trace(kxpx.T.dot(iV.T) + kxpx.dot(iV) - pxpx.dot(iViKV)))
+    return emv
 
 
 if __name__ == '__main__':
