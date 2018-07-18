@@ -39,7 +39,7 @@ class MultTest(TestCase):
 
         dim_in, dim_out = 2, 1
         ker_par_mo = np.hstack((np.ones((dim_out, 1)), 1 * np.ones((dim_out, dim_in))))
-        tf_mo = GaussianProcessTransform(dim_in, ker_par_mo, point_str='sr')
+        tf_mo = GaussianProcessTransform(dim_in, dim_out, ker_par_mo, point_str='sr')
         iK, Q = tf_mo.iK, tf_mo.Q
 
         C1 = iK.dot(Q).dot(iK)
@@ -60,7 +60,7 @@ class MultTest(TestCase):
 
         # transform
         ker_par_mo = np.hstack((np.ones((dim_out, 1)), 25 * np.ones((dim_out, dim_in))))
-        tf_so = GaussianProcessTransform(dim_in, ker_par_mo, point_str='sr')
+        tf_so = GaussianProcessTransform(dim_in, dim_out, ker_par_mo, point_str='sr')
 
         # Monte-Carlo for ground truth
         tf_mc = MonteCarloTransform(dim_in, 1000)

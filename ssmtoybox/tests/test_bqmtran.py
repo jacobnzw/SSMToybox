@@ -17,7 +17,7 @@ class GPQuadTest(TestCase):
         dim = 1
         khyp = np.array([[1, 3]], dtype=np.float)
         phyp = {'kappa': 0.0, 'alpha': 1.0}
-        tf = GaussianProcessTransform(dim, khyp, point_par=phyp)
+        tf = GaussianProcessTransform(dim, 1, khyp, point_par=phyp)
         wm, wc, wcc = tf.wm, tf.Wc, tf.Wcc
         print('wm = \n{}\nwc = \n{}\nwcc = \n{}'.format(wm, wc, wcc))
         self.assertTrue(np.allclose(wc, wc.T), "Covariance weight matrix not symmetric.")
@@ -26,7 +26,7 @@ class GPQuadTest(TestCase):
         dim = 2
         khyp = np.array([[1, 3, 3]], dtype=np.float)
         phyp = {'kappa': 0.0, 'alpha': 1.0}
-        tf = GaussianProcessTransform(dim, khyp, point_par=phyp)
+        tf = GaussianProcessTransform(dim, 1, khyp, point_par=phyp)
         wm, wc, wcc = tf.wm, tf.Wc, tf.Wcc
         print('wm = \n{}\nwc = \n{}\nwcc = \n{}'.format(wm, wc, wcc))
         self.assertTrue(np.allclose(wc, wc.T), "Covariance weight matrix not symmetric.")
@@ -34,7 +34,7 @@ class GPQuadTest(TestCase):
     def test_rbf_scaling_invariance(self):
         dim = 5
         ker_par = np.array([[1, 3, 3, 3, 3, 3]], dtype=np.float)
-        tf = GaussianProcessTransform(dim, ker_par)
+        tf = GaussianProcessTransform(dim, 1, ker_par)
         w0 = tf.weights([1] + dim * [1000])
         w1 = tf.weights([358.0] + dim * [1000.0])
         self.assertTrue(np.alltrue([np.array_equal(a, b) for a, b in zip(w0, w1)]))
@@ -42,7 +42,7 @@ class GPQuadTest(TestCase):
     def test_expected_model_variance(self):
         dim = 2
         ker_par = np.array([[1, 3, 3]], dtype=np.float)
-        tf = GaussianProcessTransform(dim, ker_par, point_str='sr')
+        tf = GaussianProcessTransform(dim, 1, ker_par, point_str='sr')
         emv0 = tf.model.exp_model_variance(ker_par)
         emv1 = tf.model.exp_model_variance(ker_par)
         # expected model variance must be positive even for numerically unpleasant settings
@@ -51,7 +51,7 @@ class GPQuadTest(TestCase):
     def test_integral_variance(self):
         dim = 2
         ker_par = np.array([[1, 3, 3]], dtype=np.float)
-        tf = GaussianProcessTransform(dim, ker_par, point_str='sr')
+        tf = GaussianProcessTransform(dim, 1, ker_par, point_str='sr')
         ivar0 = tf.model.integral_variance([1, 600, 6])
         ivar1 = tf.model.integral_variance([1.1, 600, 6])
         # expected model variance must be positive even for numerically unpleasant settings
@@ -62,11 +62,12 @@ class GPQuadTest(TestCase):
             f = ssm().dyn_eval
             dim = ssm.xD
             ker_par = np.hstack((np.ones((1, 1)), 3*np.ones((1, dim))))
-            tf = GaussianProcessTransform(dim, ker_par)
+            tf = GaussianProcessTransform(dim, dim, ker_par)
             mean, cov = np.zeros(dim, ), np.eye(dim)
             tmean, tcov, tccov = tf.apply(f, mean, cov, np.atleast_1d(1.0))
             print("Transformed moments\nmean: {}\ncov: {}\nccov: {}".format(tmean, tcov, tccov))
 
+            self.assertTrue(tf.I_out.shape == (dim, dim))
             # test positive definiteness
             try:
                 la.cholesky(tcov)
@@ -88,8 +89,9 @@ class BSQTransformTest(TestCase):
         alpha_ut = np.array([[0, 1, 0, 2, 0],
                              [0, 0, 1, 0, 2]])
         par = np.array([[1.0, 1, 1]])
-        mt = BayesSardTransform(2, par, point_str='ut', multi_ind=alpha_ut)
+        mt = BayesSardTransform(2, 2, par, multi_ind=alpha_ut, point_str='ut')
         mean_out, cov_out, cc = mt.apply(polar2cartesian, mean_in, cov_in, None)
+        self.assertTrue(mt.I_out.shape == (2, 2))
         try:
             la.cholesky(cov_out)
         except la.LinAlgError:
@@ -148,7 +150,7 @@ class GPQMOTest(TestCase):
 
         # single-output GPQ
         ker_par_so = np.hstack((np.ones((1, 1)), 25 * np.ones((1, dim_in))))
-        tf_so = GaussianProcessTransform(dim_in, ker_par_so)
+        tf_so = GaussianProcessTransform(dim_in, dim_out, ker_par_so)
 
         # multi-output GPQ
         ker_par_mo = np.hstack((np.ones((dim_out, 1)), 25 * np.ones((dim_out, dim_in))))

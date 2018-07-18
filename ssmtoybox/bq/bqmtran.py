@@ -304,8 +304,8 @@ class GaussianProcessTransform(BQTransform):
     point_par : dict
         Sigma-point set parameters.
     """
-    def __init__(self, dim_in, kern_par, kern_str='rbf', point_str='ut', point_par=None):
-        super(GaussianProcessTransform, self).__init__(dim_in, 1, kern_par, 'gp', kern_str, point_str, point_par)
+    def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None):
+        super(GaussianProcessTransform, self).__init__(dim_in, dim_out, kern_par, 'gp', kern_str, point_str, point_par)
         # BQ transform weights for the mean, covariance and cross-covariance
         self.wm, self.Wc, self.Wcc = self.weights(kern_par)
 
@@ -331,9 +331,8 @@ class BayesSardTransform(BQTransform):
     point_par : dict, optional
         Sigma-point set parameters.
     """
-
-    def __init__(self, dim_in, kern_par, multi_ind=2, point_str='ut', point_par=None):
-        super(BayesSardTransform, self).__init__(dim_in, 1, kern_par, 'bs', 'rbf', point_str, point_par,
+    def __init__(self, dim_in, dim_out, kern_par, multi_ind=2, point_str='ut', point_par=None):
+        super(BayesSardTransform, self).__init__(dim_in, dim_out, kern_par, 'bs', 'rbf', point_str, point_par,
                                                  multi_ind=multi_ind)
         # BQ transform weights for the mean, covariance and cross-covariance
         self.wm, self.Wc, self.Wcc = self.weights(kern_par, multi_ind)
@@ -385,8 +384,9 @@ class StudentTProcessTransform(BQTransform):
     nu : float
         Degrees of freedom parameter of the t-process regression model.
     """
-    def __init__(self, dim_in, kern_par, kern_str='rbf', point_str='ut', point_par=None, nu=3.0):
-        super(StudentTProcessTransform, self).__init__(dim_in, 1, kern_par, 'tp', kern_str, point_str, point_par, nu=nu)
+    def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None, nu=3.0):
+        super(StudentTProcessTransform, self).__init__(dim_in, dim_out, kern_par, 'tp', kern_str, point_str, point_par,
+                                                       nu=nu)
         # BQ transform weights for the mean, covariance and cross-covariance
         self.wm, self.Wc, self.Wcc = self.weights(kern_par)
 
