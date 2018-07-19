@@ -179,6 +179,8 @@ def tables():
             'smoother_RMSE': rmse_table_s, 'smoother_NCI': nci_table_s, 'smoother_NLL': nll_table_s}
 
 
+# TODO: plot EMV vs. ell on lower dimensional problem
+# FIXME: don't use kwarg for lscale, it's silly
 def hypers_demo(lscale=[1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1, 3, 1e1, 3e1]):
     steps, mc = 500, 20
     ssm = UNGMGaussSSM()  # initialize UNGM model
