@@ -236,17 +236,16 @@ def reentry_demo():
         'ukf': UnscentedKalman(ssm, beta=0),
     })
 
-    kpdyn = np.array([[1.0, 1, 1e3, 1, 1e3, 1e3],
-                      [1.0, 1e3, 1, 1e3, 1, 1e3],
-                      [1.0, 1, 1, 1, 1, 1],
-                      [1.0, 1, 1, 1, 1, 1],
-                      [1.0, 1e3, 1e3, 1e3, 1e3, 1]])
-    # TODO: lower velocity EMV
-    alg['bsqkf'].tf_dyn.model.model_var = multivariate_emv(alg['bsqkf'].tf_dyn, kpdyn, mul_ut)  # 0.001*np.eye(5)
+    kpdyn = np.array([[0.5, 1, 1e3, 1, 1e3, 1e3],
+                      [0.5, 1e3, 1, 1e3, 1, 1e3],
+                      [0.35, 3, 3, 3, 3, 1],
+                      [0.35, 3, 3, 3, 3, 1],
+                      [2.2, 1e3, 1e3, 1e3, 1e3, 1]])
+    alg['bsqkf'].tf_dyn.model.model_var = multivariate_emv(alg['bsqkf'].tf_dyn, kpdyn, mul_ut)
     kpobs = np.array([[1.0, 1, 1, 1e2, 1e2, 1e2],
                       [1.0, 1.4, 1.4, 1e2, 1e2, 1e2]])
     # multivariate_emv(alg[0].tf_meas, kpobs, mul_ut)  # 1e-8*np.eye(2)
-    alg['bsqkf'].tf_meas.model.model_var = 1e-8*np.eye(2)
+    alg['bsqkf'].tf_meas.model.model_var = 0*np.eye(2)
     print('BSQ EMV\ndyn: {} \nobs: {}'.format(alg['bsqkf'].tf_dyn.model.model_var.diagonal(),
                                               alg['bsqkf'].tf_meas.model.model_var.diagonal()))
 
@@ -299,7 +298,7 @@ def reentry_demo():
     print('Average parameter RMSE: {}'.format(theta_rmse_vs_time.mean(axis=0)))
     print('Average parameter Inc.: {}'.format(theta_inc_vs_time.mean(axis=0)))
 
-    # PLOTS
+    # PLOTS # TODO: figures for states rather than scores
     # root mean squared error
     plt.figure().suptitle('RMSE')
     g = GridSpec(3, 1)
