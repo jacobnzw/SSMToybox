@@ -998,15 +998,15 @@ class BayesSardModel(Model):
             mulind = self.mulind
         par = self.kernel.get_parameters(par)
 
-        pxpx = self.kernel.exp_x_pxpx(mulind)
-        kxpx = self.kernel.exp_x_kxpx(par, mulind, self.points)
+        pxpx = self._exp_x_pxpx(mulind)
+        kxpx = self._exp_x_kxpx(par, mulind, self.points)
         kxkx = self.kernel.exp_x_kxkx(par, par, self.points)
         iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
         V = vandermonde(mulind, self.points)
         iViKV = la.cho_solve(la.cho_factor(V.T.dot(iK).dot(V)), np.eye(mulind.shape[1]))
         Z = V.T.dot(iK)
         B = Z.dot(kxkx).dot(Z.T) + pxpx - Z.dot(kxpx) - kxpx.T.dot(Z.T)
-        kscale = self.self.kernel.scale.squeeze() ** 2
+        kscale = self.kernel.scale.squeeze() ** 2
         return kscale * (1 - np.trace(kxkx.dot(iK)) + np.trace(B.dot(iViKV)))
 
     def integral_variance(self, par, mulind=None):
