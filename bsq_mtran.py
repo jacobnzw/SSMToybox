@@ -8,6 +8,71 @@ from ssmtoybox.bq.bqmtran import BayesSardTransform, GaussianProcessTransform
 from ssmtoybox.utils import symmetrized_kl_divergence
 
 
+def sos(x, pars, dx=False):
+    """Sum of squares function.
+
+    Parameters
+    ----------
+    x : numpy.ndarray 1D-array
+    Returns
+    -------
+    """
+    x = np.atleast_1d(x)
+    if not dx:
+        return np.atleast_1d(np.sum(x ** 2, axis=0))
+    else:
+        return np.atleast_1d(2 * x).T.flatten()
+
+
+def toa(x, pars, dx=False):
+    """Time of arrival.
+
+    Parameters
+    ----------
+    x
+    Returns
+    -------
+    """
+    x = np.atleast_1d(x)
+    if not dx:
+        return np.atleast_1d(np.sum(x ** 2, axis=0) ** 0.5)
+    else:
+        return np.atleast_1d(x * np.sum(x ** 2, axis=0) ** (-0.5)).T.flatten()
+
+
+def rss(x, pars, dx=False):
+    """Received signal strength in dB scale.
+
+    Parameters
+    ----------
+    x : N-D ndarray
+    Returns
+    -------
+    """
+    c = 10
+    b = 2
+    x = np.atleast_1d(x)
+    if not dx:
+        return np.atleast_1d(c - b * 10 * np.log10(np.sum(x ** 2, axis=0)))
+    else:
+        return np.atleast_1d(-b * 20 / (x * np.log(10))).T.flatten()
+
+
+def doa(x, pars, dx=False):
+    """Direction of arrival in 2D.
+
+    Parameters
+    ----------
+    x : 2-D ndarray
+    Returns
+    -------
+    """
+    if not dx:
+        return np.atleast_1d(np.arctan2(x[1], x[0]))
+    else:
+        return np.array([-x[1], x[0]]) / (x[0] ** 2 + x[1] ** 2).T.flatten()
+
+
 def polar2cartesian(x, pars):
     return x[0] * np.array([np.cos(x[1]), np.sin(x[1])])
 
