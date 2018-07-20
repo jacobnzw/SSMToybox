@@ -9,7 +9,7 @@ from scipy.linalg import cho_factor, cho_solve
 from numpy.linalg import cholesky
 
 from ssmtoybox.ssinf import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman
-from ssmtoybox.ssinf import GaussianProcessKalman, BayesSardKalman
+from ssmtoybox.ssinf import GaussianProcessKalman, BayesSardKalman, BayesSardTransform
 from ssmtoybox.ssmod import UNGMGaussSSM
 from ssmtoybox.utils import bootstrap_var, squared_error, neg_log_likelihood, log_cred_ratio, mse_matrix
 
@@ -180,8 +180,7 @@ def tables():
 
 
 # TODO: plot EMV vs. ell on lower dimensional problem
-# FIXME: don't use kwarg for lscale, it's silly
-def hypers_demo(lscale=[1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1, 3, 1e1, 3e1]):
+def lengthscale_filter_demo(lscale):
     steps, mc = 500, 20
     ssm = UNGMGaussSSM()  # initialize UNGM model
     x, z = ssm.simulate(steps, mc_sims=mc)  # generate some data
@@ -229,7 +228,46 @@ def hypers_demo(lscale=[1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1, 3, 1e1, 3e1]):
     return plot_data
 
 
+def lengthscale_demo(lscale):
+    alpha_ut = np.array([[0, 1, 2]])
+    tf = BayesSardTransform(1, 1, np.array([[1, 1]]), alpha_ut, point_str='ut')
+
+    emv = np.zeros((len(lscale)))
+    for i, ell in enumerate(lscale):
+        par = np.array([[1.0, ell]])
+        emv[i] = tf.model.exp_model_variance(par, alpha_ut)
+
+    plt.figure()
+    plt.semilogx(lscale, emv)
+    plt.xlabel('$\ell$')
+    plt.ylabel('EMV')
+    plt.show()
+
+    # 2D case
+    alpha_ut = np.hstack((np.zeros((2, 1)), np.eye(2), 2*np.eye(2))).astype(np.int)
+    tf = BayesSardTransform(2, 1, np.array([[1, 1, 1]]), alpha_ut, point_str='ut')
+    emv = np.zeros((len(lscale), len(lscale)))
+    for i, ell_0 in enumerate(lscale):
+        for j, ell_1 in enumerate(lscale):
+            par = np.array([[1.0, ell_0, ell_1]])
+            emv[i, j] = tf.model.exp_model_variance(par, alpha_ut)
+
+    fig = plt.figure()
+    from mpl_toolkits.mplot3d.axes3d import Axes3D
+    ax = Axes3D(fig)
+    X, Y = np.meshgrid(np.log10(lscale), np.log10(lscale))
+    ax.plot_surface(X, Y, emv)
+
+    ax.set_xlabel('$\log_{10}(\ell_1)$')
+    ax.set_ylabel('$\log_{10}(\ell_2)$')
+    ax.set_zlabel('EMV')
+    plt.show()
+
+
 if __name__ == '__main__':
     # TODO: use argsparse to create nice command line interface
-    tables_dict = tables()
-    # plot_data = hypers_demo()
+    # tables_dict = tables()
+
+    lscales = np.logspace(-3, 3, 25)
+    # plot_data = lengthscale_filter_demo(lscales)
+    lengthscale_demo(lscales)
