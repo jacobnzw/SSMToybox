@@ -228,7 +228,7 @@ def lengthscale_filter_demo(lscale):
     return plot_data
 
 
-def lengthscale_demo(lscale):
+def lengthscale_demo(lscale, two_dim=False):
     alpha_ut = np.array([[0, 1, 2]])
     tf = BayesSardTransform(1, 1, np.array([[1, 1]]), alpha_ut, point_str='ut')
 
@@ -244,30 +244,31 @@ def lengthscale_demo(lscale):
     plt.show()
 
     # 2D case
-    alpha_ut = np.hstack((np.zeros((2, 1)), np.eye(2), 2*np.eye(2))).astype(np.int)
-    tf = BayesSardTransform(2, 1, np.array([[1, 1, 1]]), alpha_ut, point_str='ut')
-    emv = np.zeros((len(lscale), len(lscale)))
-    for i, ell_0 in enumerate(lscale):
-        for j, ell_1 in enumerate(lscale):
-            par = np.array([[1.0, ell_0, ell_1]])
-            emv[i, j] = tf.model.exp_model_variance(par, alpha_ut)
+    if two_dim:
+        alpha_ut = np.hstack((np.zeros((2, 1)), np.eye(2), 2*np.eye(2))).astype(np.int)
+        tf = BayesSardTransform(2, 1, np.array([[1, 1, 1]]), alpha_ut, point_str='ut')
+        emv = np.zeros((len(lscale), len(lscale)))
+        for i, ell_0 in enumerate(lscale):
+            for j, ell_1 in enumerate(lscale):
+                par = np.array([[1.0, ell_0, ell_1]])
+                emv[i, j] = tf.model.exp_model_variance(par, alpha_ut)
 
-    fig = plt.figure()
-    from mpl_toolkits.mplot3d.axes3d import Axes3D
-    ax = Axes3D(fig)
-    X, Y = np.meshgrid(np.log10(lscale), np.log10(lscale))
-    ax.plot_surface(X, Y, emv)
+        fig = plt.figure()
+        from mpl_toolkits.mplot3d.axes3d import Axes3D
+        ax = Axes3D(fig)
+        X, Y = np.meshgrid(np.log10(lscale), np.log10(lscale))
+        ax.plot_surface(X, Y, emv)
 
-    ax.set_xlabel('$\log_{10}(\ell_1)$')
-    ax.set_ylabel('$\log_{10}(\ell_2)$')
-    ax.set_zlabel('EMV')
-    plt.show()
+        ax.set_xlabel('$\log_{10}(\ell_1)$')
+        ax.set_ylabel('$\log_{10}(\ell_2)$')
+        ax.set_zlabel('EMV')
+        plt.show()
 
 
 if __name__ == '__main__':
     # TODO: use argsparse to create nice command line interface
     # tables_dict = tables()
 
-    lscales = np.logspace(-3, 3, 25)
+    lscales = np.logspace(-3, 3, 100)
     # plot_data = lengthscale_filter_demo(lscales)
     lengthscale_demo(lscales)
