@@ -74,22 +74,48 @@ def doa(x, pars, dx=False):
 
 
 def sum_of_squares_demo():
-    dims = [1, 5, 10, 15, 25]
+    dims = [1, 2, 3, 5, 10, 15, 25]
 
+    sos_mean_data = np.zeros((2, len(dims)))
+    sos_var_data = sos_mean_data.copy()
     for d, dim_in in enumerate(dims):
         alpha_ut = np.hstack((np.zeros((dim_in, 1)), np.eye(dim_in), 2*np.eye(dim_in))).astype(np.int)
-        kpar = np.array([[1.0] + dim_in*[1.0]])
+        kpar = np.array([[1.0] + dim_in*[2.0]])
         tforms = OrderedDict({
-            'bsq': BayesSardTransform(dim_in, kpar, alpha_ut, point_str='ut', point_par={'kappa': None}),
+            'bsq': BayesSardTransform(dim_in, 1, kpar, alpha_ut, point_str='ut', point_par={'kappa': None}),
             'ut': UnscentedTransform(dim_in, kappa=None)
         })
+
+        # print('EMV (dim = {:d}): {:.2e}'.format(dim_in, tforms['bsq'].model.model_var))
 
         mean_in = np.zeros((dim_in, ))
         cov_in = np.eye(dim_in)
 
-        for t, tf in enumerate(tforms):
-            mean_tf, cov_tf, cc = tf.apply(sos, mean_in, cov_in, None)
-            # TODO: store true mean, var and computed mean, var in a table.
+        for t, tf_key in enumerate(tforms):
+            mean_tf, cov_tf, cc = tforms[tf_key].apply(sos, mean_in, cov_in, None)
+            sos_mean_data[t, d] = np.asscalar(mean_tf)
+            sos_var_data[t, d] = np.asscalar(cov_tf)
+
+    import pandas as pd
+    row_labels = [tstr for tstr in tforms.keys()]
+    col_labels = [str(d) for d in dims]
+
+    table_mean = pd.DataFrame(sos_mean_data, index=row_labels, columns=col_labels)
+    table_var = pd.DataFrame(sos_var_data, index=row_labels, columns=col_labels)
+
+    pd.set_option('precision', 2)
+    print(table_mean)
+    print(table_var)
+
+    bsqmt = BayesSardTransform(1, 1, np.array([[1.0, 3.0]]), np.array([[0, 1, 2]], dtype=np.int), point_str='ut')
+    xtest = np.linspace(-5, 5, 50)
+    ytrue = np.zeros((len(xtest)))
+    for i in range(len(xtest)):
+        ytrue[i] = sos(xtest[i], None)
+    y = np.zeros((bsqmt.model.points.shape[1], ))
+    for i in range(bsqmt.model.points.shape[1]):
+        y[i] = sos(bsqmt.model.points[:, i], None)
+    bsqmt.model.plot_model(xtest[None, :], fcn_obs=y, fcn_true=ytrue)
 
 
 def polar2cartesian(x, pars):
@@ -177,4 +203,5 @@ def polar2cartesian_skl_demo():
 
 
 if __name__ == '__main__':
-    polar2cartesian_skl_demo()
+    # polar2cartesian_skl_demo()
+    sum_of_squares_demo()
