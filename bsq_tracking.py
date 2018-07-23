@@ -10,6 +10,7 @@ from ssmtoybox.ssmod import ReentryVehicleRadarTrackingSimpleGaussSSM, ReentryVe
     CoordinatedTurnBearingsOnlyTrackingGaussSSM
 from ssmtoybox.dynsys import ReentryVehicleRadarTrackingSimpleGaussSystem, ReentryVehicleRadarTrackingGaussSystem
 from ssmtoybox.utils import mse_matrix, squared_error, log_cred_ratio
+from ssmtoybox.ssmod import GaussianStateSpaceModel
 
 
 np.set_printoptions(precision=4)
@@ -485,6 +486,63 @@ def multivariate_emv(tf, par, multi_ind):
         # kernel expectations
         emv[i, i] = par[i, 0] * (1 - np.trace(kxpx.T.dot(iV.T) + kxpx.dot(iV) - pxpx.dot(iViKV)))
     return emv
+
+
+class ConstantVelocityRadarTrackingGaussSSM(GaussianStateSpaceModel):
+    xD = 4
+    zD = 2
+    qD = 2
+    rD = 2
+
+    q_additive = True
+    r_additive = True
+
+    def __init__(self, dt=0.5):
+        self.dt = dt
+        self.q_gain = np.array([[dt ** 2 / 2, 0],
+                                [dt, 0],
+                                [0, dt ** 2 / 2],
+                                [0, dt]])
+        pars = {
+            'x0_mean': np.array([10175, 295, 980, -35]),  # m, m/s, m, m/s
+            'x0_cov': np.diag([100**2, 10**2, 100**2, 10**2]),
+            'q_mean': np.zeros((self.qD, )),
+            'q_cov': np.diag([50, 5]),  # m^2/s^4, m^2/s^4
+            'q_gain': self.q_gain,
+            'r_mean': np.zeros((self.rD, )),
+            # 'r_cov': np.diag([50, 0.4]),  # m^2, mrad^2
+            'r_cov': np.diag([50, 0.4e-6]),  # m^2, rad^2
+        }
+        super(ConstantVelocityRadarTrackingGaussSSM, self).__init__(**pars)
+
+    def dyn_fcn(self, x, q, pars):
+        A = np.array([[1, self.dt, 0, 0],
+                      [0, 1, 0, 0],
+                      [0, 0, 1, self.dt],
+                      [0, 0, 0, 1]])
+        return A.dot(x) + self.q_gain.dot(q)
+
+    def meas_fcn(self, x, r, pars):
+        rang = np.sqrt(x[0]**2 + x[2]**2)
+        theta = np.arctan2(x[2], x[0])
+        return np.array([rang, theta]) + r
+
+    def par_fcn(self, time):
+        pass
+
+    def dyn_fcn_dx(self, x, q, pars):
+        return np.array([[1, self.dt, 0, 0],
+                         [0, 1, 0, 0],
+                         [0, 0, 1, self.dt],
+                         [0, 0, 0, 1]])
+
+    def meas_fcn_dx(self, x, r, pars):
+        pass
+
+
+def constant_velocity_radar_tracking_demo():
+    pass
+
 
 
 if __name__ == '__main__':
