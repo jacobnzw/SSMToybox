@@ -73,6 +73,25 @@ def doa(x, pars, dx=False):
         return np.array([-x[1], x[0]]) / (x[0] ** 2 + x[1] ** 2).T.flatten()
 
 
+def sum_of_squares_demo():
+    dims = [1, 5, 10, 15, 25]
+
+    for d, dim_in in enumerate(dims):
+        alpha_ut = np.hstack((np.zeros((dim_in, 1)), np.eye(dim_in), 2*np.eye(dim_in))).astype(np.int)
+        kpar = np.array([[1.0] + dim_in*[1.0]])
+        tforms = OrderedDict({
+            'bsq': BayesSardTransform(dim_in, kpar, alpha_ut, point_str='ut', point_par={'kappa': None}),
+            'ut': UnscentedTransform(dim_in, kappa=None)
+        })
+
+        mean_in = np.zeros((dim_in, ))
+        cov_in = np.eye(dim_in)
+
+        for t, tf in enumerate(tforms):
+            mean_tf, cov_tf, cc = tf.apply(sos, mean_in, cov_in, None)
+            # TODO: store true mean, var and computed mean, var in a table.
+
+
 def polar2cartesian(x, pars):
     return x[0] * np.array([np.cos(x[1]), np.sin(x[1])])
 
