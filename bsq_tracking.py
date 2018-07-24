@@ -1,16 +1,19 @@
 import numpy as np
+import pandas as pd
 from numpy import newaxis as na
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from collections import OrderedDict
 import time
 
-from ssmtoybox.ssinf import GaussianProcessKalman, BayesSardKalman, UnscentedKalman
+from ssmtoybox.ssinf import GaussianProcessKalman, BayesSardKalman, UnscentedKalman, ExtendedKalman, GaussianInference
 from ssmtoybox.ssmod import ReentryVehicleRadarTrackingSimpleGaussSSM, ReentryVehicleRadarTrackingGaussSSM, \
     CoordinatedTurnBearingsOnlyTrackingGaussSSM
 from ssmtoybox.dynsys import ReentryVehicleRadarTrackingSimpleGaussSystem, ReentryVehicleRadarTrackingGaussSystem
 from ssmtoybox.utils import mse_matrix, squared_error, log_cred_ratio
-from ssmtoybox.ssmod import GaussianStateSpaceModel
+from ssmtoybox.ssmod import GaussianStateSpaceModel, StateSpaceModel
+from ssmtoybox.bq.bqmtran import BayesSardTransform
+from ssmtoybox.mtran import LinearizationTransform
 
 
 np.set_printoptions(precision=4)
@@ -485,6 +488,9 @@ def multivariate_emv(tf, par, multi_ind):
         kxpx = tf.model._exp_x_kxpx(par[i, :], multi_ind, x)
         # kernel expectations
         emv[i, i] = par[i, 0] * (1 - np.trace(kxpx.T.dot(iV.T) + kxpx.dot(iV) - pxpx.dot(iViKV)))
+
+    # set model variance
+    tf.model.model_var = emv
     return emv
 
 
@@ -537,15 +543,139 @@ class ConstantVelocityRadarTrackingGaussSSM(GaussianStateSpaceModel):
                          [0, 0, 0, 1]])
 
     def meas_fcn_dx(self, x, r, pars):
-        pass
+        rang = np.sqrt(x[0] ** 2 + x[2] ** 2)
+        return np.array([[x[0]/rang, 0, x[2]/rang, 0],
+                         [-x[2]/(rang**2), 0, x[0]/(rang**2), 0]])
 
 
-def constant_velocity_radar_tracking_demo():
-    pass
+class LinearBayesSardKalman(GaussianInference):
+    """
+    Gaussian filter with linear MT on the dynamics model and BSQ-MT on observation model.
+    """
+    def __init__(self, ssm, kern_par_obs, mulind_obs=2, points='ut', point_hyp=None):
+        assert isinstance(ssm, StateSpaceModel)
+        nq = ssm.xD if ssm.q_additive else ssm.xD + ssm.qD
+        nr = ssm.xD if ssm.r_additive else ssm.xD + ssm.rD
+        t_dyn = LinearizationTransform(nq)
+        t_obs = BayesSardTransform(nr, ssm.zD, kern_par_obs, mulind_obs, points, point_hyp)
+        super(LinearBayesSardKalman, self).__init__(ssm, t_dyn, t_obs)
 
+
+def constant_velocity_radar_tracking_demo(steps=100, mc_sims=100):
+
+    sys = ConstantVelocityRadarTrackingGaussSSM()
+    sys.set_pars('x0_mean', np.array([10000, 300, 1000, -40]))
+    x, y = sys.simulate(steps, mc_sims)
+
+    sys.check_jacobians(h=np.sqrt(np.finfo(float).eps))
+
+    # state-space model for filters
+    ssm = ConstantVelocityRadarTrackingGaussSSM()
+    ssm.set_pars('x0_mean', np.array([10000, 300, 1000, -40]))
+    # kernel parameters for dynamics and observation functions
+    kpar_dyn = np.array([[1.0] + ssm.xD * [10]])
+    kpar_obs = np.array([[1.0] + ssm.xD * [1]])
+    alpha_ut = np.hstack((np.zeros((ssm.xD, 1)), np.eye(ssm.xD), 2*np.eye(ssm.xD))).astype(np.int)
+    alg = OrderedDict({
+        'bsqkf': BayesSardKalman(ssm, kpar_dyn, kpar_obs, alpha_ut, alpha_ut, points='ut'),
+        'lbsqkf': LinearBayesSardKalman(ssm, kpar_obs, alpha_ut, points='ut'),
+        'ukf': UnscentedKalman(ssm),
+        'ekf': ExtendedKalman(ssm),
+    })
+
+    # set custom model variance
+    kpobs = np.array([[1.0, 1, 1, 1e2, 1e2],
+                      [1.0, 1.4, 1.4, 1e2, 1e2]])
+    # multivariate_emv(alg['bsqkf'].tf_meas, kpobs, alpha_ut)  # 1e-3 * np.eye(4)
+    # multivariate_emv(alg['lbsqkf'].tf_meas, kpobs, alpha_ut)
+    alg['bsqkf'].tf_meas.model.model_var = 1e-8 * np.eye(2)
+    alg['lbsqkf'].tf_meas.model.model_var = 1e-8 * np.eye(2)
+
+    print('BSQKF Expected Model Variance')
+    print('DYN: {}'.format(alg['bsqkf'].tf_dyn.model.model_var))
+    print('OBS: {}'.format(alg['bsqkf'].tf_meas.model.model_var.diagonal()))
+    print('LBSQKF Expected Model Variance')
+    print('OBS: {}'.format(alg['lbsqkf'].tf_meas.model.model_var.diagonal()))
+    print()
+
+    # compute performance scores
+    num_alg = len(alg)
+    d, steps, mc_sims = x.shape
+    mean, cov = np.zeros((d, steps, mc_sims, num_alg)), np.zeros((d, d, steps, mc_sims, num_alg))
+    for ia, a in enumerate(alg):
+        print('Running {:<6} ... '.format(a.upper()), end='', flush=True)
+        t0 = time.time()
+        for imc in range(mc_sims):
+            mean[..., imc, ia], cov[..., imc, ia] = alg[a].forward_pass(y[..., imc])
+            alg[a].reset()
+        print('{:>30}'.format('Done in {:.2f} [sec]'.format(time.time() - t0)))
+
+    # Performance score plots
+    print()
+    print('Computing performance scores ...')
+    error2 = mean.copy()
+    lcr_pos = np.zeros((steps, mc_sims, num_alg))
+    lcr_vel = lcr_pos.copy()
+    for a in range(num_alg):
+        for k in range(steps):
+            mse = mse_matrix(x[:, k, :], mean[:, k, :, a])
+            for imc in range(mc_sims):
+                error2[:, k, imc, a] = squared_error(x[:, k, imc], mean[:, k, imc, a])
+                cov_sel = cov[..., k, imc, a]
+                lcr_pos[k, imc, a] = log_cred_ratio(x[(0, 2), k, imc], mean[(0, 2), k, imc, a],
+                                                    cov_sel[np.ix_((0, 2), (0, 2))], mse[np.ix_((0, 2), (0, 2))])
+                lcr_vel[k, imc, a] = log_cred_ratio(x[(1, 3), k, imc], mean[(1, 3), k, imc, a],
+                                                    cov_sel[np.ix_((1, 3), (1, 3))], mse[np.ix_((1, 3), (1, 3))])
+
+    # Averaged RMSE and Inclination Indicator in time
+    pos_rmse_vs_time = np.sqrt((error2[(0, 2), ...]).sum(axis=0)).mean(axis=1)
+    vel_rmse_vs_time = np.sqrt((error2[(1, 3), ...]).sum(axis=0)).mean(axis=1)
+    pos_inc_vs_time = lcr_pos.mean(axis=1)
+    vel_inc_vs_time = lcr_vel.mean(axis=1)
+
+    # print performance scores
+    row_labels = [k.upper() for k in alg.keys()]
+    col_labels = ['RMSE', 'Inc']
+
+    pos_data = np.vstack((pos_rmse_vs_time.mean(axis=0), pos_inc_vs_time.mean(axis=0))).T
+    pos_table = pd.DataFrame(pos_data, index=row_labels, columns=col_labels)
+    print(pos_table)
+
+    vel_data = np.vstack((vel_rmse_vs_time.mean(axis=0), vel_inc_vs_time.mean(axis=0))).T
+    vel_table = pd.DataFrame(vel_data, index=row_labels, columns=col_labels)
+    print(vel_table)
+
+    # PLOTS # TODO: figures for states rather than scores
+    # root mean squared error
+    plt.figure().suptitle('RMSE')
+    g = GridSpec(2, 1)
+    ax = plt.subplot(g[0, 0])
+    ax.set_title('Position')
+    for i, f_str in enumerate(alg):
+        ax.plot(pos_rmse_vs_time[:, i], label=f_str.upper())
+    ax.legend()
+    ax = plt.subplot(g[1, 0])
+    ax.set_title('Velocity')
+    for i, f_str in enumerate(alg):
+        ax.plot(vel_rmse_vs_time[:, i])
+    plt.show(block=False)
+
+    # inclination
+    plt.figure().suptitle('Inclination')
+    ax = plt.subplot(g[0, 0])
+    ax.set_title('Position')
+    for i, f_str in enumerate(alg):
+        ax.plot(pos_inc_vs_time[:, i], label=f_str.upper())
+    ax.legend()
+    ax = plt.subplot(g[1, 0])
+    ax.set_title('Velocity')
+    for i, f_str in enumerate(alg):
+        ax.plot(vel_inc_vs_time[:, i])
+    plt.show()
 
 
 if __name__ == '__main__':
     # reentry_simple_demo()
-    reentry_demo()
+    # reentry_demo()
     # coordinated_turn_radar_demo()
+    constant_velocity_radar_tracking_demo(mc_sims=20)
