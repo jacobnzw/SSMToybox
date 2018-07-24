@@ -73,7 +73,7 @@ def doa(x, pars, dx=False):
         return np.array([-x[1], x[0]]) / (x[0] ** 2 + x[1] ** 2).T.flatten()
 
 
-def sum_of_squares_demo():
+def sum_of_squares_demo(plot_fit=False):
     dims = [1, 2, 3, 5, 10, 15, 25]
 
     sos_mean_data = np.zeros((2, len(dims)))
@@ -107,15 +107,16 @@ def sum_of_squares_demo():
     print(table_mean)
     print(table_var)
 
-    bsqmt = BayesSardTransform(1, 1, np.array([[1.0, 3.0]]), np.array([[0, 1, 2]], dtype=np.int), point_str='ut')
-    xtest = np.linspace(-5, 5, 50)
-    ytrue = np.zeros((len(xtest)))
-    for i in range(len(xtest)):
-        ytrue[i] = sos(xtest[i], None)
-    y = np.zeros((bsqmt.model.points.shape[1], ))
-    for i in range(bsqmt.model.points.shape[1]):
-        y[i] = sos(bsqmt.model.points[:, i], None)
-    bsqmt.model.plot_model(xtest[None, :], fcn_obs=y, fcn_true=ytrue)
+    if plot_fit:
+        bsqmt = BayesSardTransform(1, 1, np.array([[1.0, 3.0]]), np.array([[0, 1, 2]], dtype=np.int), point_str='ut')
+        xtest = np.linspace(-5, 5, 50)
+        ytrue = np.zeros((len(xtest)))
+        for i in range(len(xtest)):
+            ytrue[i] = sos(xtest[i], None)
+        y = np.zeros((bsqmt.model.points.shape[1], ))
+        for i in range(bsqmt.model.points.shape[1]):
+            y[i] = sos(bsqmt.model.points[:, i], None)
+        bsqmt.model.plot_model(xtest[None, :], fcn_obs=y, fcn_true=ytrue)
 
 
 def polar2cartesian(x, pars):
