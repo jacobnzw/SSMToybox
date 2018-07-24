@@ -540,7 +540,7 @@ class ConstantVelocityRadarTrackingGaussSSM(GaussianStateSpaceModel):
         return np.array([[1, self.dt, 0, 0],
                          [0, 1, 0, 0],
                          [0, 0, 1, self.dt],
-                         [0, 0, 0, 1]])
+                         [0, 0, 0, 1]]).T
 
     def meas_fcn_dx(self, x, r, pars):
         rang = np.sqrt(x[0] ** 2 + x[2] ** 2)
