@@ -571,7 +571,7 @@ def constant_velocity_radar_tracking_demo(steps=100, mc_sims=100):
 
     # state-space model for filters
     ssm = ConstantVelocityRadarTrackingGaussSSM()
-    ssm.set_pars('x0_mean', np.array([10000, 300, 1000, -40]))
+    # ssm.set_pars('x0_mean', np.array([10000, 300, 1000, -40]))
     # kernel parameters for dynamics and observation functions
     kpar_dyn = np.array([[1.0] + ssm.xD * [10]])
     kpar_obs = np.array([[1.0] + ssm.xD * [1]])
@@ -580,12 +580,12 @@ def constant_velocity_radar_tracking_demo(steps=100, mc_sims=100):
         'bsqkf': BayesSardKalman(ssm, kpar_dyn, kpar_obs, alpha_ut, alpha_ut, points='ut'),
         'lbsqkf': LinearBayesSardKalman(ssm, kpar_obs, alpha_ut, points='ut'),
         'ukf': UnscentedKalman(ssm),
-        'ekf': ExtendedKalman(ssm),
+        # 'ekf': ExtendedKalman(ssm),
     })
 
     # set custom model variance
-    kpobs = np.array([[1.0, 1, 1, 1e2, 1e2],
-                      [1.0, 1.4, 1.4, 1e2, 1e2]])
+    kpobs = np.array([[0.00001, 1, 2, 1e2, 1e2],
+                      [0.00001, 1, 2, 1e2, 1e2]])
     # multivariate_emv(alg['bsqkf'].tf_meas, kpobs, alpha_ut)  # 1e-3 * np.eye(4)
     # multivariate_emv(alg['lbsqkf'].tf_meas, kpobs, alpha_ut)
     alg['bsqkf'].tf_meas.model.model_var = 1e-8 * np.eye(2)
@@ -678,4 +678,4 @@ if __name__ == '__main__':
     # reentry_simple_demo()
     # reentry_demo()
     # coordinated_turn_radar_demo()
-    constant_velocity_radar_tracking_demo(mc_sims=20)
+    constant_velocity_radar_tracking_demo(steps=200, mc_sims=50)
