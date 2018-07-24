@@ -294,9 +294,16 @@ class StateSpaceModel(metaclass=ABCMeta):
         jac_fx = (2 * h) ** -1 * (fph - fmh)
         jac_hx = (2 * h) ** -1 * (hph - hmh)
 
+        jac_fx_eval = self.dyn_eval(xq, par, dx=True).reshape(self.xD, self.xD)
+        jac_hx_eval = self.meas_eval(xr, par, dx=True).reshape(self.zD, self.xD)
+
         # report approximation error
-        print("Errors in Jacobians\n{}\n{}".format(np.abs(jac_fx - self.dyn_eval(xq, par, dx=True)),
-                                                   np.abs(jac_hx - self.meas_eval(xr, par, dx=True))))
+        print()
+        print("Errors in Jacobians")
+        print(np.abs(jac_fx - jac_fx_eval))
+        print()
+        print(np.abs(jac_hx - jac_hx_eval))
+        print()
 
     def simulate(self, steps, mc_sims=1):
         """State-space model simulation.
