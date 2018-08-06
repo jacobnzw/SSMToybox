@@ -3,8 +3,12 @@ import pandas as pd
 from numpy import newaxis as na
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
+from matplotlib.lines import Line2D
 from collections import OrderedDict
+from sklearn.externals import joblib
 import time
+import pickle
+import os
 
 from ssmtoybox.ssinf import GaussianProcessKalman, BayesSardKalman, UnscentedKalman, ExtendedKalman, GaussianInference
 from ssmtoybox.ssmod import ReentryVehicleRadarTrackingSimpleGaussSSM, ReentryVehicleRadarTrackingGaussSSM, \
@@ -216,128 +220,136 @@ def reentry_simple_demo(dur=30, tau=0.1, mc=100):
     print('Average RMSE: {}'.format(np.sqrt(error2.sum(axis=0)).mean(axis=(0, 1))))
 
 
-def reentry_demo():
-    mc_sims = 20
-    disc_tau = 0.5  # discretization period
+def reentry_demo(dur=200, tau=0.5, mc_sims=20, outfile=None):
+    # use default filename if unspecified
+    if outfile is None:
+        outfile = 'reentry_demo_data.dat'
+    outfile = os.path.join('..', outfile)
 
-    # Generate reference trajectory by ODE integration
-    sys = ReentryVehicleRadarTrackingGaussSystem()
-    x = sys.simulate_trajectory(method='rk4', dt=disc_tau, duration=200, mc_sims=mc_sims)
-    y = np.zeros((sys.zD,) + x.shape[1:])
-    for i in range(mc_sims):
-        y[..., i] = sys.simulate_measurements(x[..., i], mc_per_step=1).squeeze()
+    if not os.path.exists(outfile):
+        # Generate reference trajectory by ODE integration
+        sys = ReentryVehicleRadarTrackingGaussSystem()
+        x = sys.simulate_trajectory(method='rk4', dt=tau, duration=dur, mc_sims=mc_sims)
+        y = np.zeros((sys.zD,) + x.shape[1:])
+        for i in range(mc_sims):
+            y[..., i] = sys.simulate_measurements(x[..., i], mc_per_step=1).squeeze()
 
-    # Initialize state-space model with mis-specified initial mean
-    ssm = ReentryVehicleRadarTrackingGaussSSM(dt=disc_tau)
-    ssm.set_pars('x0_mean', np.array([6500.4, 349.14, -1.1093, -6.1967, 0.6932]))
+        # Initialize state-space model with mis-specified initial mean
+        ssm = ReentryVehicleRadarTrackingGaussSSM(dt=tau)
+        ssm.set_pars('x0_mean', np.array([6500.4, 349.14, -1.1093, -6.1967, 0.6932]))
 
-    # Initialize filters
-    par_dyn = np.array([[1.0, 1, 1, 1, 1, 1]])
-    par_obs = np.array([[1.0, 0.9, 0.9, 1e4, 1e4, 1e4]])  # np.atleast_2d(np.ones(6))
-    mul_ut = np.hstack((np.zeros((ssm.xD, 1)), np.eye(ssm.xD), 2 * np.eye(ssm.xD))).astype(np.int)
-    alg = OrderedDict({
-        # GaussianProcessKalman(ssm, par_dyn, par_obs, kernel='rbf', points='ut'),
-        'bsqkf': BayesSardKalman(ssm, par_dyn, par_obs, mul_ut, mul_ut, points='ut'),
-        'ukf': UnscentedKalman(ssm, beta=0),
-    })
+        # Initialize filters
+        par_dyn = np.array([[1.0, 1, 1, 1, 1, 1]])
+        par_obs = np.array([[1.0, 0.9, 0.9, 1e4, 1e4, 1e4]])  # np.atleast_2d(np.ones(6))
+        mul_ut = np.hstack((np.zeros((ssm.xD, 1)), np.eye(ssm.xD), 2 * np.eye(ssm.xD))).astype(np.int)
+        alg = OrderedDict({
+            # GaussianProcessKalman(ssm, par_dyn, par_obs, kernel='rbf', points='ut'),
+            'bsqkf': BayesSardKalman(ssm, par_dyn, par_obs, mul_ut, mul_ut, points='ut'),
+            'ukf': UnscentedKalman(ssm, beta=0),
+        })
 
-    kpdyn = np.array([[0.5, 1, 1e3, 1, 1e3, 1e3],
-                      [0.5, 1e3, 1, 1e3, 1, 1e3],
-                      [0.35, 3, 3, 3, 3, 1],
-                      [0.35, 3, 3, 3, 3, 1],
-                      [2.2, 1e3, 1e3, 1e3, 1e3, 1]])
-    alg['bsqkf'].tf_dyn.model.model_var = multivariate_emv(alg['bsqkf'].tf_dyn, kpdyn, mul_ut)
-    kpobs = np.array([[1.0, 1, 1, 1e2, 1e2, 1e2],
-                      [1.0, 1.4, 1.4, 1e2, 1e2, 1e2]])
-    # multivariate_emv(alg[0].tf_meas, kpobs, mul_ut)  # 1e-8*np.eye(2)
-    alg['bsqkf'].tf_meas.model.model_var = 0*np.eye(2)
-    print('BSQ EMV\ndyn: {} \nobs: {}'.format(alg['bsqkf'].tf_dyn.model.model_var.diagonal(),
-                                              alg['bsqkf'].tf_meas.model.model_var.diagonal()))
+        kpdyn = np.array([[0.5, 1, 1e3, 1, 1e3, 1e3],
+                          [0.5, 1e3, 1, 1e3, 1, 1e3],
+                          [0.35, 3, 3, 3, 3, 1],
+                          [0.35, 3, 3, 3, 3, 1],
+                          [2.2, 1e3, 1e3, 1e3, 1e3, 1]])
+        alg['bsqkf'].tf_dyn.model.model_var = multivariate_emv(alg['bsqkf'].tf_dyn, kpdyn, mul_ut)
+        kpobs = np.array([[1.0, 1, 1, 1e2, 1e2, 1e2],
+                          [1.0, 1.4, 1.4, 1e2, 1e2, 1e2]])
+        # multivariate_emv(alg[0].tf_meas, kpobs, mul_ut)  # 1e-8*np.eye(2)
+        alg['bsqkf'].tf_meas.model.model_var = 0*np.eye(2)
+        print('BSQ EMV\ndyn: {} \nobs: {}'.format(alg['bsqkf'].tf_dyn.model.model_var.diagonal(),
+                                                  alg['bsqkf'].tf_meas.model.model_var.diagonal()))
 
-    # Are both filters using the same sigma-points?
-    # assert np.array_equal(alg[0].tf_dyn.model.points, alg[1].tf_dyn.unit_sp)
-
-    num_alg = len(alg)
-    d, steps, mc_sims = x.shape
-    mean, cov = np.zeros((d, steps, mc_sims, num_alg)), np.zeros((d, d, steps, mc_sims, num_alg))
-    for ia, a in enumerate(alg):
-        print('Running {:<5} ... '.format(a.upper()), end='', flush=True)
-        t0 = time.time()
-        for imc in range(mc_sims):
-            mean[..., imc, ia], cov[..., imc, ia] = alg[a].forward_pass(y[..., imc])
-            alg[a].reset()
-        print('{:>30}'.format('Done in {:.2f} [sec]'.format(time.time() - t0)))
-
-    # Performance score plots
-    print()
-    print('Computing performance scores ...')
-    error2 = mean.copy()
-    lcr_pos = np.zeros((steps, mc_sims, num_alg))
-    lcr_vel = lcr_pos.copy()
-    lcr_theta = lcr_pos.copy()
-    for a in range(num_alg):
-        for k in range(steps):
-            mse = mse_matrix(x[:, k, :], mean[:, k, :, a])
+        num_alg = len(alg)
+        d, steps, mc_sims = x.shape
+        mean, cov = np.zeros((d, steps, mc_sims, num_alg)), np.zeros((d, d, steps, mc_sims, num_alg))
+        for ia, a in enumerate(alg):
+            print('Running {:<5} ... '.format(a.upper()), end='', flush=True)
+            t0 = time.time()
             for imc in range(mc_sims):
-                error2[:, k, imc, a] = squared_error(x[:, k, imc], mean[:, k, imc, a])
-                lcr_pos[k, imc, a] = log_cred_ratio(x[:2, k, imc], mean[:2, k, imc, a],
-                                                    cov[:2, :2, k, imc, a], mse[:2, :2])
-                lcr_vel[k, imc, a] = log_cred_ratio(x[2:4, k, imc], mean[2:4, k, imc, a],
-                                                    cov[2:4, 2:4, k, imc, a], mse[2:4, 2:4])
-                lcr_theta[k, imc, a] = log_cred_ratio(x[4, k, imc], mean[4, k, imc, a],
-                                                      cov[4, 4, k, imc, a], mse[4, 4])
+                mean[..., imc, ia], cov[..., imc, ia] = alg[a].forward_pass(y[..., imc])
+                alg[a].reset()
+            print('{:>30}'.format('Done in {:.2f} [sec]'.format(time.time() - t0)))
 
-    # Averaged RMSE and Inclination Indicator in time
-    pos_rmse_vs_time = np.sqrt((error2[:2, ...]).sum(axis=0)).mean(axis=1)
-    vel_rmse_vs_time = np.sqrt((error2[2:4, ...]).sum(axis=0)).mean(axis=1)
-    theta_rmse_vs_time = np.sqrt((error2[4, ...])).mean(axis=1)
-    pos_inc_vs_time = lcr_pos.mean(axis=1)
-    vel_inc_vs_time = lcr_vel.mean(axis=1)
-    theta_inc_vs_time = lcr_theta.mean(axis=1)
+        # Performance score plots
+        print()
+        print('Computing performance scores ...')
+        error2 = mean.copy()
+        lcr_pos = np.zeros((steps, mc_sims, num_alg))
+        lcr_vel = lcr_pos.copy()
+        lcr_theta = lcr_pos.copy()
+        for a in range(num_alg):
+            for k in range(steps):
+                mse = mse_matrix(x[:, k, :], mean[:, k, :, a])
+                for imc in range(mc_sims):
+                    error2[:, k, imc, a] = squared_error(x[:, k, imc], mean[:, k, imc, a])
+                    lcr_pos[k, imc, a] = log_cred_ratio(x[:2, k, imc], mean[:2, k, imc, a],
+                                                        cov[:2, :2, k, imc, a], mse[:2, :2])
+                    lcr_vel[k, imc, a] = log_cred_ratio(x[2:4, k, imc], mean[2:4, k, imc, a],
+                                                        cov[2:4, 2:4, k, imc, a], mse[2:4, 2:4])
+                    lcr_theta[k, imc, a] = log_cred_ratio(x[4, k, imc], mean[4, k, imc, a],
+                                                          cov[4, 4, k, imc, a], mse[4, 4])
+
+        # Averaged RMSE and Inclination Indicator in time
+        pos_rmse_vs_time = np.sqrt((error2[:2, ...]).sum(axis=0)).mean(axis=1)
+        vel_rmse_vs_time = np.sqrt((error2[2:4, ...]).sum(axis=0)).mean(axis=1)
+        theta_rmse_vs_time = np.sqrt((error2[4, ...])).mean(axis=1)
+        pos_inc_vs_time = lcr_pos.mean(axis=1)
+        vel_inc_vs_time = lcr_vel.mean(axis=1)
+        theta_inc_vs_time = lcr_theta.mean(axis=1)
+
+        # Save the simulation results into outfile
+        data_dict = {
+            'duration': dur,
+            'disc_tau': tau,
+            'alg_str': list(alg.keys()),
+            'position': {'rmse': pos_rmse_vs_time, 'inc': pos_inc_vs_time},
+            'velocity': {'rmse': vel_rmse_vs_time, 'inc': vel_inc_vs_time},
+            'parameter': {'rmse': theta_rmse_vs_time, 'inc': theta_inc_vs_time},
+        }
+        joblib.dump(data_dict, outfile)
+
+        # Visualize simulation results, plots, tables
+        reentry_demo_results(data_dict)
+    else:
+        reentry_demo_results(joblib.load(outfile))
+
+
+def reentry_demo_results(data_dict):
+    alg_str = data_dict['alg_str']
 
     # print performance scores
-    print('Average position RMSE: {}'.format(pos_rmse_vs_time.mean(axis=0)))
-    print('Average position Inc.: {}'.format(pos_inc_vs_time.mean(axis=0)))
-    print('Average velocity RMSE: {}'.format(vel_rmse_vs_time.mean(axis=0)))
-    print('Average velocity Inc.: {}'.format(vel_inc_vs_time.mean(axis=0)))
-    print('Average parameter RMSE: {}'.format(theta_rmse_vs_time.mean(axis=0)))
-    print('Average parameter Inc.: {}'.format(theta_inc_vs_time.mean(axis=0)))
+    # print('Average position RMSE: {}'.format(pos_rmse_vs_time.mean(axis=0)))
+    # print('Average position Inc.: {}'.format(pos_inc_vs_time.mean(axis=0)))
+    # print('Average velocity RMSE: {}'.format(vel_rmse_vs_time.mean(axis=0)))
+    # print('Average velocity Inc.: {}'.format(vel_inc_vs_time.mean(axis=0)))
+    # print('Average parameter RMSE: {}'.format(theta_rmse_vs_time.mean(axis=0)))
+    # print('Average parameter Inc.: {}'.format(theta_inc_vs_time.mean(axis=0)))
 
-    # PLOTS # TODO: figures for states rather than scores
-    # root mean squared error
-    plt.figure().suptitle('RMSE')
-    g = GridSpec(3, 1)
-    ax = plt.subplot(g[0, 0])
-    ax.set_title('Position')
-    for i, f_str in enumerate(alg):
-        ax.plot(pos_rmse_vs_time[:, i], label=f_str.upper())
-    ax.legend()
-    ax = plt.subplot(g[1, 0])
-    ax.set_title('Velocity')
-    for i, f_str in enumerate(alg):
-        ax.plot(vel_rmse_vs_time[:, i])
-    ax = plt.subplot(g[2, 0])
-    ax.set_title('Parameter')
-    for i, f_str in enumerate(alg):
-        ax.plot(theta_rmse_vs_time[:, i])
-    plt.show(block=False)
+    # PLOTS
+    steps = data_dict['position']['rmse'].shape[0]
+    state_labels = ['Position', 'Velocity', 'Parameter']
+    time_sec = np.linspace(0, data_dict['duration']-data_dict['disc_tau'], steps)
 
-    # inclination
-    plt.figure().suptitle('Inclination')
-    ax = plt.subplot(g[0, 0])
-    ax.set_title('Position')
-    for i, f_str in enumerate(alg):
-        ax.plot(pos_inc_vs_time[:, i], label=f_str.upper())
-    ax.legend()
-    ax = plt.subplot(g[1, 0])
-    ax.set_title('Velocity')
-    for i, f_str in enumerate(alg):
-        ax.plot(vel_inc_vs_time[:, i])
-    ax = plt.subplot(g[2, 0])
-    ax.set_title('Parameter')
-    for i, f_str in enumerate(alg):
-        ax.plot(theta_inc_vs_time[:, i])
+    for state_label in state_labels:
+        fig, ax = plt.subplots(2, 1, sharex=True)
+        fig.suptitle(state_label)
+        for i, f_str in enumerate(alg_str):
+            ax[0].plot(time_sec, data_dict[state_label.lower()]['rmse'][:, i], label=f_str.upper(), lw=2)
+        # ax[0].set_xlim(0, time_sec)
+        ax[0].set_ylabel('RMSE')
+        ax[0].legend()
+        for i, f_str in enumerate(alg_str):
+            ax[1].plot(time_sec, data_dict[state_label.lower()]['inc'][:, i], label=f_str.upper(), lw=2)
+        # ax[1].set_xlim(0, time_sec)
+        ax[1].add_line(Line2D([0, steps], [0, 0], linewidth=2, color='k', ls='--'))
+        ax[1].set_ylabel('INC')
+        ax[1].set_xlabel('time [sec]')
     plt.show()
+
+    # TODO: pandas tables
+    # TODO: use my journal figure utility
 
 
 def coordinated_turn_radar_demo():
@@ -676,6 +688,6 @@ def constant_velocity_radar_tracking_demo(steps=100, mc_sims=100):
 
 if __name__ == '__main__':
     # reentry_simple_demo()
-    # reentry_demo()
+    reentry_demo(mc_sims=10)
     # coordinated_turn_radar_demo()
-    constant_velocity_radar_tracking_demo(steps=200, mc_sims=50)
+    # constant_velocity_radar_tracking_demo(steps=200, mc_sims=50)
