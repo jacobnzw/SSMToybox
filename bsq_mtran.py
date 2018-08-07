@@ -83,7 +83,7 @@ def sum_of_squares_demo(plot_fit=False):
         kpar = np.array([[1.0] + dim_in*[2.0]])
         tforms = OrderedDict({
             'bsq': BayesSardTransform(dim_in, 1, kpar, alpha_ut, point_str='ut', point_par={'kappa': None}),
-            'ut': UnscentedTransform(dim_in, kappa=None)
+            'ut': UnscentedTransform(dim_in, kappa=None, beta=0.0)
         })
 
         # print('EMV (dim = {:d}): {:.2e}'.format(dim_in, tforms['bsq'].model.model_var))

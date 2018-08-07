@@ -267,8 +267,16 @@ def lengthscale_demo(lscale, two_dim=False):
 
 if __name__ == '__main__':
     # TODO: use argsparse to create nice command line interface
-    # tables_dict = tables()
+    tables_dict = tables()
+    # save tables in LaTeX format
+    with open('ungm_rmse.tex', 'w') as file:
+        tables_dict['filter_RMSE'].to_latex(file, float_format=lambda s: '{:.4f}'.format(s))
+    with open('ungm_inc.tex', 'w') as file:
+        tables_dict['filter_NCI'].to_latex(file, float_format=lambda s: '{:.4f}'.format(s))
+    with open('ungm_nll.tex', 'w') as file:
+        tables_dict['filter_NLL'].to_latex(file, float_format=lambda s: '{:.4f}'.format(s))
 
-    lscales = np.logspace(-3, 3, 100)
+    # lscales = np.logspace(-3, 3, 100)
     # plot_data = lengthscale_filter_demo(lscales)
-    lengthscale_demo(lscales)
+
+    # lengthscale_demo(lscales)

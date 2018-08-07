@@ -7,7 +7,6 @@ from matplotlib.lines import Line2D
 from collections import OrderedDict
 from sklearn.externals import joblib
 import time
-import pickle
 import os
 
 from ssmtoybox.ssinf import GaussianProcessKalman, BayesSardKalman, UnscentedKalman, ExtendedKalman, GaussianInference
@@ -318,15 +317,6 @@ def reentry_demo(dur=200, tau=0.5, mc_sims=20, outfile=None):
 
 def reentry_demo_results(data_dict):
     alg_str = data_dict['alg_str']
-
-    # print performance scores
-    # print('Average position RMSE: {}'.format(pos_rmse_vs_time.mean(axis=0)))
-    # print('Average position Inc.: {}'.format(pos_inc_vs_time.mean(axis=0)))
-    # print('Average velocity RMSE: {}'.format(vel_rmse_vs_time.mean(axis=0)))
-    # print('Average velocity Inc.: {}'.format(vel_inc_vs_time.mean(axis=0)))
-    # print('Average parameter RMSE: {}'.format(theta_rmse_vs_time.mean(axis=0)))
-    # print('Average parameter Inc.: {}'.format(theta_inc_vs_time.mean(axis=0)))
-
     # PLOTS
     steps = data_dict['position']['rmse'].shape[0]
     state_labels = ['Position', 'Velocity', 'Parameter']
@@ -337,18 +327,14 @@ def reentry_demo_results(data_dict):
         fig.suptitle(state_label)
         for i, f_str in enumerate(alg_str):
             ax[0].plot(time_sec, data_dict[state_label.lower()]['rmse'][:, i], label=f_str.upper(), lw=2)
-        # ax[0].set_xlim(0, time_sec)
         ax[0].set_ylabel('RMSE')
         ax[0].legend()
         for i, f_str in enumerate(alg_str):
             ax[1].plot(time_sec, data_dict[state_label.lower()]['inc'][:, i], label=f_str.upper(), lw=2)
-        # ax[1].set_xlim(0, time_sec)
         ax[1].add_line(Line2D([0, steps], [0, 0], linewidth=2, color='k', ls='--'))
         ax[1].set_ylabel('INC')
         ax[1].set_xlabel('time [sec]')
     plt.show()
-
-    # TODO: pandas tables
     # TODO: use my journal figure utility
 
 
