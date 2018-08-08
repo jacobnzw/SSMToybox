@@ -672,6 +672,54 @@ def constant_velocity_radar_tracking_demo(steps=100, mc_sims=100):
     plt.show()
 
 
+class ConstantTurnRateAndVelocityGaussSSM(GaussianStateSpaceModel):
+
+    xD = 5
+    zD = 3
+    qD = 2
+    rD = 3
+
+    q_additive = False
+    r_additive = True
+
+    def __init__(self, dt=0.5):
+        stats = {
+            'x0_mean': np.zeros((self.xD, )),
+            'x0_cov': np.eye(self.xD),
+            'q_mean': np.zeros((self.xD, )),
+            'q_cov': np.diag([0.1, 0.25*np.pi]),
+            'r_mean': np.zeros((self.xD, )),
+            'r_cov': np.diag([0.3, 0.03, 0.3]),
+        }
+        super(ConstantTurnRateAndVelocityGaussSSM, self).__init__(**stats)
+        self.dt = dt
+
+    def dyn_fcn(self, x, q, pars):
+        c = x[2] / x[4]
+        f = np.array([
+            c * (np.sin(x[3] + x[4]*self.dt) - np.sin(x[3])) + 0.5 * self.dt**2 * np.cos(x[3]) * q[0],
+            c * (-np.cos(x[3] + x[4] * self.dt) + np.cos(x[3])) + 0.5 * self.dt**2 * np.sin(x[3]) * q[0],
+            self.dt * q[0],
+            self.dt * x[3] + 0.5 * self.dt**2 * q[1],
+            self.dt * q[1]
+        ])
+        return x + f
+
+    def dyn_fcn_dx(self, x, q, pars):
+        pass
+
+    def meas_fcn(self, x, r, pars):
+        r = np.sqrt(x[0]**2 + x[1]**2)
+        theta = np.arctan2(x[1], x[0])
+        return np.array([r, theta])
+
+    def meas_fcn_dx(self, x, r, pars):
+        pass
+
+    def par_fcn(self, time):
+        pass
+
+
 if __name__ == '__main__':
     # reentry_simple_demo()
     reentry_demo(mc_sims=10)
