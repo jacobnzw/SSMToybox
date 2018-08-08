@@ -82,8 +82,8 @@ def sum_of_squares_demo(plot_fit=False):
         alpha_ut = np.hstack((np.zeros((dim_in, 1)), np.eye(dim_in), 2*np.eye(dim_in))).astype(np.int)
         kpar = np.array([[1.0] + dim_in*[2.0]])
         tforms = OrderedDict({
-            'bsq': BayesSardTransform(dim_in, 1, kpar, alpha_ut, point_str='ut', point_par={'kappa': None}),
-            'ut': UnscentedTransform(dim_in, kappa=None, beta=0.0)
+            'bsq': BayesSardTransform(dim_in, 1, kpar, alpha_ut, point_str='ut', point_par={'kappa': 0.0}),
+            'ut': UnscentedTransform(dim_in, kappa=0.0, beta=0.0)
         })
 
         # print('EMV (dim = {:d}): {:.2e}'.format(dim_in, tforms['bsq'].model.model_var))
@@ -149,7 +149,7 @@ def polar2cartesian_skl_demo():
     mul_ind = np.hstack((np.zeros((dim, 1)), np.eye(dim), 2*np.eye(dim))).astype(np.int)
     tforms = OrderedDict([
         ('bsq-ut', BayesSardTransform(dim, dim, ker_par, mul_ind, point_str='ut', point_par={'kappa': 2, 'alpha': 1})),
-        ('gpq-ut', GaussianProcessTransform(dim, dim, ker_par, point_str='ut', point_par={'alpha': 1})),
+        ('gpq-ut', GaussianProcessTransform(dim, dim, ker_par, point_str='ut', point_par={'kappa': 2, 'alpha': 1})),
         ('ut', UnscentedTransform(dim, kappa=2, alpha=1, beta=0)),
     ])
     baseline_mtf = MonteCarloTransform(dim, n=10000)
