@@ -738,11 +738,14 @@ def ctrv_demo(steps=150, mc_sims=50, outfile=None, show_trajectories=False):
 
     if not os.path.exists(outfile):
         dt = 0.02
+        # TODO: adjust model parameters: decrease initial covariance
         ssm = ConstantTurnRateAndVelocityGaussSSM(dt)
+        ssm.set_pars('x0_mean', np.array([0, 0, 10, 0*np.pi, 0]))
+        ssm.set_pars('x0_cov', np.diag([1e-6, 1e-6, 1, 0.75*np.pi, 1e-6]))
 
         x, y = ssm.simulate(steps, mc_sims)
         if show_trajectories:  # show CTRV trajectories
-            plt.plot(x[0, ...], x[1, ...], alpha=0.25, color='b')
+            plt.plot(x[0, ...], x[1, ...], alpha=0.15, color='b')
             plt.show()
 
         # Initialize filters
@@ -766,8 +769,8 @@ def ctrv_demo(steps=150, mc_sims=50, outfile=None, show_trajectories=False):
         # kpobs = np.array([[1.0, 1, 1, 1e2, 1e2, 1e2],
         #                   [1.0, 1.4, 1.4, 1e2, 1e2, 1e2]])
         # alg['bsqkf'].tf_meas.model.model_var = multivariate_emv(alg['bsqkf'].tf_meas, kpobs, mul_ut_obs)
-        alg['bsqkf'].tf_dyn.model.model_var = np.diag([0.0, 0.0, 0.0, 0.0, 0.0])
-        alg['bsqkf'].tf_meas.model.model_var = np.diag([0.0, 0.1])  # 0 * np.eye(2)
+        alg['bsqkf'].tf_dyn.model.model_var = np.diag([0.0, 0.0, 0.1, 0.0, 0.0])
+        alg['bsqkf'].tf_meas.model.model_var = np.diag([0.00, 0.00])  # 0 * np.eye(2)
         print('BSQ EMV\ndyn: {} \nobs: {}'.format(alg['bsqkf'].tf_dyn.model.model_var.diagonal(),
                                                   alg['bsqkf'].tf_meas.model.model_var.diagonal()))
 
@@ -865,4 +868,4 @@ if __name__ == '__main__':
     # reentry_demo(mc_sims=10)
     # coordinated_turn_radar_demo()
     # constant_velocity_radar_tracking_demo(steps=200, mc_sims=50)
-    ctrv_demo(mc_sims=50)
+    ctrv_demo(mc_sims=200, show_trajectories=True)
