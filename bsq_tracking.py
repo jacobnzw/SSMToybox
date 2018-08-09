@@ -222,7 +222,7 @@ def reentry_simple_demo(dur=30, tau=0.1, mc=100):
 def reentry_demo(dur=200, tau=0.5, mc_sims=20, outfile=None):
     # use default filename if unspecified
     if outfile is None:
-        outfile = 'reentry_demo_data.dat'
+        outfile = 'reentry_demo_results.dat'
     outfile = os.path.join('..', outfile)
 
     if not os.path.exists(outfile):
@@ -675,9 +675,9 @@ def constant_velocity_radar_tracking_demo(steps=100, mc_sims=100):
 class ConstantTurnRateAndVelocityGaussSSM(GaussianStateSpaceModel):
 
     xD = 5
-    zD = 3
+    zD = 2
     qD = 2
-    rD = 3
+    rD = 2
 
     q_additive = False
     r_additive = True
@@ -685,24 +685,34 @@ class ConstantTurnRateAndVelocityGaussSSM(GaussianStateSpaceModel):
     def __init__(self, dt=0.5):
         stats = {
             'x0_mean': np.zeros((self.xD, )),
-            'x0_cov': np.eye(self.xD),
-            'q_mean': np.zeros((self.xD, )),
-            'q_cov': np.diag([0.1, 0.25*np.pi]),
-            'r_mean': np.zeros((self.xD, )),
-            'r_cov': np.diag([0.3, 0.03, 0.3]),
+            'x0_cov': 0.1*np.eye(self.xD),
+            'q_mean': np.zeros((self.qD, )),
+            'q_cov': np.diag([0.1, 0.1*np.pi]),
+            'r_mean': np.zeros((self.rD, )),
+            'r_cov': np.diag([0.3, 0.03]),
         }
         super(ConstantTurnRateAndVelocityGaussSSM, self).__init__(**stats)
         self.dt = dt
 
     def dyn_fcn(self, x, q, pars):
-        c = x[2] / x[4]
-        f = np.array([
-            c * (np.sin(x[3] + x[4]*self.dt) - np.sin(x[3])) + 0.5 * self.dt**2 * np.cos(x[3]) * q[0],
-            c * (-np.cos(x[3] + x[4] * self.dt) + np.cos(x[3])) + 0.5 * self.dt**2 * np.sin(x[3]) * q[0],
-            self.dt * q[0],
-            self.dt * x[3] + 0.5 * self.dt**2 * q[1],
-            self.dt * q[1]
-        ])
+        if x[4] == 0:
+            # zero yaw rate case
+            f = np.array([
+                self.dt * x[2] * np.cos(x[3]),
+                self.dt * x[2] * np.sin(x[3]),
+                self.dt * q[0],
+                self.dt * x[3] + 0.5 * self.dt ** 2 * q[1],
+                self.dt * q[1]
+            ])
+        else:
+            c = x[2] / x[4]
+            f = np.array([
+                c * (np.sin(x[3] + x[4]*self.dt) - np.sin(x[3])) + 0.5 * self.dt**2 * np.cos(x[3]) * q[0],
+                c * (-np.cos(x[3] + x[4] * self.dt) + np.cos(x[3])) + 0.5 * self.dt**2 * np.sin(x[3]) * q[0],
+                self.dt * q[0],
+                self.dt * x[3] + 0.5 * self.dt**2 * q[1],
+                self.dt * q[1]
+            ])
         return x + f
 
     def dyn_fcn_dx(self, x, q, pars):
@@ -720,8 +730,139 @@ class ConstantTurnRateAndVelocityGaussSSM(GaussianStateSpaceModel):
         pass
 
 
+def ctrv_demo(steps=150, mc_sims=50, outfile=None, show_trajectories=False):
+    # use default filename if unspecified
+    if outfile is None:
+        outfile = 'ctrv_demo_results.dat'
+    outfile = os.path.join('..', outfile)
+
+    if not os.path.exists(outfile):
+        dt = 0.02
+        ssm = ConstantTurnRateAndVelocityGaussSSM(dt)
+
+        x, y = ssm.simulate(steps, mc_sims)
+        if show_trajectories:  # show CTRV trajectories
+            plt.plot(x[0, ...], x[1, ...], alpha=0.25, color='b')
+            plt.show()
+
+        # Initialize filters
+        par_dyn = np.array([[1.0, 1, 1, 1, 1, 1, 1, 1]])
+        par_obs = np.array([[1.0, 0.9, 0.9, 1e4, 1e4, 1e4]])  # np.atleast_2d(np.ones(6))
+        dim_aug = ssm.xD+ssm.qD
+        mul_ut_dyn = np.hstack((np.zeros((dim_aug, 1)), np.eye(dim_aug), 2 * np.eye(dim_aug))).astype(np.int)
+        mul_ut_obs = np.hstack((np.zeros((ssm.xD, 1)), np.eye(ssm.xD), 2 * np.eye(ssm.xD))).astype(np.int)
+        alg = OrderedDict({
+            # GaussianProcessKalman(ssm, par_dyn, par_obs, kernel='rbf', points='ut'),
+            'bsqkf': BayesSardKalman(ssm, par_dyn, par_obs, mul_ut_dyn, mul_ut_obs, points='ut'),
+            'ukf': UnscentedKalman(ssm, beta=0),
+        })
+
+        # kpdyn = np.array([[0.5, 1, 1e3, 1, 1e3, 1e3, 1e3, 1e3],
+        #                   [0.5, 1e3, 1, 1e3, 1, 1e3, 1e3, 1e3],
+        #                   [0.35, 3, 3, 3, 3, 1, 1e3, 1e3],
+        #                   [0.35, 3, 3, 3, 3, 1, 1e3, 1e3],
+        #                   [2.2, 1e3, 1e3, 1e3, 1e3, 1e3, 1e3, 1e3]])
+        # alg['bsqkf'].tf_dyn.model.model_var = multivariate_emv(alg['bsqkf'].tf_dyn, kpdyn, mul_ut_dyn)
+        # kpobs = np.array([[1.0, 1, 1, 1e2, 1e2, 1e2],
+        #                   [1.0, 1.4, 1.4, 1e2, 1e2, 1e2]])
+        # alg['bsqkf'].tf_meas.model.model_var = multivariate_emv(alg['bsqkf'].tf_meas, kpobs, mul_ut_obs)
+        alg['bsqkf'].tf_dyn.model.model_var = np.diag([0.0, 0.0, 0.0, 0.0, 0.0])
+        alg['bsqkf'].tf_meas.model.model_var = np.diag([0.0, 0.1])  # 0 * np.eye(2)
+        print('BSQ EMV\ndyn: {} \nobs: {}'.format(alg['bsqkf'].tf_dyn.model.model_var.diagonal(),
+                                                  alg['bsqkf'].tf_meas.model.model_var.diagonal()))
+
+        num_alg = len(alg)
+        d, steps, mc_sims = x.shape
+        mean, cov = np.zeros((d, steps, mc_sims, num_alg)), np.zeros((d, d, steps, mc_sims, num_alg))
+        for ia, a in enumerate(alg):
+            print('Running {:<5} ... '.format(a.upper()), end='', flush=True)
+            t0 = time.time()
+            for imc in range(mc_sims):
+                mean[..., imc, ia], cov[..., imc, ia] = alg[a].forward_pass(y[..., imc])
+                alg[a].reset()
+            print('{:>30}'.format('Done in {:.2f} [sec]'.format(time.time() - t0)))
+
+        # Performance score plots
+        print()
+        print('Computing performance scores ...')
+        error2 = mean.copy()
+        lcr = {
+            'position': np.zeros((steps, mc_sims, num_alg)),
+            'speed': np.zeros((steps, mc_sims, num_alg)),
+            'yaw': np.zeros((steps, mc_sims, num_alg)),
+            'yaw rate': np.zeros((steps, mc_sims, num_alg))
+        }
+        for a in range(num_alg):
+            for k in range(steps):
+                mse = mse_matrix(x[:, k, :], mean[:, k, :, a])
+                for imc in range(mc_sims):
+                    error2[:, k, imc, a] = squared_error(x[:, k, imc], mean[:, k, imc, a])
+                    lcr['position'][k, imc, a] = log_cred_ratio(x[:2, k, imc], mean[:2, k, imc, a],
+                                                                cov[:2, :2, k, imc, a], mse[:2, :2])
+                    lcr['speed'][k, imc, a] = log_cred_ratio(x[2, k, imc], mean[2, k, imc, a],
+                                                             cov[2, 2, k, imc, a], mse[2, 2])
+                    lcr['yaw'][k, imc, a] = log_cred_ratio(x[3, k, imc], mean[3, k, imc, a],
+                                                           cov[3, 3, k, imc, a], mse[3, 3])
+                    lcr['yaw rate'][k, imc, a] = log_cred_ratio(x[4, k, imc], mean[4, k, imc, a],
+                                                                cov[4, 4, k, imc, a], mse[4, 4])
+
+        # Averaged RMSE and Inclination Indicator in time
+        rmse_vs_time = {
+            'position': np.sqrt((error2[:2, ...]).sum(axis=0)).mean(axis=1),
+            'speed': np.sqrt((error2[2, ...])).mean(axis=1),
+            'yaw': np.sqrt((error2[3, ...])).mean(axis=1),
+            'yaw rate': np.sqrt((error2[4, ...])).mean(axis=1),
+        }
+
+        # Save the simulation results into outfile
+        data_dict = {
+            'steps': steps,
+            'dt': dt,
+            'alg_str': list(alg.keys()),
+            'position': {'rmse': rmse_vs_time['position'], 'inc': lcr['position'].mean(axis=1)},
+            'speed': {'rmse': rmse_vs_time['speed'], 'inc': lcr['speed'].mean(axis=1)},
+            'yaw': {'rmse': rmse_vs_time['yaw'], 'inc': lcr['yaw'].mean(axis=1)},
+            'yaw rate': {'rmse': rmse_vs_time['yaw rate'], 'inc': lcr['yaw rate'].mean(axis=1)},
+        }
+        # joblib.dump(data_dict, outfile)
+        print('RMSE')
+        for k in rmse_vs_time.keys():
+            print('{:<10}: {}'.format(k, rmse_vs_time[k].mean(axis=0)))
+        print('INC')
+        for k in lcr.keys():
+            print('{:<10}: {}'.format(k, lcr[k].mean(axis=(0, 1))))
+
+        # Visualize simulation results, plots, tables
+        ctrv_demo_results(data_dict)
+    else:
+        ctrv_demo_results(joblib.load(outfile))
+
+
+def ctrv_demo_results(data_dict):
+    alg_str = data_dict['alg_str']
+    # PLOTS
+    steps, dt = data_dict['steps'], data_dict['dt']
+    state_labels = ['Position', 'Speed', 'Yaw', 'Yaw Rate']
+    time_sec = np.linspace(0, steps*dt - dt, steps)
+
+    for state_label in state_labels:
+        fig, ax = plt.subplots(2, 1, sharex=True)
+        fig.suptitle(state_label)
+        for i, f_str in enumerate(alg_str):
+            ax[0].plot(time_sec, data_dict[state_label.lower()]['rmse'][:, i], label=f_str.upper(), lw=2)
+        ax[0].set_ylabel('RMSE')
+        ax[0].legend()
+        for i, f_str in enumerate(alg_str):
+            ax[1].plot(time_sec, data_dict[state_label.lower()]['inc'][:, i], label=f_str.upper(), lw=2)
+        ax[1].add_line(Line2D([0, steps], [0, 0], linewidth=2, color='k', ls='--'))
+        ax[1].set_ylabel('INC')
+        ax[1].set_xlabel('time [sec]')
+    plt.show()
+
+
 if __name__ == '__main__':
     # reentry_simple_demo()
-    reentry_demo(mc_sims=10)
+    # reentry_demo(mc_sims=10)
     # coordinated_turn_radar_demo()
     # constant_velocity_radar_tracking_demo(steps=200, mc_sims=50)
+    ctrv_demo(mc_sims=50)
