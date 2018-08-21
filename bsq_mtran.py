@@ -1,6 +1,7 @@
 import os
-import numpy as np
-import matplotlib.pyplot as plt
+# import numpy as np
+# import matplotlib.pyplot as plt
+from journal_figure import *
 from collections import OrderedDict
 
 from ssmtoybox.mtran import UnscentedTransform, SphericalRadialTransform, MonteCarloTransform
@@ -179,7 +180,7 @@ def polar2cartesian_skl_demo():
 
     # PLOT the SKL score for each MT and position on the spiral
     plt.style.use('seaborn-deep')
-    # printfig = FigurePrint()
+    printfig = FigurePrint()
     fig = plt.figure()
 
     # Average over mean indexes
@@ -200,9 +201,9 @@ def polar2cartesian_skl_demo():
     plt.show()
 
     # save figure
-    # printfig.savefig('polar2cartesian_skl')
+    printfig.savefig('polar2cartesian_skl')
 
 
 if __name__ == '__main__':
-    # polar2cartesian_skl_demo()
-    sum_of_squares_demo()
+    polar2cartesian_skl_demo()
+    # sum_of_squares_demo()
