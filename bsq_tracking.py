@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from numpy import newaxis as na
+# from journal_figure import *
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
@@ -236,6 +237,8 @@ def reentry_demo(dur=200, tau=0.5, mc_sims=20, outfile=None):
         # Initialize state-space model with mis-specified initial mean
         ssm = ReentryVehicleRadarTrackingGaussSSM(dt=tau)
         ssm.set_pars('x0_mean', np.array([6500.4, 349.14, -1.1093, -6.1967, 0.6932]))
+        # TODO: initialize covariances meaningfully
+        # NOTE: higher tau causes higher spread of trajectories at the ends
 
         # Initialize filters
         par_dyn = np.array([[1.0, 1, 1, 1, 1, 1]])
@@ -322,9 +325,11 @@ def reentry_demo_results(data_dict):
     state_labels = ['Position', 'Velocity', 'Parameter']
     time_sec = np.linspace(0, data_dict['duration']-data_dict['disc_tau'], steps)
 
+    plt.style.use('seaborn-deep')
+    printfig = FigurePrint()
     for state_label in state_labels:
         fig, ax = plt.subplots(2, 1, sharex=True)
-        fig.suptitle(state_label)
+        # fig.suptitle(state_label)
         for i, f_str in enumerate(alg_str):
             ax[0].plot(time_sec, data_dict[state_label.lower()]['rmse'][:, i], label=f_str.upper(), lw=2)
         ax[0].set_ylabel('RMSE')
@@ -334,8 +339,12 @@ def reentry_demo_results(data_dict):
         ax[1].add_line(Line2D([0, steps], [0, 0], linewidth=2, color='k', ls='--'))
         ax[1].set_ylabel('INC')
         ax[1].set_xlabel('time [sec]')
+        plt.tight_layout(pad=0)
     plt.show()
-    # TODO: use my journal figure utility
+
+    for i, sl in zip(plt.get_fignums(), state_labels):
+        plt.figure(i)
+        printfig.savefig('radar_tracking_{:s}'.format(sl.lower()))
 
 
 def coordinated_turn_radar_demo():
@@ -865,7 +874,7 @@ def ctrv_demo_results(data_dict):
 
 if __name__ == '__main__':
     # reentry_simple_demo()
-    # reentry_demo(mc_sims=10)
+    reentry_demo(mc_sims=100)
     # coordinated_turn_radar_demo()
     # constant_velocity_radar_tracking_demo(steps=200, mc_sims=50)
-    ctrv_demo(mc_sims=200, show_trajectories=True)
+    # ctrv_demo(mc_sims=200, show_trajectories=True)
