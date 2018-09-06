@@ -116,9 +116,9 @@ def tables():
         # BayesSardKalman(ssm, par_gh, par_gh, points='gh', point_hyp={'degree': 15}),
         # BayesSardKalman(ssm, par_gh, par_gh, points='gh', point_hyp={'degree': 20}),
         # GaussianProcessKalman(ssm, par_sr, par_sr, kernel='rbf', points='sr'),
-        # GaussianProcessKalman(ssm, par_ut, par_ut, kernel='rbf', points='ut'),
-        # GaussianProcessKalman(ssm, par_sr, par_sr, kernel='rbf', points='gh', point_hyp={'degree': 5}),
-        # GaussianProcessKalman(ssm, par_gh, par_gh, kernel='rbf', points='gh', point_hyp={'degree': 7}),
+        GaussianProcessKalman(ssm, par_ut, par_ut, kernel='rbf', points='ut', point_hyp={'alpha': 1.0}),
+        GaussianProcessKalman(ssm, par_sr, par_sr, kernel='rbf', points='gh', point_hyp={'degree': 5}),
+        GaussianProcessKalman(ssm, par_gh, par_gh, kernel='rbf', points='gh', point_hyp={'degree': 7}),
         # GaussianProcessKalman(ssm, par_gh, par_gh, kernel='rbf', points='gh', point_hyp={'degree': 10}),
         # GaussianProcessKalman(ssm, par_gh, par_gh, kernel='rbf', points='gh', point_hyp={'degree': 15}),
         # GaussianProcessKalman(ssm, par_gh, par_gh, kernel='rbf', points='gh', point_hyp={'degree': 20}),
@@ -148,18 +148,18 @@ def tables():
     # row_labels = ['SR', 'UT', 'GH-5', 'GH-7', 'GH-10', 'GH-15', 'GH-20']
     row_labels = ['UT', 'GH-5', 'GH-7']
     num_labels = len(row_labels)
-    col_labels = ['Classical', 'Bayesian', 'Classical (2std)', 'Bayesian (2std)']
-    rmse_table_f = pd.DataFrame(np.hstack((rmseMean_f.reshape(2, num_labels).T, rmseStd_f.reshape(2, num_labels).T)),
+    col_labels = ['Classical', 'BSQ', 'GPQ', 'Classical (2std)', 'BSQ (2std)', 'GPQ (2std)']
+    rmse_table_f = pd.DataFrame(np.hstack((rmseMean_f.reshape(3, num_labels).T, rmseStd_f.reshape(3, num_labels).T)),
                                 index=row_labels, columns=col_labels)
-    nci_table_f = pd.DataFrame(np.hstack((nciMean_f.reshape(2, num_labels).T, nciStd_f.reshape(2, num_labels).T)),
+    nci_table_f = pd.DataFrame(np.hstack((nciMean_f.reshape(3, num_labels).T, nciStd_f.reshape(3, num_labels).T)),
                                index=row_labels, columns=col_labels)
-    nll_table_f = pd.DataFrame(np.hstack((nllMean_f.reshape(2, num_labels).T, nllStd_f.reshape(2, num_labels).T)),
+    nll_table_f = pd.DataFrame(np.hstack((nllMean_f.reshape(3, num_labels).T, nllStd_f.reshape(3, num_labels).T)),
                                index=row_labels, columns=col_labels)
-    rmse_table_s = pd.DataFrame(np.hstack((rmseMean_s.reshape(2, num_labels).T, rmseStd_s.reshape(2, num_labels).T)),
+    rmse_table_s = pd.DataFrame(np.hstack((rmseMean_s.reshape(3, num_labels).T, rmseStd_s.reshape(3, num_labels).T)),
                                 index=row_labels, columns=col_labels)
-    nci_table_s = pd.DataFrame(np.hstack((nciMean_s.reshape(2, num_labels).T, nciStd_s.reshape(2, num_labels).T)),
+    nci_table_s = pd.DataFrame(np.hstack((nciMean_s.reshape(3, num_labels).T, nciStd_s.reshape(3, num_labels).T)),
                                index=row_labels, columns=col_labels)
-    nll_table_s = pd.DataFrame(np.hstack((nllMean_s.reshape(2, num_labels).T, nllStd_s.reshape(2, num_labels).T)),
+    nll_table_s = pd.DataFrame(np.hstack((nllMean_s.reshape(3, num_labels).T, nllStd_s.reshape(3, num_labels).T)),
                                index=row_labels, columns=col_labels)
     # print tables
     print('Filter RMSE')
@@ -270,11 +270,11 @@ if __name__ == '__main__':
     tables_dict = tables()
     # save tables in LaTeX format
     with open('ungm_rmse.tex', 'w') as file:
-        tables_dict['filter_RMSE'].to_latex(file, float_format=lambda s: '{:.4f}'.format(s))
+        tables_dict['filter_RMSE'].to_latex(file, float_format=lambda s: '{:.3f}'.format(s))
     with open('ungm_inc.tex', 'w') as file:
-        tables_dict['filter_NCI'].to_latex(file, float_format=lambda s: '{:.4f}'.format(s))
+        tables_dict['filter_NCI'].to_latex(file, float_format=lambda s: '{:.3f}'.format(s))
     with open('ungm_nll.tex', 'w') as file:
-        tables_dict['filter_NLL'].to_latex(file, float_format=lambda s: '{:.4f}'.format(s))
+        tables_dict['filter_NLL'].to_latex(file, float_format=lambda s: '{:.3f}'.format(s))
 
     # lscales = np.logspace(-3, 3, 100)
     # plot_data = lengthscale_filter_demo(lscales)
