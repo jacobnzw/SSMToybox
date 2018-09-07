@@ -92,9 +92,9 @@ def tables():
     ssm = UNGMGaussSSM()  # initialize UNGM model
     x, z = ssm.simulate(steps, mc_sims=mc)  # generate some data
 
-    par_sr = np.array([[5.0, 0.3]])
-    par_ut = np.array([[4.0, 0.5]])
-    par_gh = np.array([[4.0, 0.1]])
+    par_sr = np.array([[1.0, 0.1]])
+    par_ut = np.array([[1.0, 3.0]])
+    par_gh = np.array([[1.0, 0.1]])
     mulind_ut = np.array([[0, 1, 2]])
     mulind_gh = lambda degree: np.atleast_2d(np.arange(degree))
 
@@ -162,6 +162,7 @@ def tables():
     nll_table_s = pd.DataFrame(np.hstack((nllMean_s.reshape(3, num_labels).T, nllStd_s.reshape(3, num_labels).T)),
                                index=row_labels, columns=col_labels)
     # print tables
+    pd.set_option('precision', 2, 'display.max_columns', 6)
     print('Filter RMSE')
     print(rmse_table_f)
     print('Filter NCI')
@@ -269,6 +270,7 @@ if __name__ == '__main__':
     # TODO: use argsparse to create nice command line interface
     tables_dict = tables()
     # save tables in LaTeX format
+    pd.set_option('precision', 2)
     with open('ungm_rmse.tex', 'w') as file:
         tables_dict['filter_RMSE'].to_latex(file, float_format=lambda s: '{:.3f}'.format(s))
     with open('ungm_inc.tex', 'w') as file:
