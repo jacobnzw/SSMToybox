@@ -226,7 +226,7 @@ def reentry_demo(dur=200, tau=0.5, mc_sims=20, outfile=None):
         outfile = 'reentry_demo_results.dat'
     outfile = os.path.join('..', outfile)
 
-    if not os.path.exists(outfile):
+    if not os.path.exists(outfile) or True:
         # Generate reference trajectory by ODE integration
         sys = ReentryVehicleRadarTrackingGaussSystem()
         x = sys.simulate_trajectory(method='rk4', dt=tau, duration=dur, mc_sims=mc_sims)
@@ -236,8 +236,8 @@ def reentry_demo(dur=200, tau=0.5, mc_sims=20, outfile=None):
 
         # Initialize state-space model with mis-specified initial mean
         ssm = ReentryVehicleRadarTrackingGaussSSM(dt=tau)
-        ssm.set_pars('x0_mean', np.array([6500.4, 349.14, -1.1093, -6.1967, 0.6932]))
-        # TODO: initialize covariances meaningfully
+        ssm.set_pars('x0_mean', np.array([6450.4, 309.14, -1.8093, -6.7967, 0.6932]))
+        ssm.set_pars('x0_cov', np.diag([1e-6, 1e-6, 1e-6, 1e-6, 1e-6]))  # TODO: initialize covariances meaningfully
         # NOTE: higher tau causes higher spread of trajectories at the ends
 
         # Initialize filters
@@ -255,9 +255,10 @@ def reentry_demo(dur=200, tau=0.5, mc_sims=20, outfile=None):
                           [0.35, 3, 3, 3, 3, 1],
                           [0.35, 3, 3, 3, 3, 1],
                           [2.2, 1e3, 1e3, 1e3, 1e3, 1]])
-        alg['bsqkf'].tf_dyn.model.model_var = multivariate_emv(alg['bsqkf'].tf_dyn, kpdyn, mul_ut)
         kpobs = np.array([[1.0, 1, 1, 1e2, 1e2, 1e2],
                           [1.0, 1.4, 1.4, 1e2, 1e2, 1e2]])
+        # multivariate_emv(alg['bsqkf'].tf_dyn, kpdyn, mul_ut)
+        alg['bsqkf'].tf_dyn.model.model_var = np.diag([0e-4, 0e-4, 1e-4, 1e-4, 1e-4])
         # multivariate_emv(alg[0].tf_meas, kpobs, mul_ut)  # 1e-8*np.eye(2)
         alg['bsqkf'].tf_meas.model.model_var = 0*np.eye(2)
         print('BSQ EMV\ndyn: {} \nobs: {}'.format(alg['bsqkf'].tf_dyn.model.model_var.diagonal(),
@@ -326,7 +327,7 @@ def reentry_demo_results(data_dict):
     time_sec = np.linspace(0, data_dict['duration']-data_dict['disc_tau'], steps)
 
     plt.style.use('seaborn-deep')
-    printfig = FigurePrint()
+    # printfig = FigurePrint()
     for state_label in state_labels:
         fig, ax = plt.subplots(2, 1, sharex=True)
         # fig.suptitle(state_label)
@@ -342,9 +343,9 @@ def reentry_demo_results(data_dict):
         plt.tight_layout(pad=0)
     plt.show()
 
-    for i, sl in zip(plt.get_fignums(), state_labels):
-        plt.figure(i)
-        printfig.savefig('radar_tracking_{:s}'.format(sl.lower()))
+    # for i, sl in zip(plt.get_fignums(), state_labels):
+    #     plt.figure(i)
+    #     printfig.savefig('radar_tracking_{:s}'.format(sl.lower()))
 
 
 def coordinated_turn_radar_demo():
