@@ -92,9 +92,9 @@ def tables():
     ssm = UNGMGaussSSM()  # initialize UNGM model
     x, z = ssm.simulate(steps, mc_sims=mc)  # generate some data
 
-    par_sr = np.array([[1.0, 0.3]])
-    par_ut = np.array([[1.0, 3.0]])
-    par_gh = np.array([[1.0, 0.1]])
+    par_sr = np.array([[4.0, 1.0]])
+    par_ut = np.array([[4.0, 1.0]])
+    par_gh = np.array([[4.0, 0.1]])
     mulind_ut = np.array([[0, 1, 2]])
     mulind_gh = lambda degree: np.atleast_2d(np.arange(degree))
 
