@@ -92,7 +92,7 @@ def tables():
     ssm = UNGMGaussSSM()  # initialize UNGM model
     x, z = ssm.simulate(steps, mc_sims=mc)  # generate some data
 
-    par_sr = np.array([[1.0, 0.1]])
+    par_sr = np.array([[1.0, 0.3]])
     par_ut = np.array([[1.0, 3.0]])
     par_gh = np.array([[1.0, 0.1]])
     mulind_ut = np.array([[0, 1, 2]])
@@ -102,21 +102,21 @@ def tables():
     algorithms = (
         # ExtendedKalman(ssm),
         # CubatureKalman(ssm),
-        UnscentedKalman(ssm, alpha=1.0, beta=0.0),
+        UnscentedKalman(ssm, kappa=0, alpha=1.0, beta=0.0),
         GaussHermiteKalman(ssm, deg=5),
         GaussHermiteKalman(ssm, deg=7),
         # GaussHermiteKalman(ssm, deg=10),
         # GaussHermiteKalman(ssm, deg=15),
         # GaussHermiteKalman(ssm, deg=20),
         # BayesSardKalman(ssm, par_sr, par_sr, points='sr'),
-        BayesSardKalman(ssm, par_ut, par_ut, mulind_ut, mulind_ut, points='ut', point_hyp={'alpha': 1.0}),
+        BayesSardKalman(ssm, par_ut, par_ut, mulind_ut, mulind_ut, points='ut', point_hyp={'kappa': 0, 'alpha': 1.0}),
         BayesSardKalman(ssm, par_sr, par_sr, mulind_gh(5), mulind_gh(5), points='gh', point_hyp={'degree': 5}),
         BayesSardKalman(ssm, par_gh, par_gh, mulind_gh(7), mulind_gh(7), points='gh', point_hyp={'degree': 7}),
         # BayesSardKalman(ssm, par_gh, par_gh, points='gh', point_hyp={'degree': 10}),
         # BayesSardKalman(ssm, par_gh, par_gh, points='gh', point_hyp={'degree': 15}),
         # BayesSardKalman(ssm, par_gh, par_gh, points='gh', point_hyp={'degree': 20}),
         # GaussianProcessKalman(ssm, par_sr, par_sr, kernel='rbf', points='sr'),
-        GaussianProcessKalman(ssm, par_ut, par_ut, kernel='rbf', points='ut', point_hyp={'alpha': 1.0}),
+        GaussianProcessKalman(ssm, par_ut, par_ut, kernel='rbf', points='ut', point_hyp={'kappa': 0, 'alpha': 1.0}),
         GaussianProcessKalman(ssm, par_sr, par_sr, kernel='rbf', points='gh', point_hyp={'degree': 5}),
         GaussianProcessKalman(ssm, par_gh, par_gh, kernel='rbf', points='gh', point_hyp={'degree': 7}),
         # GaussianProcessKalman(ssm, par_gh, par_gh, kernel='rbf', points='gh', point_hyp={'degree': 10}),
