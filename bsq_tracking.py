@@ -236,8 +236,8 @@ def reentry_demo(dur=200, tau=0.5, mc_sims=20, outfile=None):
 
         # Initialize state-space model with mis-specified initial mean
         ssm = ReentryVehicleRadarTrackingGaussSSM(dt=tau)
-        ssm.set_pars('x0_mean', np.array([6450.4, 309.14, -1.8093, -6.7967, 0.6932]))
-        ssm.set_pars('x0_cov', np.diag([1e-6, 1e-6, 1e-6, 1e-6, 1e-6]))  # TODO: initialize covariances meaningfully
+        ssm.set_pars('x0_mean', np.array([6500.4, 349.14, -1.1093, -6.1967, 0.6932]))
+        ssm.set_pars('x0_cov', np.diag([1e-6, 1e-6, 1e-6, 1e-6, 1]))
         # NOTE: higher tau causes higher spread of trajectories at the ends
 
         # Initialize filters
@@ -257,8 +257,8 @@ def reentry_demo(dur=200, tau=0.5, mc_sims=20, outfile=None):
                           [2.2, 1e3, 1e3, 1e3, 1e3, 1]])
         kpobs = np.array([[1.0, 1, 1, 1e2, 1e2, 1e2],
                           [1.0, 1.4, 1.4, 1e2, 1e2, 1e2]])
-        # multivariate_emv(alg['bsqkf'].tf_dyn, kpdyn, mul_ut)
-        alg['bsqkf'].tf_dyn.model.model_var = np.diag([0e-4, 0e-4, 1e-4, 1e-4, 1e-4])
+        #
+        alg['bsqkf'].tf_dyn.model.model_var = np.diag([0.2833, 0.2833, 0.1167, 0.1167, 0.6071]) # multivariate_emv(alg['bsqkf'].tf_dyn, kpdyn, mul_ut)
         # multivariate_emv(alg[0].tf_meas, kpobs, mul_ut)  # 1e-8*np.eye(2)
         alg['bsqkf'].tf_meas.model.model_var = 0*np.eye(2)
         print('BSQ EMV\ndyn: {} \nobs: {}'.format(alg['bsqkf'].tf_dyn.model.model_var.diagonal(),
