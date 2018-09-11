@@ -257,8 +257,8 @@ def reentry_demo(dur=200, tau=0.5, mc_sims=20, outfile=None):
                           [2.2, 1e3, 1e3, 1e3, 1e3, 1]])
         kpobs = np.array([[1.0, 1, 1, 1e2, 1e2, 1e2],
                           [1.0, 1.4, 1.4, 1e2, 1e2, 1e2]])
-        #
-        alg['bsqkf'].tf_dyn.model.model_var = np.diag([0.2833, 0.2833, 0.1167, 0.1167, 0.6071]) # multivariate_emv(alg['bsqkf'].tf_dyn, kpdyn, mul_ut)
+        # multivariate_emv(alg['bsqkf'].tf_dyn, kpdyn, mul_ut)
+        alg['bsqkf'].tf_dyn.model.model_var = np.diag([0.2833, 0.2833, 0.1167, 0.1167, 0.02])
         # multivariate_emv(alg[0].tf_meas, kpobs, mul_ut)  # 1e-8*np.eye(2)
         alg['bsqkf'].tf_meas.model.model_var = 0*np.eye(2)
         print('BSQ EMV\ndyn: {} \nobs: {}'.format(alg['bsqkf'].tf_dyn.model.model_var.diagonal(),
