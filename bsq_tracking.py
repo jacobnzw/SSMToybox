@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from numpy import newaxis as na
-# from journal_figure import *
+from journal_figure import *
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
@@ -327,7 +327,7 @@ def reentry_demo_results(data_dict):
     time_sec = np.linspace(0, data_dict['duration']-data_dict['disc_tau'], steps)
 
     plt.style.use('seaborn-deep')
-    # printfig = FigurePrint()
+    printfig = FigurePrint()
     for state_label in state_labels:
         fig, ax = plt.subplots(2, 1, sharex=True)
         # fig.suptitle(state_label)
@@ -343,9 +343,9 @@ def reentry_demo_results(data_dict):
         plt.tight_layout(pad=0)
     plt.show()
 
-    # for i, sl in zip(plt.get_fignums(), state_labels):
-    #     plt.figure(i)
-    #     printfig.savefig('radar_tracking_{:s}'.format(sl.lower()))
+    for i, sl in zip(plt.get_fignums(), state_labels):
+        plt.figure(i)
+        printfig.savefig('radar_tracking_{:s}'.format(sl.lower()))
 
 
 def coordinated_turn_radar_demo():

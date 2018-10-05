@@ -2,7 +2,8 @@ import os
 import time
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
+from journal_figure import *
 from numpy import newaxis as na
 from scipy.stats import multivariate_normal
 from scipy.linalg import cho_factor, cho_solve
@@ -238,11 +239,15 @@ def lengthscale_demo(lscale, two_dim=False):
         par = np.array([[1.0, ell]])
         emv[i] = tf.model.exp_model_variance(par, alpha_ut)
 
+    plt.style.use('seaborn-deep')
+    pf = FigurePrint()
     plt.figure()
     plt.semilogx(lscale, emv)
     plt.xlabel('$\ell$')
     plt.ylabel('EMV')
+    plt.tight_layout(pad=0)
     plt.show()
+    pf.savefig('emv_lengthscale_sensitivity')
 
     # 2D case
     if two_dim:
@@ -268,17 +273,17 @@ def lengthscale_demo(lscale, two_dim=False):
 
 if __name__ == '__main__':
     # TODO: use argsparse to create nice command line interface
-    tables_dict = tables()
-    # save tables in LaTeX format
-    pd.set_option('precision', 2)
-    with open('ungm_rmse.tex', 'w') as file:
-        tables_dict['filter_RMSE'].to_latex(file, float_format=lambda s: '{:.3f}'.format(s))
-    with open('ungm_inc.tex', 'w') as file:
-        tables_dict['filter_NCI'].to_latex(file, float_format=lambda s: '{:.3f}'.format(s))
-    with open('ungm_nll.tex', 'w') as file:
-        tables_dict['filter_NLL'].to_latex(file, float_format=lambda s: '{:.3f}'.format(s))
+    # tables_dict = tables()
+    # # save tables in LaTeX format
+    # pd.set_option('precision', 2)
+    # with open('ungm_rmse.tex', 'w') as file:
+    #     tables_dict['filter_RMSE'].to_latex(file, float_format=lambda s: '{:.3f}'.format(s))
+    # with open('ungm_inc.tex', 'w') as file:
+    #     tables_dict['filter_NCI'].to_latex(file, float_format=lambda s: '{:.3f}'.format(s))
+    # with open('ungm_nll.tex', 'w') as file:
+    #     tables_dict['filter_NLL'].to_latex(file, float_format=lambda s: '{:.3f}'.format(s))
 
-    # lscales = np.logspace(-3, 3, 100)
+    lscales = np.logspace(-3, 3, 100)
     # plot_data = lengthscale_filter_demo(lscales)
 
-    # lengthscale_demo(lscales)
+    lengthscale_demo(lscales)
