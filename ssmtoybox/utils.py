@@ -247,6 +247,54 @@ def print_table(data, row_labels=None, col_labels=None, latex=False):
         pd.to_latex()
 
 
+def gauss_mixture(means, covs, alphas, size):
+    """
+    Draw samples from Gaussian mixture.
+
+    Parameters
+    ----------
+    means : tuple of ndarrays
+        Mean for each of the mixture components.
+
+    covs : tuple of ndarrays
+        Covariance for each of the mixture components.
+
+    alphas : 1d ndarray
+        Mixing proportions, must have same length as means and covs.
+
+    size : int or tuple of ints  #TODO: tuple of ints not yet handled.
+        Number of samples to draw or shape of the output array containing samples.
+
+    Returns
+    -------
+    samples : ndarray
+        Samples from the Gaussian mixture.
+
+    indexes : ndarray
+        Component of indices corresponding to samples in
+    """
+    if len(means) != len(covs) or len(covs) != len(alphas):
+        raise ValueError('means, covs and alphas need to have the same length.')
+
+    n_samples = np.prod(size)
+    n_dim = len(means[0])
+    # draw from discrete distribution according to the mixing proportions
+    ci = np.random.choice(np.arange(len(alphas)), p=alphas, size=size)
+    ci_counts = np.unique(ci, return_counts=True)[1]
+
+    # draw samples from each of the component Gaussians
+    samples = np.empty((n_samples, n_dim))
+    indexes = np.empty(n_samples, dtype=int)
+    start = 0
+    for ind, c in enumerate(ci_counts):
+        end = start + c
+        samples[start:end, :] = np.random.multivariate_normal(means[ind], covs[ind], size=c)
+        indexes[start:end] = ind
+        start = end
+    from sklearn.utils import shuffle
+    return shuffle(samples, indexes)
+
+
 def bigauss_mixture(m0, c0, m1, c1, alpha, size):
     """
     Samples from a Gaussian mixture with two components.
