@@ -4,12 +4,28 @@ import numpy as np
 from numpy import newaxis as na
 from ssmtoybox.utils import multivariate_t
 
-# NOTE : The class should recognize input dimensions of dynamics and observation models separately
-# This is because observation models do not always use all the state dimensions, e.g. radar only uses position
-# to produce range and bearing measurements, the remaining states (velocity, ...) remain unused. Therefore the moment
-# transform for the observation model should have different dimension. I think this approach should be followed by
-# all the sigma-point transforms. The question is how to compute I/O covariance? Perhaps using the lower-dimensional
-# rule with sigma-points extended with zeros to match the state dimension.
+
+class TransitionModel(metaclass=ABCMeta):
+    """
+    Class responsibilities
+
+    - define state transition function (system dynamics and noise coupling)
+    - define evaluation function, which takes care of evaluation of the state transition function,
+      under noise coupling (additive vs. non-additive)
+    - define parameter function for t-variant systems (only if parameter evolution is known before hand)
+    - simulate the discrete time state evolution for given time period (steps)
+    - enable online setting of state transition function parameters (like discretization period etc.)
+    """
+    pass
+
+
+class MeasurementModel(metaclass=ABCMeta):
+    """
+    Class responsibilities same TransitionModel
+
+    - simulate measurements given one state or sequence of states
+    """
+    pass
 
 
 class StateSpaceModel(metaclass=ABCMeta):
