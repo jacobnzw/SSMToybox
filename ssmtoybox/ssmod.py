@@ -6,17 +6,294 @@ from ssmtoybox.utils import multivariate_t
 
 
 class TransitionModel(metaclass=ABCMeta):
-    """
-    Class responsibilities
+    """State transition model
 
-    - define state transition function (system dynamics and noise coupling)
-    - define evaluation function, which takes care of evaluation of the state transition function,
-      under noise coupling (additive vs. non-additive)
-    - define parameter function for t-variant systems (only if parameter evolution is known before hand)
-    - simulate the discrete time state evolution for given time period (steps)
-    - enable online setting of state transition function parameters (like discretization period etc.)
+    Definition of both discrete and continuous-time dynamics with simulation.
+
+    TODO: enable online setting of state transition function parameters (like discretization period etc.)
     """
-    pass
+
+    dim_in = None
+    dim_out = None
+    dim_noise = None
+    noise_additive = None
+
+    def __init__(self, init_dist, noise_dist):
+        # distribution of initial conditions
+        self.init_dist = init_dist
+        # distribution of process noise
+        self.noise_dist = noise_dist
+        # zero vec for convenience
+        self.zero_q = np.zeros(self.dim_noise)
+
+    @abstractmethod
+    def dyn_fcn(self, x, q, time):
+        """Discrete-time system dynamics.
+
+         Abstract method for the discrete-time system dynamics.
+
+         Parameters
+         ----------
+         x : 1-D array_like of shape (self.xD,)
+             System state
+
+         q : 1-D array_like of shape (self.qD,)
+             System noise
+
+         time : 1-D array_like
+             Parameters of the system dynamics
+
+         Returns
+         -------
+         1-D numpy.ndarray of shape (self.xD,)
+             system state in the next time step
+         """
+        pass
+
+    @abstractmethod
+    def dyn_fcn_cont(self, x, q, time):
+        """Continuous-time system dynamics.
+
+         Abstract method for the continuous-time system dynamics.
+
+         Parameters
+         ----------
+         x : 1-D array_like of shape (self.xD,)
+             System state
+
+         q : 1-D array_like of shape (self.qD,)
+             System noise
+
+         time : 1-D array_like
+             Parameters of the system dynamics
+
+         Returns
+         -------
+         1-D numpy.ndarray of shape (self.xD,)
+             time-derivative of system state evaluated at given state and time
+         """
+        pass
+
+    @abstractmethod
+    def dyn_fcn_dx(self, x, r, time):
+        """Jacobian of the system dynamics.
+
+        Abstract method for the Jacobian of system dynamics. Jacobian is a matrix of first partial derivatives.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            System state
+        q : 1-D array_like of shape (self.qD,)
+            System noise
+        time : 1-D array_like of shape (self.pD,)
+            System parameter
+
+        Returns
+        -------
+        2-D numpy.ndarray
+            Jacobian matrix of the system dynamics, where the second dimension depends on the noise additivity.
+            The shape depends on whether or not the state noise is additive. The two cases are:
+                * additive: (self.xD, self.xD)
+                * non-additive: (self.xD, self.xD + self.qD)
+        """
+        pass
+
+    def dyn_eval(self, xq, pars, dx=False):
+        """Evaluation of the system dynamics according to noise additivity.
+
+        Parameters
+        ----------
+        xq : 1-D array_like
+            Augmented system state
+        pars : 1-D array_like
+            System dynamics parameters
+        dx : bool
+            * ``True``: Evaluates derivatives (Jacobian) of the system dynamics
+            * ``False``: Evaluates system dynamics
+        Returns
+        -------
+            Evaluated system dynamics or evaluated Jacobian of the system dynamics.
+        """
+
+        if self.noise_additive:
+            assert len(xq) == self.dim_in
+            if dx:
+                out = (self.dyn_fcn_dx(xq, self.zero_q, pars).T.flatten())
+            else:
+                out = self.dyn_fcn(xq, self.zero_q, pars)
+        else:
+            assert len(xq) == self.dim_in + self.dim_noise
+            x, q = xq[:self.dim_in], xq[-self.dim_noise:]
+            if dx:
+                out = (self.dyn_fcn_dx(x, q, pars).T.flatten())
+            else:
+                out = self.dyn_fcn(x, q, pars)
+        return out
+
+    def simulate_discrete(self, steps, mc_sims=1):
+        """State-space model simulation.
+
+        SSM simulation starting from initial conditions for a given number of time steps
+
+        Parameters
+        ----------
+        steps : int
+            Number of time steps in state trajectory
+        mc_sims : int
+            Number of trajectories to simulate (the initial state is drawn randomly)
+
+        Returns
+        -------
+        tuple
+            Tuple (x, z) where both element are of type numpy.ndarray and where:
+
+                * x : 3-D array of shape (self.xD, steps, mc_sims) containing the true system state trajectory
+                * z : 3-D array of shape (self.zD, steps, mc_sims) containing simulated measurements of the system state
+        """
+
+        # allocate space for state and measurement sequences
+        x = np.zeros((self.dim_in, steps, mc_sims))
+        # generate initial conditions, store initial states at k=0
+        x[:, 0, :] = self.init_dist.sample(mc_sims)  # (D, mc_sims)
+
+        # generate state and measurement noise
+        q = self.noise_dist.sample((mc_sims, steps))
+
+        # simulate SSM `mc_sims` times for `steps` time steps
+        for imc in range(mc_sims):
+            for k in range(1, steps):
+                x[:, k, imc] = self.dyn_fcn(x[:, k-1, imc], q[:, k-1, imc], k-1)
+        return x
+
+    def simulate_continuous(self, duration, dt=0.1, mc_sims=1, method='euler'):
+        """
+        Computes continuous-time system state trajectory using the given ODE integration method.
+
+        Parameters
+        ----------
+        duration : int
+            Length of trajectory in seconds.
+
+        dt : float, optional
+            Discretization step.
+
+        mc_sims : int, optional
+            Number of Monte Carlo simulations.
+
+        method : str {'euler', 'rk4'}, optional
+            ODE integration method.
+
+        Returns
+        -------
+        : (dim_x, num_time_steps, num_mc_sims) ndarray
+            State trajectories of the continuous-time dynamic system.
+        """
+        # ensure sensible values of dt
+        assert dt < duration
+
+        # get ODE integration method
+        ode_method = self._get_ode_method(method)
+
+        # allocate space for system state and noise
+        steps = int(np.floor(duration / dt))
+        x = np.zeros((self.dim_in, steps+1, mc_sims))
+        # sample initial conditions and process noise
+        x[:, 0, :] = self.init_dist.sample(mc_sims)  # (D, mc_sims)
+        q = self.noise_dist.sample((mc_sims, steps + 1))
+
+        # continuous-time system simulation
+        for imc in range(mc_sims):
+            for k in range(1, steps+1):
+                # computes next state x(t + dt) by ODE integration
+                x[:, k, imc] = ode_method(self.dyn_fcn, x[:, k - 1, imc], q[:, k - 1, imc], k-1, dt)
+        return x[:, 1:, :]
+
+    @staticmethod
+    def ode_euler(func, x, q, time, dt):
+        """
+        ODE integration using Euler approximation.
+
+        Parameters
+        ----------
+        func : function
+            Function defining the system dynamics.
+
+        x : (dim_x, ) ndarray
+            Previous system state.
+
+        q : (dim_q, ) ndarray
+            System (process) noise.
+
+        time : (dim_par, ) ndarray
+            Time index.
+
+        dt : float
+            Discretization step.
+
+        Returns
+        -------
+        : (dim_x, ) ndarray
+            State in the next time step.
+        """
+        xdot = func(x, q, time)
+        return x + dt * xdot
+
+    @staticmethod
+    def ode_rk4(func, x, q, time, dt):
+        """
+        ODE integration using 4th-order Runge-Kutta approximation.
+
+        Parameters
+        ----------
+        func : function
+            Function defining the system dynamics.
+
+        x : (dim_x, ) ndarray
+            Previous system state.
+
+        q : (dim_q, ) ndarray
+            System (process) noise.
+
+        time : (dim_par, ) ndarray
+            Time index.
+
+        dt : float
+            Discretization step.
+
+        Returns
+        -------
+        : (dim_x, ) ndarray
+            State in the next time step.
+        """
+        dt2 = 0.5 * dt
+        k1 = func(x, q, time)
+        k2 = func(x + dt2 * k1, q, time)
+        k3 = func(x + dt2 * k2, q, time)
+        k4 = func(x + dt * k3, q, time)
+        return x + (dt / 6) * (k1 + 2 * (k2 + k3) + k4)
+
+    def _get_ode_method(self, method):
+        """
+        Get an ODE integration method.
+
+        Parameters
+        ----------
+        method : str {'euler', 'rk4'}
+            ODE integration method.
+
+        Returns
+        -------
+        : function
+            Function handle to the desired ODE integration method.
+        """
+        method = method.lower()
+        if method == 'euler':
+            return self.ode_euler
+        elif method == 'rk4':
+            return self.ode_rk4
+        else:
+            raise ValueError("Unknown ODE integration method {}".format(method))
 
 
 class MeasurementModel(metaclass=ABCMeta):
