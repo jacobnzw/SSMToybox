@@ -10,7 +10,31 @@ class TransitionModel(metaclass=ABCMeta):
 
     Definition of both discrete and continuous-time dynamics with simulation.
 
-    TODO: enable online setting of state transition function parameters (like discretization period etc.)
+    Parameters
+    ----------
+    <type> : init_dist
+        Distribution of the system initial conditions.
+
+    <type> : noise_dist
+        Distribution of the process (state) noise.
+
+    Attributes
+    ----------
+    int : dim_in
+        Input dimension of the state transition function.
+
+    int : dim_out
+        Output dimension of the state transition function.
+
+    int : dim_noise
+        Dimensionality of the process noise vector.
+
+    bool : noise_additive
+        Indicates additivity of the noise. `True` if noise is additive, `False` otherwise.
+
+    TODO:
+    - enable online setting of state transition function parameters (like discretization period etc.)
+    - convenient access to noise statistics
     """
 
     dim_in = None
@@ -132,24 +156,22 @@ class TransitionModel(metaclass=ABCMeta):
         return out
 
     def simulate_discrete(self, steps, mc_sims=1):
-        """State-space model simulation.
+        """Simulation of discrete-time state trajectory.
 
-        SSM simulation starting from initial conditions for a given number of time steps
+        Simulation starts from initial conditions for a given number of time steps
 
         Parameters
         ----------
         steps : int
             Number of time steps in state trajectory
+
         mc_sims : int
             Number of trajectories to simulate (the initial state is drawn randomly)
 
         Returns
         -------
-        tuple
-            Tuple (x, z) where both element are of type numpy.ndarray and where:
-
-                * x : 3-D array of shape (self.xD, steps, mc_sims) containing the true system state trajectory
-                * z : 3-D array of shape (self.zD, steps, mc_sims) containing simulated measurements of the system state
+        numpy.ndarray
+            3-D array of shape (self.xD, steps, mc_sims) containing the system state trajectory
         """
 
         # allocate space for state and measurement sequences
@@ -297,12 +319,161 @@ class TransitionModel(metaclass=ABCMeta):
 
 
 class MeasurementModel(metaclass=ABCMeta):
-    """
-    Class responsibilities same TransitionModel
+    """Measurement model
 
-    - simulate measurements given one state or sequence of states
+    Describes transformation of the system state into measurement.
+
+    Parameters
+    ----------
+    <type> : init_dist
+        Distribution of the system initial conditions.
+
+    <type> : noise_dist
+        Distribution of the process (state) noise.
+
+    Attributes
+    ----------
+    int : dim_in
+        Input dimension of the state transition function.
+
+    int : dim_out
+        Output dimension of the state transition function.
+
+    int : dim_noise
+        Dimensionality of the process noise vector.
+
+    bool : noise_additive
+        Indicates additivity of the noise. `True` if noise is additive, `False` otherwise.
     """
-    pass
+
+    dim_in = None
+    dim_out = None
+    dim_noise = None
+    noise_additive = None
+
+    def __init__(self, init_dist, noise_dist):
+        # distribution of initial conditions
+        self.init_dist = init_dist
+        # distribution of process noise
+        self.noise_dist = noise_dist
+        # zero vec for convenience
+        self.zero_r = np.zeros(self.dim_noise)
+
+    @abstractmethod
+    def meas_fcn(self, x, r, time):
+        """Measurement model.
+
+        Abstract method for the measurement model.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            system state
+        
+        r : 1-D array_like of shape (self.rD,)
+            measurement noise
+        
+        time : 1-D array_like
+            parameters of the measurement model
+
+        Returns
+        -------
+        1-D numpy.ndarray of shape (self.zD,)
+            measurement of the state
+        """
+        pass
+
+    @abstractmethod
+    def meas_fcn_dx(self, x, r, time):
+        """Jacobian of the measurement model.
+
+        Abstract method for the Jacobian of measurement model. Jacobian is a matrix of first partial derivatives.
+
+        Parameters
+        ----------
+        x : 1-D array_like of shape (self.xD,)
+            System state
+        
+        r : 1-D array_like of shape (self.qD,)
+            Measurement noise
+        
+        time : 1-D array_like of shape (self.pD,)
+            System parameter
+
+        Returns
+        -------
+        2-D numpy.ndarray
+            Jacobian matrix of the measurement model, where the second dimension depends on the noise additivity.
+            The shape depends on whether or not the state noise is additive. The two cases are:
+                * additive: (self.xD, self.xD)
+                * non-additive: (self.xD, self.xD + self.rD)
+        """
+        pass
+
+    def meas_eval(self, xr, time, dx=False):
+        """Evaluation of the system dynamics according to noise additivity.
+
+        Parameters
+        ----------
+        xr : 1-D array_like
+            Augmented system state
+        
+        time : 1-D array_like
+            Measurement model parameters
+        
+        dx : bool
+            * ``True``: Evaluates derivatives (Jacobian) of the measurement model
+            * ``False``: Evaluates measurement model
+        
+        Returns
+        -------
+            Evaluated measurement model or evaluated Jacobian of the measurement model.
+        """
+
+        if self.noise_additive:
+            # assert len(xr) == self.xD
+            if dx:
+                out = (self.meas_fcn_dx(xr, self.zero_r, time).T.flatten())
+            else:
+                out = self.meas_fcn(xr, self.zero_r, time)
+        else:
+            assert len(xr) == self.dim_in + self.dim_noise
+            x, r = xr[:self.dim_in], xr[-self.dim_noise:]
+            if dx:
+                out = (self.meas_fcn_dx(x, r, time).T.flatten())
+            else:
+                out = self.meas_fcn(x, r, time)
+        return out
+
+    def simulate_measurements(self, x, mc_per_step=1):
+        """
+        Simulates measurements
+
+        Parameters
+        ----------
+        x : (dim_x, ) ndarray
+            State trajectory.
+
+        mc_per_step : int, optional
+            Number of measurements to generate in each time step.
+
+        Returns
+        -------
+        : (dim_y, num_time_steps, num_mc_sims) ndarray
+            Measurement trajectories of the continuous-time dynamic system.
+        """
+        # x - state trajectory, freq - sampling frequency [Hz],
+        # mc_per_step - how many measurement to generate in each time step
+
+        d, steps = x.shape
+
+        # Generate measurement noise
+        r = self.noise_dist.sample((mc_per_step, steps))
+        y = np.zeros((self.dim_out, steps, mc_per_step))
+        for imc in range(mc_per_step):
+            for k in range(steps):
+                y[:, k, imc] = self.meas_fcn(x[:, k], r[:, k, imc], k-1)
+        return y
 
 
 class StateSpaceModel(metaclass=ABCMeta):
