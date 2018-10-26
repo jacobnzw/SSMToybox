@@ -318,6 +318,98 @@ class TransitionModel(metaclass=ABCMeta):
             raise ValueError("Unknown ODE integration method {}".format(method))
 
 
+class UNGMTransition(TransitionModel):
+
+    dim_in = 1
+    dim_out = 1
+    dim_noise = 1
+    noise_additive = True
+
+    def __init__(self, init_dist, noise_dist):
+        super(UNGMTransition, self).__init__(init_dist, noise_dist)
+
+    def dyn_fcn(self, x, q, time):
+        return np.asarray([0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * np.cos(1.2 * time)]) + q
+
+    def dyn_fcn_dx(self, x, q, time):
+        return np.asarray([0.5 + 25 * (1 - x[0] ** 2) / (1 + x[0] ** 2) ** 2])
+
+    def dyn_fcn_cont(self, x, q, time):
+        pass
+
+
+class ReentryVehicle2DTransition(TransitionModel):
+
+    dim_in = 5
+    dim_out = 5
+    dim_noise = 3
+    noise_additive = True
+
+    def __init__(self, init_dist, noise_dist, dt=0.1):
+        super(ReentryVehicle2DTransition, self).__init__(init_dist, noise_dist)
+        self.dt = dt
+        self.R0 = 6374  # Earth's radius
+        self.H0 = 13.406
+        self.Gm0 = 3.9860e5
+        self.b0 = -0.59783  # ballistic coefficient of a typical vehicle
+
+    def dyn_fcn(self, x, q, time):
+        """
+        Equation describing dynamics of the reentry vehicle.
+
+        Parameters
+        ----------
+        x : (dim_x, ) ndarray
+            State vector.
+
+        q : (dim_q, ) ndarray
+            State noise vector.
+
+        time :
+            Time index.
+
+        Returns
+        -------
+        : (dim_x, ) ndarray
+            System state in the next time step.
+        """
+        # scaled ballistic coefficient
+        b = self.b0 * np.exp(x[4])
+        # distance from center of the Earth
+        R = np.sqrt(x[0] ** 2 + x[1] ** 2)
+        # speed
+        V = np.sqrt(x[2] ** 2 + x[3] ** 2)
+        # drag force
+        D = b * np.exp((self.R0 - R) / self.H0) * V
+        # gravity force
+        G = -self.Gm0 / R ** 3
+        return np.array([x[0] + self.dt * x[2],
+                         x[1] + self.dt * x[3],
+                         x[2] + self.dt * (D * x[2] + G * x[0]) + q[0],
+                         x[3] + self.dt * (D * x[3] + G * x[1]) + q[1],
+                         x[4] + q[2]])
+
+    def dyn_fcn_dx(self, x, r, time):
+        pass
+
+    def dyn_fcn_cont(self, x, q, time):
+        # scaled ballistic coefficient
+        b = self.b0 * np.exp(x[4])
+        # distance from center of the Earth
+        R = np.sqrt(x[0] ** 2 + x[1] ** 2)
+        # speed
+        V = np.sqrt(x[2] ** 2 + x[3] ** 2)
+        # drag force
+        D = b * np.exp((self.R0 - R) / self.H0) * V
+        # gravity force
+        G = -self.Gm0 / R ** 3
+        return np.array([x[2],
+                         x[3],
+                         D * x[2] + G * x[0] + q[0],
+                         D * x[3] + G * x[1] + q[1],
+                         q[2]])
+
+
 class MeasurementModel(metaclass=ABCMeta):
     """Measurement model
 
@@ -474,6 +566,66 @@ class MeasurementModel(metaclass=ABCMeta):
             for k in range(steps):
                 y[:, k, imc] = self.meas_fcn(x[:, k], r[:, k, imc], k-1)
         return y
+
+
+class UNGMMeasurement(MeasurementModel):
+
+    dim_in = 1
+    dim_out = 1
+    dim_noise = 1
+    noise_additive = True
+
+    def __init__(self, init_dist, noise_dist):
+        super(UNGMMeasurement, self).__init__(init_dist, noise_dist)
+
+    def meas_fcn(self, x, r, time):
+        return np.asarray([0.05 * x[0] ** 2]) + r
+
+    def meas_fcn_dx(self, x, r, time):
+        return np.asarray([0.1 * x[0]])
+
+
+class Radar2DMeasurement(MeasurementModel):
+
+    dim_in = 2
+    dim_out = 2
+    dim_noise = 2
+    noise_additive = True
+
+    def __init__(self, init_dist, noise_dist, radar_loc=None):
+        super(Radar2DMeasurement, self).__init__(init_dist, noise_dist)
+        # set default radar location
+        if radar_loc is None:
+            self.radar_loc = np.array([0, 0])
+
+    def meas_fcn(self, x, r, pars):
+        """
+        Range and bearing measurement from the sensor to the moving object.
+
+        Parameters
+        ----------
+        x : (dim_x, ) ndarray
+            State vector.
+
+        r : (dim_r, ) ndarray
+            Measurement noise vector.
+
+        pars : tuple
+            Unused.
+
+        Returns
+        -------
+        : (dim_y, ) ndarray
+            Range and bearing measurements.
+        """
+        # range
+        rng = np.sqrt((x[0] - self.radar_loc[0]) ** 2 + (x[1] - self.radar_loc[1]) ** 2)
+        # bearing
+        theta = np.arctan2((x[1] - self.radar_loc[1]), (x[0] - self.radar_loc[0]))
+        return np.array([rng, theta]) + r
+
+    def meas_fcn_dx(self, x, r, time):
+        pass
 
 
 class StateSpaceModel(metaclass=ABCMeta):
