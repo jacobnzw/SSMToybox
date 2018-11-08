@@ -220,22 +220,28 @@ def reentry_simple_demo(dur=30, tau=0.1, mc=100):
     print('Average RMSE: {}'.format(np.sqrt(error2.sum(axis=0)).mean(axis=(0, 1))))
 
 
-def reentry_demo(dur=200, tau=0.5, mc_sims=20, outfile=None):
+def reentry_demo(dur=200, mc_sims=100, outfile=None):
     # use default filename if unspecified
     if outfile is None:
         outfile = 'reentry_demo_results.dat'
     outfile = os.path.join('..', outfile)
 
     if not os.path.exists(outfile) or True:
-        # Generate reference trajectory by ODE integration
+        tau = 0.05
+        disc_tau = 0.1
+        # Generate reference trajectory by SDE simulation
         sys = ReentryVehicleRadarTrackingGaussSystem()
-        x = sys.simulate_trajectory(method='rk4', dt=tau, duration=dur, mc_sims=mc_sims)
+        x = sys.simulate_trajectory(dt=tau, duration=dur, mc_sims=mc_sims)
         y = np.zeros((sys.zD,) + x.shape[1:])
         for i in range(mc_sims):
-            y[..., i] = sys.simulate_measurements(x[..., i], mc_per_step=1).squeeze()
+            y[..., i] = sys.simulate_measurements(x[..., i]).squeeze()
+
+        # subsample data for the filter and performance score calculation
+        x = x[:, ::2, ...]  # take every second point on the trajectory
+        y = y[:, ::2, ...]  # and corresponding measurement
 
         # Initialize state-space model with mis-specified initial mean
-        ssm = ReentryVehicleRadarTrackingGaussSSM(dt=tau)
+        ssm = ReentryVehicleRadarTrackingGaussSSM(dt=disc_tau)
         ssm.set_pars('x0_mean', np.array([6500.4, 349.14, -1.1093, -6.1967, 0.6932]))
         ssm.set_pars('x0_cov', np.diag([1e-6, 1e-6, 1e-6, 1e-6, 1]))
         # NOTE: higher tau causes higher spread of trajectories at the ends
@@ -250,16 +256,7 @@ def reentry_demo(dur=200, tau=0.5, mc_sims=20, outfile=None):
             'ukf': UnscentedKalman(ssm, beta=0),
         })
 
-        kpdyn = np.array([[0.5, 1, 1e3, 1, 1e3, 1e3],
-                          [0.5, 1e3, 1, 1e3, 1, 1e3],
-                          [0.35, 3, 3, 3, 3, 1],
-                          [0.35, 3, 3, 3, 3, 1],
-                          [2.2, 1e3, 1e3, 1e3, 1e3, 1]])
-        kpobs = np.array([[1.0, 1, 1, 1e2, 1e2, 1e2],
-                          [1.0, 1.4, 1.4, 1e2, 1e2, 1e2]])
-        # multivariate_emv(alg['bsqkf'].tf_dyn, kpdyn, mul_ut)
-        alg['bsqkf'].tf_dyn.model.model_var = np.diag([0.1, 0.1, 0.1, 0.1, 0.02])
-        # multivariate_emv(alg[0].tf_meas, kpobs, mul_ut)  # 1e-8*np.eye(2)
+        alg['bsqkf'].tf_dyn.model.model_var = np.diag([0.1, 0.1, 0.1, 0.1, 0.015])
         alg['bsqkf'].tf_meas.model.model_var = 0*np.eye(2)
         print('BSQ EMV\ndyn: {} \nobs: {}'.format(alg['bsqkf'].tf_dyn.model.model_var.diagonal(),
                                                   alg['bsqkf'].tf_meas.model.model_var.diagonal()))
@@ -305,7 +302,7 @@ def reentry_demo(dur=200, tau=0.5, mc_sims=20, outfile=None):
         # Save the simulation results into outfile
         data_dict = {
             'duration': dur,
-            'disc_tau': tau,
+            'disc_tau': disc_tau,
             'alg_str': list(alg.keys()),
             'position': {'rmse': pos_rmse_vs_time, 'inc': pos_inc_vs_time},
             'velocity': {'rmse': vel_rmse_vs_time, 'inc': vel_inc_vs_time},

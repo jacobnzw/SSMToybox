@@ -346,8 +346,8 @@ class System(object, metaclass=ABCMeta):
         # ensure sensible values of dt
         assert dt < duration
 
-        # get ODE integration method
-        ode_method = self._get_ode_method(method)
+        # get SDE integration method
+        sde_method = self._euler_maruyama  # self._get_method(method)
 
         # allocate space for system state and noise
         steps = int(np.floor(duration / dt))
@@ -360,8 +360,8 @@ class System(object, metaclass=ABCMeta):
         for imc in range(mc_sims):
             for k in range(1, steps+1):
                 theta = self.par_fcn(k - 1)
-                # computes next state x(t + dt) by ODE integration
-                x[:, k, imc] = ode_method(self.dyn_fcn, x[:, k - 1, imc], q[:, k - 1, imc], theta, dt)
+                # computes next state x(t + dt) by chosen SDE method
+                x[:, k, imc] = sde_method(self.dyn_fcn, x[:, k - 1, imc], q[:, k - 1, imc], theta, dt)
         return x[:, 1:, :]
 
     def simulate_measurements(self, x, mc_per_step=1):
@@ -394,6 +394,27 @@ class System(object, metaclass=ABCMeta):
                 theta = self.par_fcn(k - 1)
                 y[:, k, imc] = self.meas_fcn(x[:, k], r[:, k, imc], theta)
         return y
+
+    def _euler_maruyama(self, func, x, q, theta, dt):
+        """
+        SDE integration using Euler-Maruyama approximation.
+
+        x_k+1 = x_k + f(x_k, k)*dt + q_k, q_k ~ N(0, dt*Q)
+
+        Parameters
+        ----------
+        func
+        x
+        q
+        theta
+        dt
+
+        Returns
+        -------
+
+        """
+        # NOTE: the compensatory factor sqrt(dt)/dt is there because q~N(0,Q) and func needs the q
+        return x + dt * func(x, (np.sqrt(dt)/dt)*q, theta)
 
     def _ode_euler(self, func, x, q, theta, dt):
         """
@@ -457,9 +478,9 @@ class System(object, metaclass=ABCMeta):
         k4 = func(x + dt * k3, q, theta)
         return x + (dt / 6) * (k1 + 2 * (k2 + k3) + k4)
 
-    def _get_ode_method(self, method):
+    def _get_method(self, method):
         """
-        Get an ODE integration method.
+        Get an SDE integration method.
 
         Parameters
         ----------

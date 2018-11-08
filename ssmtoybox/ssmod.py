@@ -1250,7 +1250,7 @@ class ReentryVehicleRadarTrackingGaussSSM(GaussianStateSpaceModel):
             'x0_mean': np.array([6500.4, 349.14, -1.8093, -6.7967, 0.6932]),  # m, m/s, m m/s, rad/s
             'x0_cov': np.diag([1e-6, 1e-6, 1e-6, 1e-6, 1]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
             'q_mean': np.zeros(self.qD),
-            'q_cov': np.array(
+            'q_cov': dt * np.array(
                 [[2.4064e-5, 0, 0],
                  [0, 2.4064e-5, 0],
                  [0, 0, 1e-6]]),
