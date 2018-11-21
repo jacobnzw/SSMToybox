@@ -5,6 +5,8 @@ from numpy import newaxis as na, linalg as la
 import pandas as pd
 import sys
 
+from abc import ABCMeta, abstractmethod
+
 """
 Preliminary implementation of routines computing various performance metrics used in state estimation.
 
@@ -496,3 +498,41 @@ def vandermonde(mul_ind, x):
         for b in range(num_basis):
             vdm[n, b] = np.prod(x[:, n] ** mul_ind[:, b])
     return vdm
+
+
+class RandomVariable(metaclass=ABCMeta):
+
+    @abstractmethod
+    def sample(self, size):
+        pass
+
+    @abstractmethod
+    def get_stats(self):
+        pass
+
+
+class GaussRV(RandomVariable):
+
+    def __init__(self, dim, mean=None, cov=None):
+        self.dim = dim
+
+        # standard Gaussian distribution if mean, cov not specified
+        if mean is None:
+            mean = np.zeros((dim, ))
+        if mean.ndim != 1:
+            ValueError(
+                "{:s}: mean has to be 1D array. Supplied {:d}D array.".format(self.__class__.__name__, mean.ndim))
+        self.mean = mean
+
+        if cov is None:
+            cov = np.eye(dim)
+        if cov.ndim != 2:
+            ValueError(
+                "{:s}: covariance has to be 2D array. Supplied {:d}D array.".format(self.__class__.__name__, cov.ndim))
+        self.cov = cov
+
+    def sample(self, size):
+        return np.random.multivariate_normal(self.mean, self.cov, size)
+
+    def get_stats(self):
+        return self.mean, self.cov
