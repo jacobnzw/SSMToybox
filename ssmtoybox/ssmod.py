@@ -344,6 +344,26 @@ class UNGMTransition(TransitionModel):
         pass
 
 
+class UNGMNATransition(TransitionModel):
+
+    dim_in = 1
+    dim_out = 1
+    dim_noise = 1
+    noise_additive = False
+
+    def __init__(self, init_dist, noise_dist):
+        super(UNGMNATransition, self).__init__(init_dist, noise_dist)
+
+    def dyn_fcn(self, x, q, time):
+        return np.asarray([0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * q[0] * np.cos(1.2 * time)])
+
+    def dyn_fcn_cont(self, x, q, time):
+        pass
+
+    def dyn_fcn_dx(self, x, q, time):
+        return np.asarray([0.5 + 25 * (1 - x[0] ** 2) / (1 + x[0] ** 2) ** 2, 8 * np.cos(1.2 * time)])
+
+
 class Pendulum2DTransition(TransitionModel):
 
     dim_in = 2
@@ -598,34 +618,29 @@ class MeasurementModel(metaclass=ABCMeta):
                 out = self.meas_fcn(x, r, time)
         return out
 
-    def simulate_measurements(self, x, mc_per_step=1):
+    def simulate_measurements(self, x):
         """
         Simulates measurements
 
         Parameters
         ----------
-        x : (dim_x, ) ndarray
+        x : (dim_x, steps, mc_sims) ndarray
             State trajectory.
-
-        mc_per_step : int, optional
-            Number of measurements to generate in each time step.
 
         Returns
         -------
-        : (dim_y, num_time_steps, num_mc_sims) ndarray
+        : (dim_y, steps, mc_sims) ndarray
             Measurement trajectories of the continuous-time dynamic system.
         """
-        # x - state trajectory, freq - sampling frequency [Hz],
-        # mc_per_step - how many measurement to generate in each time step
 
-        d, steps = x.shape
+        d, steps, mc_sims = x.shape
 
         # Generate measurement noise
-        r = self.noise_dist.sample((mc_per_step, steps))
-        y = np.zeros((self.dim_out, steps, mc_per_step))
-        for imc in range(mc_per_step):
+        r = self.noise_dist.sample((steps, mc_sims))
+        y = np.zeros((self.dim_out, steps, mc_sims))
+        for imc in range(mc_sims):
             for k in range(steps):
-                y[:, k, imc] = self.meas_fcn(x[:, k], r[:, k, imc], k-1)
+                y[:, k, imc] = self.meas_fcn(x[:, k, imc], r[:, k, imc], k+1)  # TODO: check time index
         return y
 
 
@@ -644,6 +659,23 @@ class UNGMMeasurement(MeasurementModel):
 
     def meas_fcn_dx(self, x, r, time):
         return np.asarray([0.1 * x[0]])
+
+
+class UNGMNAMeasurement(MeasurementModel):
+
+    dim_in = 1
+    dim_out = 1
+    dim_noise = 1
+    noise_additive = False
+
+    def __init__(self, noise_dist):
+        super(UNGMNAMeasurement, self).__init__(noise_dist)
+
+    def meas_fcn(self, x, r, time):
+        return np.asarray([0.05 * r[0] * x[0] ** 2])
+
+    def meas_fcn_dx(self, x, r, time):
+        return np.asarray([0.1 * r[0] * x[0], 0.05 * x[0] ** 2])
 
 
 class Pendulum2DMeasurement(MeasurementModel):
