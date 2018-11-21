@@ -87,20 +87,20 @@ def tables():
     # initialize filters/smoothers
     algorithms = (
         # ExtendedKalman(ssm),
-        CubatureKalman(ssm),
-        UnscentedKalman(ssm, kappa=0.0),
-        GaussHermiteKalman(ssm, deg=5),
-        GaussHermiteKalman(ssm, deg=7),
-        GaussHermiteKalman(ssm, deg=10),
-        GaussHermiteKalman(ssm, deg=15),
-        GaussHermiteKalman(ssm, deg=20),
-        GaussianProcessKalman(ssm, kern_par_sr, kern_par_sr, kernel='rbf', points='sr'),
-        GaussianProcessKalman(ssm, kern_par_ut, kern_par_ut, kernel='rbf', points='ut'),
-        GaussianProcessKalman(ssm, kern_par_sr, kern_par_sr, kernel='rbf', points='gh', point_hyp={'degree': 5}),
-        GaussianProcessKalman(ssm, kern_par_gh, kern_par_gh, kernel='rbf', points='gh', point_hyp={'degree': 7}),
-        GaussianProcessKalman(ssm, kern_par_gh, kern_par_gh, kernel='rbf', points='gh', point_hyp={'degree': 10}),
-        GaussianProcessKalman(ssm, kern_par_gh, kern_par_gh, kernel='rbf', points='gh', point_hyp={'degree': 15}),
-        GaussianProcessKalman(ssm, kern_par_gh, kern_par_gh, kernel='rbf', points='gh', point_hyp={'degree': 20}),
+        CubatureKalman(ssm, mod_meas,,,
+        UnscentedKalman(ssm, mod_meas,,,
+        GaussHermiteKalman(ssm, mod_meas,,,
+        GaussHermiteKalman(ssm, mod_meas,,,
+        GaussHermiteKalman(ssm, mod_meas,,,
+        GaussHermiteKalman(ssm, mod_meas,,,
+        GaussHermiteKalman(ssm, mod_meas,,,
+        GaussianProcessKalman(ssm, mod_meas, kern_par_sr, kern_par_sr),
+        GaussianProcessKalman(ssm, mod_meas, kern_par_ut, kern_par_ut),
+        GaussianProcessKalman(ssm, mod_meas, kern_par_sr, kern_par_sr),
+        GaussianProcessKalman(ssm, mod_meas, kern_par_gh, kern_par_gh),
+        GaussianProcessKalman(ssm, mod_meas, kern_par_gh, kern_par_gh),
+        GaussianProcessKalman(ssm, mod_meas, kern_par_gh, kern_par_gh),
+        GaussianProcessKalman(ssm, mod_meas, kern_par_gh, kern_par_gh),
     )
     num_algs = len(algorithms)
 
@@ -170,7 +170,7 @@ def hypers_demo(lscale=[1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1, 3, 1e1, 3e1]):
         ker_par = np.array([[1.0, el * ssm.xD]])
 
         # initialize BHKF with current lenghtscale
-        f = GaussianProcessKalman(ssm, ker_par, ker_par, kernel='rbf', points='ut')
+        f = GaussianProcessKalman(ssm, mod_meas, ker_par, ker_par)
         # filtering
         for s in range(mc):
             mean_f[..., s, iel], cov_f[..., s, iel] = f.forward_pass(z[..., s])

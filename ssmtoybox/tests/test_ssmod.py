@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from ssmtoybox.ssinf import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GaussianProcessKalman, TPQKalman
-from ssmtoybox.ssmod import PendulumGaussSSM, UNGMGaussSSM, UNGMNonAdditiveGaussSSM
+from ssmtoybox.ssmod import UNGMTransition, UNGMMeasurement, Pendulum2DTransition, Pendulum2DMeasurement, UNGMNonAdditiveGaussSSM
 
 
 def default_bq_hypers(sys):
@@ -22,26 +22,34 @@ class TestUNGM(unittest.TestCase):
     def test_meas_fcn(self):
         pass
 
-    def test_simulate(self):
-        ungm = UNGMGaussSSM()
-        ungmna = UNGMNonAdditiveGaussSSM()
-        ungm.simulate(50, mc_sims=20)
-        ungmna.simulate(50, mc_sims=20)
+    def test_simulate_transition(self):
+        ungm_dyn = UNGMTransition()
+        ungmna_dyn = UNGMNATransition()
+        ungm_dyn.simulate_discrete(50, mc_sims=20)
+        ungmna_dyn.simulate_discrete(50, mc_sims=20)
+
+    def test_simulate_measurement(self):
+        ungm_meas = UNGMMeasurement()
+        ungmna_meas = UNGMNAMeasurement()
+        ungm_meas.simulate_measurements(50, mc_per_step=10)
+        ungmna_meas.simulate_measurements(50, mc_per_step=10)
 
     def test_ungm_inference(self):
         """
         Test bunch of filters on Univariate Non-linear Growth Model (with additive noise)
         """
-        ssm = UNGMGaussSSM()
-        x, z = ssm.simulate(100, mc_sims=1)
+        mod_dyn = UNGMTransition()
+        mod_meas = UNGMMeasurement()
+        x = mod_dyn.simulate_discrete(100, mc_sims=1)
+        z = mod_meas.simulate_measurements(x)
         hyp_dyn, hyp_meas = default_bq_hypers(ssm)
         inf_method = (
-            ExtendedKalman(ssm),
-            UnscentedKalman(ssm, kappa=0.0),
-            CubatureKalman(ssm),
-            GaussHermiteKalman(ssm),
-            GaussianProcessKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
-            TPQKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
+            ExtendedKalman(ssm, mod_meas,,,
+            UnscentedKalman(ssm, mod_meas,,,
+            CubatureKalman(ssm, mod_meas,,,
+            GaussHermiteKalman(ssm, mod_meas,,,
+            GaussianProcessKalman(ssm, mod_meas, hyp_dyn, hyp_meas),
+            TPQKalman(ssm, mod_meas, hyp_dyn, hyp_meas),
         )
         for inf in inf_method:
             inf.forward_pass(z[..., 0])
@@ -55,12 +63,12 @@ class TestUNGM(unittest.TestCase):
         x, z = ssm.simulate(100, mc_sims=1)
         hyp_dyn, hyp_meas = default_bq_hypers(ssm)
         inf_method = (
-            ExtendedKalman(ssm),
-            UnscentedKalman(ssm),
-            CubatureKalman(ssm),
-            GaussHermiteKalman(ssm),
-            GaussianProcessKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
-            TPQKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
+            ExtendedKalman(ssm, mod_meas,,,
+            UnscentedKalman(ssm, mod_meas,,,
+            CubatureKalman(ssm, mod_meas,,,
+            GaussHermiteKalman(ssm, mod_meas,,,
+            GaussianProcessKalman(ssm, mod_meas, hyp_dyn, hyp_meas),
+            TPQKalman(ssm, mod_meas, hyp_dyn, hyp_meas),
         )
         for inf in inf_method:
             print(r"Testing {} ...".format(inf.__class__.__name__), end=' ')
@@ -82,12 +90,12 @@ class TestPendulum(unittest.TestCase):
         x, z = ssm.simulate(100, mc_sims=1)
         hyp_dyn, hyp_meas = default_bq_hypers(ssm)
         inf_method = (
-            ExtendedKalman(ssm),
-            UnscentedKalman(ssm),
-            CubatureKalman(ssm),
-            GaussHermiteKalman(ssm),
-            GaussianProcessKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
-            TPQKalman(ssm, hyp_dyn, hyp_meas, 'rbf', 'ut'),
+            ExtendedKalman(ssm, mod_meas,,,
+            UnscentedKalman(ssm, mod_meas,,,
+            CubatureKalman(ssm, mod_meas,,,
+            GaussHermiteKalman(ssm, mod_meas,,,
+            GaussianProcessKalman(ssm, mod_meas, hyp_dyn, hyp_meas),
+            TPQKalman(ssm, mod_meas, hyp_dyn, hyp_meas),
         )
         for inf in inf_method:
             inf.forward_pass(z[..., 0])

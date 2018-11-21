@@ -4,6 +4,7 @@ import numpy as np
 from numpy import newaxis as na
 from ssmtoybox.utils import multivariate_t
 
+# TODO: before defining all classes, build a prototype of the whole to see if the redesign checks out
 
 """
 Transition models
@@ -343,6 +344,30 @@ class UNGMTransition(TransitionModel):
         pass
 
 
+class Pendulum2DTransition(TransitionModel):
+
+    dim_in = 2
+    dim_out = 2
+    dim_noise = 2
+    noise_additive = True
+
+    g = 9.81  # gravitational acceleration
+
+    def __init__(self, init_dist, noise_dist, dt=0.01):
+        super(Pendulum2DTransition, self).__init__(init_dist, noise_dist)
+        self.dt = dt
+
+    def dyn_fcn(self, x, q, time):
+        return np.array([x[0] + x[1] * self.dt, x[1] - self.g * self.dt * np.sin(x[0])]) + q
+
+    def dyn_fcn_cont(self, x, q, time):
+        pass
+
+    def dyn_fcn_dx(self, x, r, time):
+        return np.array([[1.0, self.dt],
+                         [-self.g * self.dt * np.cos(x[0]), 1.0]])
+
+
 class ReentryVehicle1DTransition(TransitionModel):
 
     dim_in = 3
@@ -474,6 +499,8 @@ class MeasurementModel(metaclass=ABCMeta):
         Indicates additivity of the noise. `True` if noise is additive, `False` otherwise.
     """
 
+    # TODO use index mask to pick out states to use for computing the measurement.
+    # TODO should represent effective dim. to verify the index mask (if proper # dims were selected).
     dim_in = None
     dim_out = None
     dim_noise = None
@@ -619,6 +646,23 @@ class UNGMMeasurement(MeasurementModel):
         return np.asarray([0.1 * x[0]])
 
 
+class Pendulum2DMeasurement(MeasurementModel):
+
+    dim_in = 2
+    dim_out = 1
+    dim_noise = 1
+    noise_additive = True
+
+    def __init__(self, noise_dist):
+        super(Pendulum2DMeasurement, self).__init__(noise_dist)
+
+    def meas_fcn(self, x, r, time):
+        return np.array([np.sin(x[0])]) + r
+
+    def meas_fcn_dx(self, x, r, time):
+        return np.array([np.cos(x[0]), 0.0])
+
+
 class RangeMeasurement(MeasurementModel):
 
     dim_in = 3
@@ -628,6 +672,8 @@ class RangeMeasurement(MeasurementModel):
 
     def __init__(self, noise_dist):
         super(RangeMeasurement, self).__init__(noise_dist)
+        self.sx = 30
+        self.sy = 30
 
     def meas_fcn(self, x, r, time):
         rng = np.sqrt(self.sx ** 2 + (x[0] - self.sy) ** 2)

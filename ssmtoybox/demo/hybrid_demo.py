@@ -37,9 +37,9 @@ der_mask = np.array([0])
 # filters/smoothers to test
 algorithms = (
     # EKF, GPQ+D w/ affine kernel, GPQ+D w/ RBF kernel (el --> infty)
-    ExtendedKalman(ssm),
+    ExtendedKalman(ssm, mod_meas,,,
     # GPQ+D RBF kernel w/ single sigma-point, becomes EKF for el --> infinity
-    ExtendedKalmanGPQD(ssm, el=1.0),
+    ExtendedKalmanGPQD(ssm, mod_meas,,,
     # GPQ+D affine kernel w/ single sigma-point, x = m + L*xi
     # GPQuadDerAffineKalman(ssm, usp_0, usp_0, hyp_affine, hyp_affine, which_der=der_mask),
     # GPQ+D RBF kernel w/ single sigma-point, x = m + L*xi

@@ -134,8 +134,8 @@ def ukf_trunc_demo(mc_sims=50):
 
     # initialize UKF and UKF in truncated version
     alg = (
-        UnscentedKalman(ssm),
-        UnscentedTruncKalman(ssm),
+        UnscentedKalman(ssm, mod_meas,,,
+        UnscentedTruncKalman(ssm, mod_meas,,,
     )
     num_alg = len(alg)
 
