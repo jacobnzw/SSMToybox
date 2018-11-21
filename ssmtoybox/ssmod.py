@@ -5,6 +5,11 @@ from numpy import newaxis as na
 from ssmtoybox.utils import multivariate_t
 
 
+"""
+Transition models
+"""
+
+
 class TransitionModel(metaclass=ABCMeta):
     """State transition model
 
@@ -338,6 +343,32 @@ class UNGMTransition(TransitionModel):
         pass
 
 
+class ReentryVehicle1DTransition(TransitionModel):
+
+    dim_in = 3
+    dim_out = 3
+    dim_noise = 3
+    noise_additive = True
+
+    def __init__(self, init_dist, noise_dist, dt=0.1):
+        super(ReentryVehicle1DTransition, self).__init__(init_dist, noise_dist)
+        self.dt = dt
+        self.Gamma = 1 / 6.096
+
+    def dyn_fcn(self, x, q, time):
+        return np.array([x[0] - self.dt * x[1] + q[0],
+                         x[1] - self.dt * np.exp(-self.Gamma * x[0]) * x[1] ** 2 * x[2] + q[1],
+                         x[2] + q[2]])
+
+    def dyn_fcn_cont(self, x, q, time):
+        return np.array([-x[1] + q[0],
+                         -np.exp(-self.Gamma * x[0]) * x[1] ** 2 * x[2] + q[1],
+                         q[2]])
+
+    def dyn_fcn_dx(self, x, r, time):
+        pass
+
+
 class ReentryVehicle2DTransition(TransitionModel):
 
     dim_in = 5
@@ -410,6 +441,11 @@ class ReentryVehicle2DTransition(TransitionModel):
                          q[2]])
 
 
+"""
+Measurement models
+"""
+
+
 class MeasurementModel(metaclass=ABCMeta):
     """Measurement model
 
@@ -443,9 +479,7 @@ class MeasurementModel(metaclass=ABCMeta):
     dim_noise = None
     noise_additive = None
 
-    def __init__(self, init_dist, noise_dist):
-        # distribution of initial conditions
-        self.init_dist = init_dist
+    def __init__(self, noise_dist):
         # distribution of process noise
         self.noise_dist = noise_dist
         # zero vec for convenience
@@ -583,6 +617,24 @@ class UNGMMeasurement(MeasurementModel):
 
     def meas_fcn_dx(self, x, r, time):
         return np.asarray([0.1 * x[0]])
+
+
+class RangeMeasurement(MeasurementModel):
+
+    dim_in = 3
+    dim_out = 1
+    dim_noise = 1
+    noise_additive = True
+
+    def __init__(self, noise_dist):
+        super(RangeMeasurement, self).__init__(noise_dist)
+
+    def meas_fcn(self, x, r, time):
+        rng = np.sqrt(self.sx ** 2 + (x[0] - self.sy) ** 2)
+        return np.array([rng]) + r
+
+    def meas_fcn_dx(self, x, r, time):
+        pass
 
 
 class Radar2DMeasurement(MeasurementModel):
