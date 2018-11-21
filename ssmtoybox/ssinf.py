@@ -223,6 +223,7 @@ class GaussianInference(StateSpaceInference):
         self.q_mean, self.q_cov = mod_dyn.noise_dist.get_stats()
         self.r_mean, self.r_cov = mod_meas.noise_dist.get_stats()
 
+        self.G = np.eye(mod_dyn.dim_out, mod_dyn.dim_noise)
         self.x_mean_fi, self.x_cov_fi = self.x0_mean, self.x0_cov
 
         super(GaussianInference, self).__init__(mod_dyn, mod_meas, tf_dyn, tf_meas)
@@ -759,9 +760,9 @@ class ExtendedKalman(GaussianInference):
     """
 
     def __init__(self, mod_dyn, mod_meas):
-        assert isinstance(mod_dyn, StateSpaceModel)
-        nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
-        nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
+        assert isinstance(mod_dyn, TransitionModel) and isinstance(mod_meas, MeasurementModel)
+        nq = mod_dyn.dim_in if mod_dyn.noise_additive else mod_dyn.dim_in + mod_dyn.dim_noise
+        nr = mod_meas.dim_in if mod_meas.noise_additive else mod_meas.dim_in + mod_dyn.dim_noise
         tf = LinearizationTransform(nq)
         th = LinearizationTransform(nr)
         super(ExtendedKalman, self).__init__(mod_dyn, mod_meas, tf, th)
@@ -955,13 +956,13 @@ class GaussianProcessKalman(GaussianInference):
 
     """
 
-    def __init__(self, mod_dyn, mod_meas, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None):
-        assert isinstance(mod_dyn, TransitionModel) and isinstance(mod_meas, MeasurementModel)
-        nq = mod_dyn.dim_in if mod_dyn.noise_additive else mod_dyn.dim_in + mod_dyn.dim_noise
-        nr = mod_meas.dim_in if mod_meas.noise_additive else mod_meas.dim_in + mod_meas.dim_noise
-        t_dyn = GaussianProcessTransform(nq, mod_dyn.xD, kern_par_dyn, kernel, points, point_hyp)
-        t_obs = GaussianProcessTransform(nr, mod_dyn.zD, kern_par_obs, kernel, points, point_hyp)
-        super(GaussianProcessKalman, self).__init__(mod_dyn, mod_meas, t_dyn, t_obs)
+    def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None):
+        assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
+        nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
+        nr = obs.dim_in if obs.noise_additive else obs.dim_in + obs.dim_noise
+        t_dyn = GaussianProcessTransform(nq, dyn.dim_out, kern_par_dyn, kernel, points, point_hyp)
+        t_obs = GaussianProcessTransform(nr, obs.dim_out, kern_par_obs, kernel, points, point_hyp)
+        super(GaussianProcessKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
 
 class BayesSardKalman(GaussianInference):
@@ -1004,13 +1005,13 @@ class BayesSardKalman(GaussianInference):
         Hyper-parameters of the sigma-point set.
     """
 
-    def __init__(self, mod_dyn, mod_meas, kern_par_dyn, kern_par_obs, mulind_dyn=2, mulind_obs=2, points='ut', point_hyp=None):
-        assert isinstance(mod_dyn, TransitionModel) and isinstance(mod_meas, MeasurementModel)
-        nq = mod_dyn.dim_in if mod_dyn.noise_additive else mod_dyn.dim_in + mod_dyn.dim_noise
-        nr = mod_meas.dim_in if mod_meas.noise_additive else mod_meas.dim_in + mod_meas.dim_noise
-        t_dyn = BayesSardTransform(nq, mod_dyn.xD, kern_par_dyn, mulind_dyn, points, point_hyp)
-        t_obs = BayesSardTransform(nr, mod_dyn.zD, kern_par_obs, mulind_obs, points, point_hyp)
-        super(BayesSardKalman, self).__init__(mod_dyn, mod_meas, t_dyn, t_obs)
+    def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, mulind_dyn=2, mulind_obs=2, points='ut', point_hyp=None):
+        assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
+        nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
+        nr = obs.dim_in if obs.noise_additive else obs.dim_in + obs.dim_noise
+        t_dyn = BayesSardTransform(nq, dyn.dim_out, kern_par_dyn, mulind_dyn, points, point_hyp)
+        t_obs = BayesSardTransform(nr, obs.dim_out, kern_par_obs, mulind_obs, points, point_hyp)
+        super(BayesSardKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
 
 class GPQMOKalman(GaussianInference):
@@ -1138,13 +1139,13 @@ class TPQKalman(GaussianInference):
            Numerische Mathematik, vol. 10, pp. 327–344, 1967
     """
 
-    def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas):
-        assert isinstance(mod_dyn, StateSpaceModel)
-        nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
-        nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
-        t_dyn = StudentTProcessTransform(nq, 1, mod_dyn.xD, kern_par_dyn, kernel, points, point_hyp)
-        t_obs = StudentTProcessTransform(nr, 1, mod_dyn.zD, kern_par_obs, kernel, points, point_hyp)
-        super(TPQKalman, self).__init__(mod_dyn, mod_meas, t_dyn, t_obs)
+    def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None, nu=3.0):
+        assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
+        nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
+        nr = obs.dim_in if obs.noise_additive else obs.dim_in + obs.dim_noise
+        t_dyn = StudentTProcessTransform(nq, 1, kern_par_dyn, kernel, points, point_hyp)
+        t_obs = StudentTProcessTransform(nr, 1, kern_par_obs, kernel, points, point_hyp)
+        super(TPQKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
 
 class TPQStudent(StudentInference):

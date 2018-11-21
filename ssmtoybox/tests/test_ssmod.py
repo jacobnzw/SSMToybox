@@ -5,6 +5,7 @@ import numpy as np
 from ssmtoybox.ssinf import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GaussianProcessKalman, TPQKalman
 from ssmtoybox.ssmod import UNGMTransition, UNGMMeasurement, UNGMNATransition, UNGMNAMeasurement, \
     Pendulum2DTransition, Pendulum2DMeasurement
+from ssmtoybox.utils import GaussRV
 
 
 def default_bq_hypers(mod_dyn, mod_meas):
@@ -26,17 +27,17 @@ class TestUNGM(unittest.TestCase):
     def test_simulate(self):
         time_steps = 50
         # UNGM additive noise
-        # TODO implement Gaussian Random Variable
-        # init_dist = GaussRV(mean=np.array([0.0]), cov=np.array([1.0]))
-        # noise_dist = GaussRV(mean=np.array([0.0]), cov=np.array([1.0]))
-        ungm_dyn = UNGMTransition()
-        ungm_meas = UNGMMeasurement()
+        dim = 1
+        init_dist = GaussRV(dim)
+        noise_dist = GaussRV(dim, cov=np.atleast_2d(10.0))
+        ungm_dyn = UNGMTransition(init_dist, noise_dist)
+        ungm_meas = UNGMMeasurement(GaussRV(dim))
         x = ungm_dyn.simulate_discrete(time_steps, mc_sims=20)
         y = ungm_meas.simulate_measurements(x)
 
         # UNGM non-additive noise
-        ungmna_dyn = UNGMNATransition()
-        ungmna_meas = UNGMNAMeasurement()
+        ungmna_dyn = UNGMNATransition(init_dist, noise_dist)
+        ungmna_meas = UNGMNAMeasurement(GaussRV(dim))
         x = ungmna_dyn.simulate_discrete(time_steps, mc_sims=20)
         y = ungmna_meas.simulate_measurements(x)
 
@@ -44,8 +45,11 @@ class TestUNGM(unittest.TestCase):
         """
         Test bunch of filters on Univariate Non-linear Growth Model (with additive noise)
         """
-        dyn = UNGMTransition()
-        meas = UNGMMeasurement()
+        dim = 1
+        init_dist = GaussRV(dim)
+        noise_dist = GaussRV(dim, cov=np.atleast_2d(10.0))
+        dyn = UNGMTransition(init_dist, noise_dist)
+        meas = UNGMMeasurement(GaussRV(dim))
         x = dyn.simulate_discrete(100, mc_sims=1)
         z = meas.simulate_measurements(x)
         hyp_dyn, hyp_meas = default_bq_hypers(dyn, meas)
@@ -61,12 +65,23 @@ class TestUNGM(unittest.TestCase):
             inf.forward_pass(z[..., 0])
             inf.backward_pass()
 
+        # TODO: check the results visually
+        import matplotlib.pyplot as plt
+        plt.figure()
+        for inf in inf_method:
+            plt.plot(inf.fi_mean, lw=2)
+        plt.plot(x[..., 0].T)
+        plt.show()
+
     def test_ungm_nonadd_inference(self):
         """
         Test bunch of filters on Univariate Non-linear Growth Model (with NON-additive noise)
         """
-        mod_dyn = UNGMNATransition()
-        mod_meas = UNGMNAMeasurement()
+        dim = 1
+        init_dist = GaussRV(dim)
+        noise_dist = GaussRV(dim, cov=np.atleast_2d(10.0))
+        mod_dyn = UNGMNATransition(init_dist, noise_dist)
+        mod_meas = UNGMNAMeasurement(GaussRV(dim))
         x = mod_dyn.simulate_discrete(100)
         z = mod_meas.simulate_measurements(x)
         hyp_dyn, hyp_meas = default_bq_hypers(mod_dyn, mod_meas)

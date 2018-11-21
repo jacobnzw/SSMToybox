@@ -532,7 +532,7 @@ class GaussRV(RandomVariable):
         self.cov = cov
 
     def sample(self, size):
-        return np.random.multivariate_normal(self.mean, self.cov, size)
+        return np.moveaxis(np.random.multivariate_normal(self.mean, self.cov, size), -1, 0)
 
     def get_stats(self):
         return self.mean, self.cov

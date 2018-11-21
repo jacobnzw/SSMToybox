@@ -186,7 +186,7 @@ class TransitionModel(metaclass=ABCMeta):
         x[:, 0, :] = self.init_dist.sample(mc_sims)  # (D, mc_sims)
 
         # generate state and measurement noise
-        q = self.noise_dist.sample((mc_sims, steps))
+        q = self.noise_dist.sample((steps, mc_sims))
 
         # simulate SSM `mc_sims` times for `steps` time steps
         for imc in range(mc_sims):
@@ -335,7 +335,7 @@ class UNGMTransition(TransitionModel):
         super(UNGMTransition, self).__init__(init_dist, noise_dist)
 
     def dyn_fcn(self, x, q, time):
-        return np.asarray([0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * np.cos(1.2 * time)]) + q
+        return np.asarray(0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * np.cos(1.2 * time)) + q
 
     def dyn_fcn_dx(self, x, q, time):
         return np.asarray([0.5 + 25 * (1 - x[0] ** 2) / (1 + x[0] ** 2) ** 2])
@@ -355,7 +355,7 @@ class UNGMNATransition(TransitionModel):
         super(UNGMNATransition, self).__init__(init_dist, noise_dist)
 
     def dyn_fcn(self, x, q, time):
-        return np.asarray([0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * q[0] * np.cos(1.2 * time)])
+        return np.asarray(0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * q[0] * np.cos(1.2 * time))
 
     def dyn_fcn_cont(self, x, q, time):
         pass
@@ -651,8 +651,8 @@ class UNGMMeasurement(MeasurementModel):
     dim_noise = 1
     noise_additive = True
 
-    def __init__(self, init_dist, noise_dist):
-        super(UNGMMeasurement, self).__init__(init_dist, noise_dist)
+    def __init__(self, noise_dist):
+        super(UNGMMeasurement, self).__init__(noise_dist)
 
     def meas_fcn(self, x, r, time):
         return np.asarray([0.05 * x[0] ** 2]) + r
