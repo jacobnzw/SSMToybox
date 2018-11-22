@@ -596,4 +596,4 @@ class StudentRV(RandomVariable):
         return np.moveaxis(multivariate_t(self.mean, self.scale, self.dof, size), -1, 0)
 
     def get_stats(self):
-        return self.mean, self.dof/(self.dof - 2) * self.scale
+        return self.mean, self.scale, self.dof
