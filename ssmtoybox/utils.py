@@ -512,23 +512,36 @@ class RandomVariable(metaclass=ABCMeta):
 
 
 class GaussRV(RandomVariable):
+    """
+    Gaussian random variable.
+
+    Parameters
+    ----------
+    dim : int
+        Dimensionality of the random variable.
+
+    mean : (dim, ) ndarray, optional
+        Mean. If `None`, zero mean.
+
+    cov : (dim, dim) ndarray, optional
+        Covariance matrix. If `None`, unit covariance matrix.
+    """
 
     def __init__(self, dim, mean=None, cov=None):
-        self.dim = dim
-
         # standard Gaussian distribution if mean, cov not specified
         if mean is None:
             mean = np.zeros((dim, ))
         if mean.ndim != 1:
             ValueError(
                 "{:s}: mean has to be 1D array. Supplied {:d}D array.".format(self.__class__.__name__, mean.ndim))
-        self.mean = mean
-
         if cov is None:
             cov = np.eye(dim)
         if cov.ndim != 2:
             ValueError(
                 "{:s}: covariance has to be 2D array. Supplied {:d}D array.".format(self.__class__.__name__, cov.ndim))
+
+        self.dim = dim
+        self.mean = mean
         self.cov = cov
 
     def sample(self, size):
@@ -536,3 +549,51 @@ class GaussRV(RandomVariable):
 
     def get_stats(self):
         return self.mean, self.cov
+
+
+class StudentRV(RandomVariable):
+    """
+    Student's t random variable.
+
+    Parameters
+    ----------
+    dim : int
+        Dimensionality of the random variable.
+
+    mean : (dim, ) ndarray, optional
+        Mean. If `None`, zero mean.
+
+    scale : (dim, dim) ndarray, optional
+        Scale matrix. If `None`, unit scale matrix.
+
+    dof : float, optional
+        Degrees of freedom. Must be > 2. Default `dof=3`.
+    """
+
+    def __init__(self, dim, mean=None, scale=None, dof=3.0):
+        # zero mean if not given
+        if mean is None:
+            mean = np.zeros((dim,))
+        if mean.ndim != 1:
+            ValueError(
+                "{:s}: mean has to be 1D array. Supplied {:d}D array.".format(self.__class__.__name__, mean.ndim))
+        # unit scale if not given
+        if scale is None:
+            scale = np.eye(dim)
+        if scale.ndim != 2:
+            ValueError("{:s}: scale matrix has to be 2D array. Supplied {:d}D array.".format(
+                self.__class__.__name__, scale.ndim))
+        # dof must be > 2
+        if dof <= 2.0:
+            dof = 3.0
+
+        self.dim = dim
+        self.mean = mean
+        self.scale = scale
+        self.dof = dof
+
+    def sample(self, size):
+        return multivariate_t(self.mean, self.scale, self.dof, size)
+
+    def get_stats(self):
+        return self.mean, self.dof/(self.dof - 2) * self.scale
