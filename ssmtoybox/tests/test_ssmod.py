@@ -65,13 +65,13 @@ class TestUNGM(unittest.TestCase):
             inf.forward_pass(z[..., 0])
             inf.backward_pass()
 
-        # TODO: check the results visually
-        import matplotlib.pyplot as plt
-        plt.figure()
-        for inf in inf_method:
-            plt.plot(inf.fi_mean, lw=2)
-        plt.plot(x[..., 0].T)
-        plt.show()
+        # import matplotlib.pyplot as plt
+        # plt.figure()
+        # for inf in inf_method:
+        #     plt.plot(inf.fi_mean[:, 1:].T, label=inf.__class__.__name__)
+        # plt.plot(x[..., 0].T, label='True', color='r', ls='--')
+        # plt.legend()
+        # plt.show()
 
     def test_ungm_nonadd_inference(self):
         """
@@ -109,8 +109,17 @@ class TestPendulum(unittest.TestCase):
         """
         Test bunch of filters on a pendulum example
         """
-        mod_dyn = Pendulum2DTransition()
-        mod_meas = Pendulum2DMeasurement()
+
+        # transition model: x0 = initial state RV, q = state noise RV, dt = discretization period
+        x0 = GaussRV(2, mean=np.array([1.5, 0]), cov=0.01 * np.eye(2))
+        dt = 0.01
+        q = GaussRV(2, cov=0.01 * np.array([[(dt ** 3) / 3, (dt ** 2) / 2], [(dt ** 2) / 2, dt]]))
+        mod_dyn = Pendulum2DTransition(x0, q, dt=dt)
+
+        # measurement model: r = measurement noise RV
+        r = GaussRV(1, cov=np.array([[0.1]]))
+        mod_meas = Pendulum2DMeasurement(r)
+
         x = mod_dyn.simulate_discrete(100)
         z = mod_meas.simulate_measurements(x)
         hyp_dyn, hyp_meas = default_bq_hypers(mod_dyn, mod_meas)

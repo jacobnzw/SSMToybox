@@ -80,7 +80,7 @@ class StateSpaceInference(metaclass=ABCMeta):
         self.D, self.N = data.shape
         self.fi_mean = np.zeros((self.mod_dyn.dim_in, self.N+1))
         self.fi_cov = np.zeros((self.mod_dyn.dim_in, self.mod_dyn.dim_in, self.N+1))
-        # FIXME: saving initial conditions to filtered state is redundant
+        # FIXME: why save x0 to fi_mean, fi_cov when they get trimmed off in the end?
         # NOTE: if init. conds must be saved (smoother?) than fi_mean should be one larger than # measurements to
         # accommodate inits.
 
@@ -223,7 +223,9 @@ class GaussianInference(StateSpaceInference):
         self.q_mean, self.q_cov = mod_dyn.noise_dist.get_stats()
         self.r_mean, self.r_cov = mod_meas.noise_dist.get_stats()
 
+        # TODO: gain should be part of the TransitionModel probably
         self.G = np.eye(mod_dyn.dim_out, mod_dyn.dim_noise)
+        # initial moments are taken to be the first filtered estimate
         self.x_mean_fi, self.x_cov_fi = self.x0_mean, self.x0_cov
 
         super(GaussianInference, self).__init__(mod_dyn, mod_meas, tf_dyn, tf_meas)
