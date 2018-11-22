@@ -593,7 +593,7 @@ class StudentRV(RandomVariable):
         self.dof = dof
 
     def sample(self, size):
-        return multivariate_t(self.mean, self.scale, self.dof, size)
+        return np.moveaxis(multivariate_t(self.mean, self.scale, self.dof, size))
 
     def get_stats(self):
         return self.mean, self.dof/(self.dof - 2) * self.scale
