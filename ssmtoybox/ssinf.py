@@ -10,6 +10,7 @@ from ssmtoybox.mtran import MomentTransform, LinearizationTransform, TaylorGPQDT
     SphericalRadialTransform, UnscentedTransform, GaussHermiteTransform, \
     SphericalRadialTruncatedTransform, UnscentedTruncatedTransform, GaussHermiteTruncatedTransform
 from ssmtoybox.utils import StudentRV
+import warnings
 
 
 class StateSpaceInference(metaclass=ABCMeta):
@@ -220,12 +221,11 @@ class GaussianInference(StateSpaceInference):
         assert isinstance(mod_dyn, TransitionModel) and isinstance(mod_meas, MeasurementModel)
 
         # set initial condition mean and covariance, and noise covariances
-        self.x0_mean, self.x0_cov = mod_dyn.init_dist.get_stats()
-        self.q_mean, self.q_cov = mod_dyn.noise_dist.get_stats()
+        self.x0_mean, self.x0_cov = mod_dyn.init_rv.get_stats()
+        self.q_mean, self.q_cov = mod_dyn.noise_rv.get_stats()
         self.r_mean, self.r_cov = mod_meas.noise_dist.get_stats()
 
-        # TODO: gain should be part of the TransitionModel probably
-        self.G = np.eye(mod_dyn.dim_out, mod_dyn.dim_noise)
+        self.G = mod_dyn.noise_gain
         # initial moments are taken to be the first filtered estimate
         self.x_mean_fi, self.x_cov_fi = self.x0_mean, self.x0_cov
 
@@ -1006,22 +1006,25 @@ class StudentInference(StateSpaceInference):
         assert isinstance(mod_dyn, TransitionModel) and isinstance(mod_meas, MeasurementModel)
 
         # make sure initial state and noises are Student RVs
-        if not isinstance(mod_dyn.init_dist, StudentRV):
+        if not isinstance(mod_dyn.init_rv, StudentRV):
             ValueError("Initial state is not Student RV.")
-        if not isinstance(mod_dyn.noise_dist, StudentRV):
+        if not isinstance(mod_dyn.noise_rv, StudentRV):
             ValueError("Process noise is not Student RV.")
         if not isinstance(mod_meas.noise_dist, StudentRV):
             ValueError("Measurement noise is not Student RV.")
-
-        # TODO: check dof > 2
+        if dof <= 2.0:
+            dof = 4.0
+            warnings.warn("You supplied invalid DoF (must be > 2). Setting to dof=4.")
 
         # extract SSM parameters  # TODO get_stats() returns scale mat., convert it to cov. mat.
-        self.x0_mean, self.x0_cov, self.x0_dof = mod_dyn.init_dist.get_stats()
-        # initial filtered statistics are the initial state statistics are taken to be
+        self.x0_mean, self.x0_cov, self.x0_dof = mod_dyn.init_rv.get_stats()
+        self.x0_cov = (self.x0_dof/(self.x0_dof-2)) * self.cov
+        # initial filtered statistics are the initial state statistics
         self.x_mean_fi, self.x_cov_fi, self.dof_fi = self.x0_mean, self.x0_cov, self.x0_dof
 
         # state noise statistics
-        self.q_mean, self.q_cov, self.q_dof, self.q_gain = mod_dyn.noise_dist.get_stats()
+        self.q_mean, self.q_cov, self.q_dof = mod_dyn.noise_rv.get_stats()
+        self.q_gain = mod_dyn.noise_gain
 
         # measurement noise statistics
         self.r_mean, self.r_cov, self.r_dof = mod_meas.noise_dist.get_stats()
@@ -1203,8 +1206,8 @@ class TPQStudent(StudentInference):
         nr = mod_obs.dim_in if mod_obs.noise_additive else mod_obs.dim_in + mod_obs.dim_noise
 
         # degrees of freedom for SSM noises
-        assert isinstance(mod_dyn.init_dist, StudentRV) and isinstance(mod_dyn.noise_dist, StudentRV)
-        q_dof, r_dof = mod_dyn.noise_dist.dof, mod_obs.noise_dist.dof
+        assert isinstance(mod_dyn.init_rv, StudentRV) and isinstance(mod_dyn.noise_rv, StudentRV)
+        q_dof, r_dof = mod_dyn.noise_rv.dof, mod_obs.noise_dist.dof
 
         # add DOF of the noises to the sigma-point parameters
         if point_par is None:

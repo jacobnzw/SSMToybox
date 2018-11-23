@@ -18,24 +18,27 @@ class TransitionModel(metaclass=ABCMeta):
 
     Parameters
     ----------
-    <type> : init_dist
+    init_rv : RandomVariable
         Distribution of the system initial conditions.
 
-    <type> : noise_dist
+    noise_rv : RandomVariable
         Distribution of the process (state) noise.
+
+    noise_gain : (dim_out, dim_noise) ndarray, optional
+        Noise gain matrix.
 
     Attributes
     ----------
-    int : dim_in
+    dim_in : int
         Input dimension of the state transition function.
 
-    int : dim_out
+    dim_out : int
         Output dimension of the state transition function.
 
-    int : dim_noise
+    dim_noise : int
         Dimensionality of the process noise vector.
 
-    bool : noise_additive
+    noise_additive : bool
         Indicates additivity of the noise. `True` if noise is additive, `False` otherwise.
 
     TODO:
@@ -48,13 +51,15 @@ class TransitionModel(metaclass=ABCMeta):
     dim_noise = None
     noise_additive = None
 
-    def __init__(self, init_dist, noise_dist):
+    def __init__(self, init_rv, noise_rv, noise_gain=None):
         # distribution of initial conditions
-        self.init_dist = init_dist
+        self.init_rv = init_rv
         # distribution of process noise
-        self.noise_dist = noise_dist
+        self.noise_rv = noise_rv
         # zero vec for convenience
         self.zero_q = np.zeros(self.dim_noise)
+        if noise_gain is None:
+            self.noise_gain = np.eye(self.dim_out, self.dim_noise)
 
     @abstractmethod
     def dyn_fcn(self, x, q, time):
@@ -183,10 +188,10 @@ class TransitionModel(metaclass=ABCMeta):
         # allocate space for state and measurement sequences
         x = np.zeros((self.dim_in, steps, mc_sims))
         # generate initial conditions, store initial states at k=0
-        x[:, 0, :] = self.init_dist.sample(mc_sims)  # (D, mc_sims)
+        x[:, 0, :] = self.init_rv.sample(mc_sims)  # (D, mc_sims)
 
         # generate state and measurement noise
-        q = self.noise_dist.sample((steps, mc_sims))
+        q = self.noise_rv.sample((steps, mc_sims))
 
         # simulate SSM `mc_sims` times for `steps` time steps
         for imc in range(mc_sims):
@@ -227,8 +232,8 @@ class TransitionModel(metaclass=ABCMeta):
         steps = int(np.floor(duration / dt))
         x = np.zeros((self.dim_in, steps+1, mc_sims))
         # sample initial conditions and process noise
-        x[:, 0, :] = self.init_dist.sample(mc_sims)  # (D, mc_sims)
-        q = self.noise_dist.sample((mc_sims, steps + 1))
+        x[:, 0, :] = self.init_rv.sample(mc_sims)  # (D, mc_sims)
+        q = self.noise_rv.sample((mc_sims, steps + 1))
 
         # continuous-time system simulation
         for imc in range(mc_sims):
@@ -331,8 +336,8 @@ class UNGMTransition(TransitionModel):
     dim_noise = 1
     noise_additive = True
 
-    def __init__(self, init_dist, noise_dist):
-        super(UNGMTransition, self).__init__(init_dist, noise_dist)
+    def __init__(self, init_rv, noise_rv):
+        super(UNGMTransition, self).__init__(init_rv, noise_rv)
 
     def dyn_fcn(self, x, q, time):
         return np.asarray(0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * np.cos(1.2 * time)) + q
@@ -351,8 +356,8 @@ class UNGMNATransition(TransitionModel):
     dim_noise = 1
     noise_additive = False
 
-    def __init__(self, init_dist, noise_dist):
-        super(UNGMNATransition, self).__init__(init_dist, noise_dist)
+    def __init__(self, init_rv, noise_rv):
+        super(UNGMNATransition, self).__init__(init_rv, noise_rv)
 
     def dyn_fcn(self, x, q, time):
         return np.asarray(0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * q[0] * np.cos(1.2 * time))
@@ -373,8 +378,8 @@ class Pendulum2DTransition(TransitionModel):
 
     g = 9.81  # gravitational acceleration
 
-    def __init__(self, init_dist, noise_dist, dt=0.01):
-        super(Pendulum2DTransition, self).__init__(init_dist, noise_dist)
+    def __init__(self, init_rv, noise_rv, dt=0.01):
+        super(Pendulum2DTransition, self).__init__(init_rv, noise_rv)
         self.dt = dt
 
     def dyn_fcn(self, x, q, time):
@@ -395,8 +400,8 @@ class ReentryVehicle1DTransition(TransitionModel):
     dim_noise = 3
     noise_additive = True
 
-    def __init__(self, init_dist, noise_dist, dt=0.1):
-        super(ReentryVehicle1DTransition, self).__init__(init_dist, noise_dist)
+    def __init__(self, init_rv, noise_rv, dt=0.1):
+        super(ReentryVehicle1DTransition, self).__init__(init_rv, noise_rv)
         self.dt = dt
         self.Gamma = 1 / 6.096
 
@@ -421,8 +426,8 @@ class ReentryVehicle2DTransition(TransitionModel):
     dim_noise = 3
     noise_additive = True
 
-    def __init__(self, init_dist, noise_dist, dt=0.1):
-        super(ReentryVehicle2DTransition, self).__init__(init_dist, noise_dist)
+    def __init__(self, init_rv, noise_rv, dt=0.1):
+        super(ReentryVehicle2DTransition, self).__init__(init_rv, noise_rv)
         self.dt = dt
         self.R0 = 6374  # Earth's radius
         self.H0 = 13.406
@@ -498,10 +503,10 @@ class MeasurementModel(metaclass=ABCMeta):
 
     Parameters
     ----------
-    <type> : init_dist
+    <type> : init_rv
         Distribution of the system initial conditions.
 
-    <type> : noise_dist
+    <type> : noise_rv
         Distribution of the process (state) noise.
 
     Attributes
