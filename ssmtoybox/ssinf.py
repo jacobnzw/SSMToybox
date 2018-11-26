@@ -223,7 +223,7 @@ class GaussianInference(StateSpaceInference):
         # set initial condition mean and covariance, and noise covariances
         self.x0_mean, self.x0_cov = mod_dyn.init_rv.get_stats()
         self.q_mean, self.q_cov = mod_dyn.noise_rv.get_stats()
-        self.r_mean, self.r_cov = mod_meas.noise_dist.get_stats()
+        self.r_mean, self.r_cov = mod_meas.noise_rv.get_stats()
 
         self.G = mod_dyn.noise_gain
         # initial moments are taken to be the first filtered estimate
@@ -1010,7 +1010,7 @@ class StudentInference(StateSpaceInference):
             ValueError("Initial state is not Student RV.")
         if not isinstance(mod_dyn.noise_rv, StudentRV):
             ValueError("Process noise is not Student RV.")
-        if not isinstance(mod_meas.noise_dist, StudentRV):
+        if not isinstance(mod_meas.noise_rv, StudentRV):
             ValueError("Measurement noise is not Student RV.")
         if dof <= 2.0:
             dof = 4.0
@@ -1027,7 +1027,7 @@ class StudentInference(StateSpaceInference):
         self.q_gain = mod_dyn.noise_gain
 
         # measurement noise statistics
-        self.r_mean, self.r_cov, self.r_dof = mod_meas.noise_dist.get_stats()
+        self.r_mean, self.r_cov, self.r_dof = mod_meas.noise_rv.get_stats()
 
         # scale matrix variables
         scale = (dof - 2)/dof
@@ -1207,7 +1207,7 @@ class TPQStudent(StudentInference):
 
         # degrees of freedom for SSM noises
         assert isinstance(mod_dyn.init_rv, StudentRV) and isinstance(mod_dyn.noise_rv, StudentRV)
-        q_dof, r_dof = mod_dyn.noise_rv.dof, mod_obs.noise_dist.dof
+        q_dof, r_dof = mod_dyn.noise_rv.dof, mod_obs.noise_rv.dof
 
         # add DOF of the noises to the sigma-point parameters
         if point_par is None:

@@ -4,7 +4,6 @@ import numpy as np
 from numpy import newaxis as na
 from ssmtoybox.utils import multivariate_t
 
-# TODO: before defining all classes, build a prototype of the whole to see if the redesign checks out
 
 """
 Transition models
@@ -40,10 +39,6 @@ class TransitionModel(metaclass=ABCMeta):
 
     noise_additive : bool
         Indicates additivity of the noise. `True` if noise is additive, `False` otherwise.
-
-    TODO:
-    - enable online setting of state transition function parameters (like discretization period etc.)
-    - convenient access to noise statistics
     """
 
     dim_in = None
@@ -57,7 +52,7 @@ class TransitionModel(metaclass=ABCMeta):
         # distribution of process noise
         self.noise_rv = noise_rv
         # zero vec for convenience
-        self.zero_q = np.zeros(self.dim_noise)
+        self.zero_q = np.zeros(self.dim_noise)  # TODO rename to q_zero
         if noise_gain is None:
             self.noise_gain = np.eye(self.dim_out, self.dim_noise)
 
@@ -65,48 +60,48 @@ class TransitionModel(metaclass=ABCMeta):
     def dyn_fcn(self, x, q, time):
         """Discrete-time system dynamics.
 
-         Abstract method for the discrete-time system dynamics.
+        Abstract method for the discrete-time system dynamics.
 
-         Parameters
-         ----------
-         x : 1-D array_like of shape (self.xD,)
-             System state
+        Parameters
+        ----------
+        x : (dim_in, ) ndarray
+            System state.
 
-         q : 1-D array_like of shape (self.qD,)
-             System noise
+        q : (dim_noise, ) ndarray
+            System noise.
 
-         time : 1-D array_like
-             Parameters of the system dynamics
+        time : int
+            Time index.
 
-         Returns
-         -------
-         1-D numpy.ndarray of shape (self.xD,)
-             system state in the next time step
-         """
+        Returns
+        -------
+        : (dim_out, ) ndarray
+             System state in the next time step.
+        """
         pass
 
     @abstractmethod
     def dyn_fcn_cont(self, x, q, time):
         """Continuous-time system dynamics.
 
-         Abstract method for the continuous-time system dynamics.
+        Abstract method for the continuous-time system dynamics.
 
-         Parameters
-         ----------
-         x : 1-D array_like of shape (self.xD,)
-             System state
+        Parameters
+        ----------
+        x : (dim_in, ) ndarray
+            System state.
 
-         q : 1-D array_like of shape (self.qD,)
-             System noise
+        q : (dim_noise, ) ndarray
+            System noise.
 
-         time : 1-D array_like
-             Parameters of the system dynamics
+        time : int
+            Time index.
 
-         Returns
-         -------
-         1-D numpy.ndarray of shape (self.xD,)
-             time-derivative of system state evaluated at given state and time
-         """
+        Returns
+        -------
+        : (dim_out, ) ndarray
+           Time-derivative of system state evaluated at given state and time
+        """
         pass
 
     @abstractmethod
@@ -117,53 +112,59 @@ class TransitionModel(metaclass=ABCMeta):
 
         Parameters
         ----------
-        x : 1-D array_like of shape (self.xD,)
-            System state
-        q : 1-D array_like of shape (self.qD,)
-            System noise
-        time : 1-D array_like of shape (self.pD,)
-            System parameter
+        x : (dim_in, ) ndarray
+            System state.
+
+        q : (dim_noise, ) ndarray
+            System noise.
+
+        time : int
+            Time index.
 
         Returns
         -------
-        2-D numpy.ndarray
-            Jacobian matrix of the system dynamics, where the second dimension depends on the noise additivity.
-            The shape depends on whether or not the state noise is additive. The two cases are:
-                * additive: (self.xD, self.xD)
-                * non-additive: (self.xD, self.xD + self.qD)
+        : (dim_out, dim_in) ndarray
+            Jacobian matrix of the system dynamics. Note that in non-additive noise case `dim_in = dim_out + dim_noise`.
         """
         pass
 
-    def dyn_eval(self, xq, pars, dx=False):
+    def dyn_eval(self, xq, time, dx=False):
         """Evaluation of the system dynamics according to noise additivity.
 
         Parameters
         ----------
-        xq : 1-D array_like
-            Augmented system state
-        pars : 1-D array_like
-            System dynamics parameters
-        dx : bool
-            * ``True``: Evaluates derivatives (Jacobian) of the system dynamics
+        xq : (dim_in + dim_noise) ndarray
+            Augmented system state.
+
+        time : int
+            Time index.
+
+        dx : bool, optional
+            * ``True``: Evaluates derivative (Jacobian) of the system dynamics
             * ``False``: Evaluates system dynamics
+
         Returns
         -------
-            Evaluated system dynamics or evaluated Jacobian of the system dynamics.
+        : (dim_out, )
+            Evaluated system dynamics, if `dx == False`.
+
+        : (dim_out, dim_in)
+            Evaluated Jacobian of the system dynamics, if `dx == True`.
         """
 
         if self.noise_additive:
             assert len(xq) == self.dim_in
             if dx:
-                out = (self.dyn_fcn_dx(xq, self.zero_q, pars).T.flatten())
+                out = (self.dyn_fcn_dx(xq, self.zero_q, time).T.flatten())
             else:
-                out = self.dyn_fcn(xq, self.zero_q, pars)
+                out = self.dyn_fcn(xq, self.zero_q, time)
         else:
             assert len(xq) == self.dim_in + self.dim_noise
             x, q = xq[:self.dim_in], xq[-self.dim_noise:]
             if dx:
-                out = (self.dyn_fcn_dx(x, q, pars).T.flatten())
+                out = (self.dyn_fcn_dx(x, q, time).T.flatten())
             else:
-                out = self.dyn_fcn(x, q, pars)
+                out = self.dyn_fcn(x, q, time)
         return out
 
     def simulate_discrete(self, steps, mc_sims=1):
@@ -181,8 +182,8 @@ class TransitionModel(metaclass=ABCMeta):
 
         Returns
         -------
-        numpy.ndarray
-            3-D array of shape (self.xD, steps, mc_sims) containing the system state trajectory
+        (dim_out, steps, mc_sims) ndarray
+            The `mc_sims` state trajectories, each `steps` long.
         """
 
         # allocate space for state and measurement sequences
@@ -330,6 +331,18 @@ class TransitionModel(metaclass=ABCMeta):
 
 
 class UNGMTransition(TransitionModel):
+    """
+    Univariate Nonlinear Growth Model (UNGM) with additive noise.
+
+    Notes
+    -----
+    The model is
+
+    .. math::
+        x_{k+1} = 0.5 x_k * \frac{25 x_k}{1 + x_k^2} + 8*\cos(1.2 k) + q_k
+
+    Typically used with :math:`x_0 ~ N(0, 1)`, :math:`q_k ~ N(0, 10)`.
+    """
 
     dim_in = 1
     dim_out = 1
@@ -350,6 +363,18 @@ class UNGMTransition(TransitionModel):
 
 
 class UNGMNATransition(TransitionModel):
+    """
+    Univariate Nonlinear Growth Model (UNGM) with non-additive noise.
+
+    Notes
+    -----
+    The model is
+
+    .. math::
+        x_{k+1} = 0.5 x_k \frac{25 x_k}{1 + x_k^2} + 8 q_k \cos(1.2 k)
+
+    Typically used with :math:`x_0 ~ N(0, 1)`, :math:`q_k ~ N(0, 10)`.
+    """
 
     dim_in = 1
     dim_out = 1
@@ -370,6 +395,32 @@ class UNGMNATransition(TransitionModel):
 
 
 class Pendulum2DTransition(TransitionModel):
+    """
+    Pendulum with unit length and mass in 2D [1]_ (Example 5.1).
+
+    State
+    -----
+    `x[0]`: :math:`\alpha` angle from the perpendicular and the direction of the pendulum
+    `x[1]`: :math:`\dot{\alpha}` angular speed
+
+    Notes
+    -----
+
+    .. math ::
+
+        \begin{bmatrix}
+            \alpha_{k+1} \\
+            \dot{\alpha}_{k+1}
+        \end{bmatrix} =
+        \begin{bmatrix}
+            \alpha_k + \dot{\alpha}_k\Delta t \\
+            \dot{\alpha}_k - g\sin(\alpha_k)\Delta t
+        \end{bmatrix} + \mathbf{q}_k
+
+    References
+    ----------
+    .. [1] Sarkka, S., Bayesian Filtering and Smoothing, Cambridge University Press, 2013.
+    """
 
     dim_in = 2
     dim_out = 2
@@ -394,6 +445,35 @@ class Pendulum2DTransition(TransitionModel):
 
 
 class ReentryVehicle1DTransition(TransitionModel):
+    """
+    Simplified model of reentry vehicle.
+
+    "The position, velocity and constant ballistic coefficient of a body as it re-enters the atmosphere at a very high
+    altitude at a very high velocity. Acceleration due to gravity is negligible compared to the altitude and
+    velocity-dependent drag terms. The body is constrained so that it falls vertically." [1]_
+
+    State
+    -----
+    :math:`\\mathbf{x} = [y, \\dot{y}, \\omega]`, where
+        :math:`y`
+            Altitude.
+
+        :math:`\\dot{y}`
+            Velocity.
+
+        :math:`\\omega`
+            (constant) ballistic coefficient.
+
+    Notes
+    -----
+    # TODO: process equation, reasonable statistics
+
+
+    References
+    ----------
+    .. [1] Julier, S. and Uhlmann, J., A General Method for Approximating Nonlinear Transformations of Probability
+           Distributions, 1996
+    """
 
     dim_in = 3
     dim_out = 3
@@ -420,6 +500,64 @@ class ReentryVehicle1DTransition(TransitionModel):
 
 
 class ReentryVehicle2DTransition(TransitionModel):
+    """
+    Reentry vehicle entering the atmosphere at high altitude and at a very speed.
+
+    "This type of problem has been identified by a number of authors [2]_-[5]_ as being particularly stressful for
+    filters and trackers because of the strong nonlinearities exhibited by the forces which act on the vehicle. There
+    are three types of forces in effect. The most dominant is aerodynamic drag, which is a function of vehicle speed
+    and has a substantial nonlinear variation in altitude. The second type of force is gravity, which accelerates the
+    vehicle toward the center of the earth. The final forces are random buffeting terms." [1]_
+
+    "The tracking problem is made more difficult by the fact that the drag properties of the vehicle might be only very
+    crudely known." [1]_
+
+    The model is specified in Cartesian `geocentric coordinates <https://en.wikipedia.org/wiki/ECEF>`.
+
+    State
+    -----
+    :math:`\\mathbf{x} = [x, y, \\dot{x}, \\dot{y}, \\omega]`, where
+        :math:`x`, :math:`y`
+            Position in 2D.
+
+        :math:`\\dot{x}`, :math:`\\dot{y}`
+            Velocity in 2D.
+
+        :math:`\\omega`
+            Aerodynamic parameter.
+
+    Notes
+    -----
+    # TODO: process equation, reasonable stats
+
+    x_0 ~ N(0, P_0), q ~ N(0, Q)
+    kwargs = {
+            'x0_mean': np.array([6500.4, 349.14, -1.8093, -6.7967, 0.6932]),  # m, m/s, m m/s, rad/s
+            'x0_cov': np.diag([1e-6, 1e-6, 1e-6, 1e-6, 1]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
+            'q_mean': np.zeros(self.qD),
+            'q_cov': self.dt ** -1 * np.array(
+                [[2.4064e-5, 0, 0],
+                 [0, 2.4064e-5, 0],
+                 [0, 0, 1e-6]]),
+            'q_gain': np.vstack((np.zeros((2, 3)), np.eye(3)))
+        }
+
+    .. math::
+
+        P_0 = \diag([  ])
+
+    References
+    ----------
+    .. [1] Julier, S. and Uhlmann, J. Unscented Filtering and Nonlinear Estimation, Proceedings of IEEE, 2004
+    .. [2] P. J. Costa, “Adaptive model architecture and extended Kalman–Bucy filters,”
+           IEEE Trans. Aerosp. Electron. Syst., vol. 30, pp. 525–533, Apr. 1994.
+    .. [3] M. Athans, R. P. Wishner, and A. Bertolini, “Suboptimal state estimation for continuous-time nonlinear
+           systems from discrete noisy measurements,” IEEE Trans. Automat. Contr., vol. AC-13, pp. 504–518, Oct. 1968.
+    .. [4] J. W. Austin and C. T. Leondes, “Statistically linearized estimation of reentry trajectories,”
+           IEEE Trans. Aerosp. Electron. Syst., vol. AES-17, pp. 54–61, Jan. 1981.
+    .. [5] R. K. Mehra, “A comparison of several nonlinear filters for reentry vehicle tracking,”
+           IEEE Trans. Automat. Contr., vol. AC-16, pp. 307–319, Aug. 1971.
+    """
 
     dim_in = 5
     dim_out = 5
@@ -497,31 +635,29 @@ Measurement models
 
 
 class MeasurementModel(metaclass=ABCMeta):
-    """Measurement model
+    """Measurement model.
 
     Describes transformation of the system state into measurement.
 
     Parameters
     ----------
-    <type> : init_rv
-        Distribution of the system initial conditions.
+    noise_rv : RandomVariable
+        Distribution of the measurement noise.
 
-    <type> : noise_rv
-        Distribution of the process (state) noise.
 
     Attributes
     ----------
-    int : dim_in
+    dim_in : int
         Input dimension of the state transition function.
 
-    int : dim_out
+    dim_out : int
         Output dimension of the state transition function.
 
-    int : dim_noise
+    dim_noise : int
         Dimensionality of the process noise vector.
 
-    bool : noise_additive
-        Indicates additivity of the noise. `True` if noise is additive, `False` otherwise.
+    noise_additive : bool
+        Indicates additivity of the measurement noise. `True` if noise is additive, `False` otherwise.
     """
 
     # TODO use index mask to pick out states to use for computing the measurement.
@@ -531,11 +667,11 @@ class MeasurementModel(metaclass=ABCMeta):
     dim_noise = None
     noise_additive = None
 
-    def __init__(self, noise_dist):
+    def __init__(self, noise_rv):
         # distribution of process noise
-        self.noise_dist = noise_dist
+        self.noise_rv = noise_rv
         # zero vec for convenience
-        self.zero_r = np.zeros(self.dim_noise)
+        self.zero_r = np.zeros(self.dim_noise)  # TODO: rename to r_zero
 
     @abstractmethod
     def meas_fcn(self, x, r, time):
@@ -545,19 +681,19 @@ class MeasurementModel(metaclass=ABCMeta):
 
         Parameters
         ----------
-        x : 1-D array_like of shape (self.xD,)
-            system state
+        x : (dim_in, ) ndarray  # TODO: there will be more to say once the mask is implemented
+            System state.
         
-        r : 1-D array_like of shape (self.rD,)
-            measurement noise
+        r : (dim_noise, ) ndarray
+            Measurement noise.
         
-        time : 1-D array_like
-            parameters of the measurement model
+        time : int
+            Time index.
 
         Returns
         -------
-        1-D numpy.ndarray of shape (self.zD,)
-            measurement of the state
+        : (dim_out, ) ndarray
+            Measurement of the state.
         """
         pass
 
@@ -569,43 +705,44 @@ class MeasurementModel(metaclass=ABCMeta):
 
         Parameters
         ----------
-        x : 1-D array_like of shape (self.xD,)
-            System state
+        x : (dim_in, ) ndarray
+            System state.
         
-        r : 1-D array_like of shape (self.qD,)
-            Measurement noise
+        r : (dim_noise, ) ndarray
+            Measurement noise.
         
-        time : 1-D array_like of shape (self.pD,)
-            System parameter
+        time : int
+            Time index.
 
         Returns
         -------
-        2-D numpy.ndarray
-            Jacobian matrix of the measurement model, where the second dimension depends on the noise additivity.
-            The shape depends on whether or not the state noise is additive. The two cases are:
-                * additive: (self.xD, self.xD)
-                * non-additive: (self.xD, self.xD + self.rD)
+        : (dim_out, dim_in) ndarray
+            Jacobian matrix of the system dynamics. Note that in non-additive noise case `dim_in = dim_out + dim_noise`.
         """
         pass
 
     def meas_eval(self, xr, time, dx=False):
-        """Evaluation of the system dynamics according to noise additivity.
+        """Evaluation of the measurement model according to noise additivity.
 
         Parameters
         ----------
-        xr : 1-D array_like
-            Augmented system state
-        
-        time : 1-D array_like
-            Measurement model parameters
-        
-        dx : bool
-            * ``True``: Evaluates derivatives (Jacobian) of the measurement model
-            * ``False``: Evaluates measurement model
-        
+        xr : (dim_in + dim_noise) ndarray
+            System state augmented with the measurement noise.
+
+        time : int
+            Time index.
+
+        dx : bool, optional
+            * ``True``: Evaluates derivative (Jacobian) of the measurement model.
+            * ``False``: Evaluates measurement model.
+
         Returns
         -------
-            Evaluated measurement model or evaluated Jacobian of the measurement model.
+        : (dim_out, )
+            Evaluated measurement model, if `dx == False`.
+
+        : (dim_out, dim_in)
+            Evaluated Jacobian of the measurement model, if `dx == True`.
         """
 
         if self.noise_additive:
@@ -641,7 +778,7 @@ class MeasurementModel(metaclass=ABCMeta):
         d, steps, mc_sims = x.shape
 
         # Generate measurement noise
-        r = self.noise_dist.sample((steps, mc_sims))
+        r = self.noise_rv.sample((steps, mc_sims))
         y = np.zeros((self.dim_out, steps, mc_sims))
         for imc in range(mc_sims):
             for k in range(steps):
@@ -656,8 +793,8 @@ class UNGMMeasurement(MeasurementModel):
     dim_noise = 1
     noise_additive = True
 
-    def __init__(self, noise_dist):
-        super(UNGMMeasurement, self).__init__(noise_dist)
+    def __init__(self, noise_rv):
+        super(UNGMMeasurement, self).__init__(noise_rv)
 
     def meas_fcn(self, x, r, time):
         return np.asarray([0.05 * x[0] ** 2]) + r
@@ -673,8 +810,8 @@ class UNGMNAMeasurement(MeasurementModel):
     dim_noise = 1
     noise_additive = False
 
-    def __init__(self, noise_dist):
-        super(UNGMNAMeasurement, self).__init__(noise_dist)
+    def __init__(self, noise_rv):
+        super(UNGMNAMeasurement, self).__init__(noise_rv)
 
     def meas_fcn(self, x, r, time):
         return np.asarray([0.05 * r[0] * x[0] ** 2])
@@ -690,8 +827,8 @@ class Pendulum2DMeasurement(MeasurementModel):
     dim_noise = 1
     noise_additive = True
 
-    def __init__(self, noise_dist):
-        super(Pendulum2DMeasurement, self).__init__(noise_dist)
+    def __init__(self, noise_rv):
+        super(Pendulum2DMeasurement, self).__init__(noise_rv)
 
     def meas_fcn(self, x, r, time):
         return np.array([np.sin(x[0])]) + r
@@ -707,8 +844,8 @@ class RangeMeasurement(MeasurementModel):
     dim_noise = 1
     noise_additive = True
 
-    def __init__(self, noise_dist):
-        super(RangeMeasurement, self).__init__(noise_dist)
+    def __init__(self, noise_rv):
+        super(RangeMeasurement, self).__init__(noise_rv)
         self.sx = 30
         self.sy = 30
 
@@ -721,14 +858,23 @@ class RangeMeasurement(MeasurementModel):
 
 
 class Radar2DMeasurement(MeasurementModel):
+    """
+    kwargs = {
+            'r_mean': np.zeros(self.rD),
+            'r_cov': np.array([[1e-6, 0],
+                               [0, 0.17e-3 ** 2]]),
+        }
+
+    # TODO: could be extended to 3D + (optionally) range rate measurements
+    """
 
     dim_in = 2
     dim_out = 2
     dim_noise = 2
     noise_additive = True
 
-    def __init__(self, init_dist, noise_dist, radar_loc=None):
-        super(Radar2DMeasurement, self).__init__(init_dist, noise_dist)
+    def __init__(self, init_dist, noise_rv, radar_loc=None):
+        super(Radar2DMeasurement, self).__init__(init_dist, noise_rv)
         # set default radar location
         if radar_loc is None:
             self.radar_loc = np.array([0, 0])
