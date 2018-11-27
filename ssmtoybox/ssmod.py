@@ -1084,13 +1084,18 @@ class BearingMeasurement(MeasurementModel):
 
 class Radar2DMeasurement(MeasurementModel):
     """
-    kwargs = {
-            'r_mean': np.zeros(self.rD),
-            'r_cov': np.array([[1e-6, 0],
-                               [0, 0.17e-3 ** 2]]),
-        }
+    Radar measurements.
 
-    # TODO: could be extended to 3D + (optionally) range rate measurements
+    .. math::
+        z_k =
+        \begin{bmatrix}
+            \\sqrt((x_k - s_x)^2 + (y_k - s_y)^2) \\
+            \\atan2(y_k - s_y, x_k - s_x)
+        \end{bmatrix} + r_k
+
+    Reasonable statistics: :math:`r_k \sim N(0, \diag([1e-6, 0.17e-6]))`
+
+    # TODO: (optionally) range rate measurements
     """
 
     dim_in = 2
