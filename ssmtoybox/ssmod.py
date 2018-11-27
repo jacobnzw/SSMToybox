@@ -670,6 +670,108 @@ class ReentryVehicle2DTransition(TransitionModel):
                          q[2]])
 
 
+class CoordinatedTurnTransition(TransitionModel):
+    """
+    Coordinated turn model [1]_ assumes constant turn rate (not implemented).
+    Model in [2]_ is implemented here, where the turn rate can change in time.
+    [3]_ considers only bearing measurements.
+
+    State
+    -----
+    x = [x_1, v_1, x_2, v_2, omega]
+        x_1, x_2 - target position [m]
+        v_1, v_2 - target velocity [m/s]
+        omega - target turn rate [deg/s]
+
+    .. math::
+    x_{k+1} =
+    \begin{bmatrix}
+        1 & c & 0 & -d & 0 \\
+        0 & b & 0 & -a & 0 \\
+        0 & d & 1 &  c & 0 \\
+        0 & a & 0 &  b & 0 \\
+        0 & 0 & 0 &  0 & 1
+    \end{bmatrix} x_k + q_k
+
+    where :math:`a = \\sin(\\omega \\Delta t)`, :math:`b = \\cos(\\omega \\Delta t)`,
+    :math:`c = \\sin(\\omega \Delta t) / \\omega`, :math:`d = (1 - \\cos(\\omega \\Delta t)) / \\omega`.
+
+    Reasonable statistics [2]_: :math:`x_0 \sim N(m_0, P_0),\ q_k \sim N(0, Q)`
+
+    .. math::
+
+        m_0 =
+        \\begin{bmatrix}
+            1000 m \\
+            300 m/s \\
+            1000 m \\
+            0 m/s \\
+            -3.0 * \\pi / 180 rad/s
+        \\end{bmatrix},\ P_0 = \diag([100, 10, 100, 10, 0.1])
+        Q = \\mathrm{blkdiag}([\\rho_1 A, \\rho_1 A, \\rho_2\\Delta t])
+
+    where noise intensities :math:`\\rho_1 = 0.1,\ \\rho_2 = 1.75e-4` and
+
+    .. math::
+
+        A =
+        \\begin{bmatrix}
+            {\\Delta t}^3/3 & {\\Delta t}^2/2 \\
+            {\\Delta t}^2/2 & \\Delta t
+        \\end{bmatrix}
+
+    For more see [2]_ and [3]_.
+
+    References
+    ----------
+    .. [1] Bar-Shalom, Y., Li, X. R. and Kirubarajan, T. (2001).
+           Estimation with applications to tracking and navigation. Wiley-Blackwell.
+    .. [2] Arasaratnam, I., and Haykin, S. (2009). Cubature Kalman Filters.
+           IEEE Transactions on Automatic Control, 54(6), 1254-1269.
+    .. [3] Sarkka, S., Hartikainen, J., Svensson, L., & Sandblom, F. (2015).
+           On the relation between Gaussian process quadratures and sigma-point methods.
+    """
+
+    dim_in = 5
+    dim_out = 5
+    dim_noise = 5
+
+    noise_additive = True
+
+    def __init__(self, init_rv, noise_rv, dt=0.1):
+        """
+        Parameters
+        ----------
+        dt :
+            time interval between two consecutive measurements
+        """
+        super(CoordinatedTurnTransition, self).__init__(init_rv, noise_rv)
+        self.dt = dt
+
+    def dyn_fcn(self, x, q, *args):
+        """
+        Model describing an object in 2D plane moving with constant speed (magnitude of the velocity vector) and
+        turning with a constant angular rate (executing a coordinated turn).
+        """
+        om = x[4]
+        a = np.sin(om * self.dt)
+        b = np.cos(om * self.dt)
+        c = np.sin(om * self.dt) / om
+        d = (1 - np.cos(om * self.dt)) / om
+        mdyn = np.array([[1, c, 0, -d, 0],
+                         [0, b, 0, -a, 0],
+                         [0, d, 1, c, 0],
+                         [0, a, 0, b, 0],
+                         [0, 0, 0, 0, 1]])
+        return mdyn.dot(x) + q
+
+    def dyn_fcn_cont(self, x, q, time):
+        pass
+
+    def dyn_fcn_dx(self, x, r, time):
+        pass
+
+
 """
 Measurement models
 """
@@ -937,6 +1039,44 @@ class RangeMeasurement(MeasurementModel):
     def meas_fcn(self, x, r, time):
         rng = np.sqrt(self.sx ** 2 + (x[0] - self.sy) ** 2)
         return np.array([rng]) + r
+
+    def meas_fcn_dx(self, x, r, time):
+        pass
+
+
+class BearingMeasurement(MeasurementModel):
+    """
+    Bearing measurement.
+
+    :math:`S` bearing measurements :math:`\\mathbf{z}_k = [z^{(1)}_k, \ldots, z^{(S)}_k]` where
+
+    .. math::
+        z^{(s)}_k = \\mathrm{atan2}(y_k - p^{(s)}_y, x_k - p^{(s)}_x) + r^{(s)}_k
+
+    Reasonable statistics: :math:`r^{(s)}_k \sim N(0, 10e-3)`
+
+
+    Parameters
+    ----------
+    sensor_pos : (num_sensors, 2) ndarray
+        Positions of bearing sensors in 2D Cartesian plane.
+
+    """
+
+    # TODO: can be generalized to 3D
+    def __init__(self, noise_rv, sensor_pos=None):
+        super(BearingMeasurement, self).__init__(noise_rv)
+        # default: 4 sensor positions
+        if sensor_pos is None:
+            self.sensor_pos = np.vstack((np.eye(2), -np.eye(2)))
+
+    def meas_fcn(self, x, r, time):
+        """
+        Bearing measurement from the sensor to the moving object.
+        """
+        dy = x[2] - self.sensor_pos[:, 1]
+        dx = x[0] - self.sensor_pos[:, 0]
+        return np.arctan2(dy, dx) + r
 
     def meas_fcn_dx(self, x, r, time):
         pass
