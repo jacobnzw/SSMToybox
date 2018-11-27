@@ -478,7 +478,25 @@ class ReentryVehicle1DTransition(TransitionModel):
 
     Notes
     -----
-    # TODO: process equation, reasonable statistics
+    .. math::
+        \begin{bmatrix}
+            y_{k+1} \\
+            \\dot{y}_{k+1} \\
+            \\omega_{k+1}
+        \end{bmatrix} =
+        \begin{bmatrix}
+            y_k - \\Delta t \\dot{y}_k \\
+            \\dot{y}_k - \\Delta t \exp(-\gamma y_k) \\dot{y}_k^2 \\omega \\
+            \\omega_k
+        \end{bmatrix} + q_k
+
+    reasonable statistics: :math:`x_0 \sim N(m_0, P_0),\ q_k \sim N(0, Q)`
+
+    .. math::
+        m_0 =
+        \begin{bmatrix}
+            90 km \\ 6 km/s \\ 1.7
+        \end{bmatrix},\ P_0 = \diag([0.3048^2, 1.2192^2, 10]),\ Q = 0
 
 
     References
@@ -540,23 +558,34 @@ class ReentryVehicle2DTransition(TransitionModel):
 
     Notes
     -----
-    # TODO: process equation, reasonable stats
-
-    x_0 ~ N(0, P_0), q ~ N(0, Q)
-    kwargs = {
-            'x0_mean': np.array([6500.4, 349.14, -1.8093, -6.7967, 0.6932]),  # m, m/s, m m/s, rad/s
-            'x0_cov': np.diag([1e-6, 1e-6, 1e-6, 1e-6, 1]),  # m^2, m^2/s^2, m^2, m^2/s^2, rad^2/s^2
-            'q_mean': np.zeros(self.qD),
-            'q_cov': self.dt ** -1 * np.array(
-                [[2.4064e-5, 0, 0],
-                 [0, 2.4064e-5, 0],
-                 [0, 0, 1e-6]]),
-            'q_gain': np.vstack((np.zeros((2, 3)), np.eye(3)))
-        }
 
     .. math::
+        \\mathbf{x}_{k+1} = \\mathbf{x}_k +
+        \begin{bmatrix}
+            x_k\\Delta t \\
+            y_k\\Delta t \\
+            (D_k \\dot{x}_k + G_k x_k)\\Delta t \\
+            (D_k \\dot{y}_k + G_k y_k)\\Delta t \\
+            0
+        \end{bmatrix} + \\mathbf{G}\\mathbf{q}_k
+        \\mathbf{G} =
+        \begin{bmatrix}
+            \\mathbf{0}_{2\times 3}
+            \\mathbf{I}_{3\times 3}
+        \end{bmatrix}
 
-        P_0 = \diag([  ])
+    Reasonable statistics: :math:`\\mathbf{x}_0 ~ N(\\mathbf{m}_0, \\mathbf{P}_0),\ \\mathbf{q}_k ~ N(0, \\mathbf{Q})`
+
+    .. math::
+        \\mathbf{m}_0 =
+        \begin{bmatrix}
+            6500.4 km, 349.14 km, -1.8093 km/s, -6.7967 km/s, 0.6932
+        \end{bmatrix},\ \\mathbf{P}_0 = \diag([1e-6, 1e-6, 1e-6, 1e-6, 1])
+
+    Covariance of the Euler-Maruyama discretized model
+
+    .. math::
+        \\mathbf{Q} = {\\Delta t}^{-1} \diag([2.4064e-5\ 2.4064e-5\ 1e-6])
 
     References
     ----------
@@ -878,6 +907,21 @@ class Pendulum2DMeasurement(MeasurementModel):
 
 
 class RangeMeasurement(MeasurementModel):
+    """
+    Range measurement of vertically moving object for the Reentry1DTransition model.
+
+    Notes
+    -----
+
+    Input: `x[0]`: :math:`y_k`
+
+    .. math::
+        z_k = \sqrt(s_x^2 + (y_k - s_y)) + r_k
+
+    reasonable statistics: :math:`r_k \sim N(0, 0.03048^2)`
+    :math:`s_x,\ s_y` sensor position
+
+    """
 
     dim_in = 3
     dim_out = 1
@@ -886,6 +930,7 @@ class RangeMeasurement(MeasurementModel):
 
     def __init__(self, noise_rv):
         super(RangeMeasurement, self).__init__(noise_rv)
+        # radar location: 30km (~100k ft) above the surface, radar-to-body horizontal distance
         self.sx = 30
         self.sy = 30
 
