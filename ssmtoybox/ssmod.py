@@ -417,6 +417,18 @@ class Pendulum2DTransition(TransitionModel):
             \dot{\alpha}_k - g\sin(\alpha_k)\Delta t
         \end{bmatrix} + \mathbf{q}_k
 
+    Reasonable statistics: :math:`x_0 \sim N(m_0, P_0),\ q_k \sim N(0, Q)` where
+
+    .. math::
+        m_0 = \begin{bmatrix}1.5 \\ 0\end{bmatrix},\ P_0 = 0.01 I
+
+    .. math::
+        Q = q_c
+        \begin{bmatrix}
+            {\Delta t}^3/3 & {\Delta t}^2/2 \\
+            {\Delta t}^2/2 & {\Delta t}
+        \end{bmatrix}
+
     References
     ----------
     .. [1] Sarkka, S., Bayesian Filtering and Smoothing, Cambridge University Press, 2013.
@@ -821,6 +833,18 @@ class UNGMNAMeasurement(MeasurementModel):
 
 
 class Pendulum2DMeasurement(MeasurementModel):
+    """
+    Sine of an angle.
+
+    Input
+    -----
+        `x[0]`: :math:`\alpha` angle
+
+    .. math::
+        z_k = \sin(\alpha_k) + r_k
+
+    Reasonable statistics: :math:`r_k \sim N(0, 0.1)`
+    """
 
     dim_in = 2
     dim_out = 1
