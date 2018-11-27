@@ -799,6 +799,14 @@ class MeasurementModel(metaclass=ABCMeta):
 
 
 class UNGMMeasurement(MeasurementModel):
+    """
+    Measurement model for the UNGM.
+
+    .. math::
+        z_k = 0.05*x_k^2 + r_k
+
+    Reasonable statistics: r_k \sim N(0, 1)
+    """
 
     dim_in = 1
     dim_out = 1
@@ -816,6 +824,14 @@ class UNGMMeasurement(MeasurementModel):
 
 
 class UNGMNAMeasurement(MeasurementModel):
+    """
+    Measurement model for the UNGM with non-additive noise.
+
+    .. math::
+        z_k = 0.05*x_k^2*r_k
+
+    Reasonable statistics: r_k \sim N(0, 1)
+    """
 
     dim_in = 1
     dim_out = 1
