@@ -4,7 +4,7 @@ import numpy.linalg as la
 from scipy.linalg import cho_factor, cho_solve, block_diag
 from scipy.stats import multivariate_normal
 from numpy import newaxis as na
-from ssmtoybox.ssmod import TransitionModel, MeasurementModel, StudentStateSpaceModel
+from ssmtoybox.ssmod import TransitionModel, MeasurementModel
 from ssmtoybox.bq.bqmtran import GaussianProcessTransform, GPQMO, StudentTProcessTransform, TPQMO, BayesSardTransform
 from ssmtoybox.mtran import MomentTransform, LinearizationTransform, TaylorGPQDTransform, \
     SphericalRadialTransform, UnscentedTransform, GaussHermiteTransform, \
@@ -339,13 +339,13 @@ class ExtendedKalman(GaussianInference):
         State-space model to perform inference on. Needs to have Jacobians implemented.
     """
 
-    def __init__(self, mod_dyn, mod_meas):
-        assert isinstance(mod_dyn, TransitionModel) and isinstance(mod_meas, MeasurementModel)
-        nq = mod_dyn.dim_in if mod_dyn.noise_additive else mod_dyn.dim_in + mod_dyn.dim_noise
-        nr = mod_meas.dim_in if mod_meas.noise_additive else mod_meas.dim_in + mod_dyn.dim_noise
+    def __init__(self, dyn, obs):
+        assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
+        nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
+        nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
         tf = LinearizationTransform(nq)
         th = LinearizationTransform(nr)
-        super(ExtendedKalman, self).__init__(mod_dyn, mod_meas, tf, th)
+        super(ExtendedKalman, self).__init__(dyn, obs, tf, th)
 
 
 class ExtendedKalmanGPQD(GaussianInference):
@@ -383,13 +383,13 @@ class CubatureKalman(GaussianInference):
         State-space model to perform inference on.
     """
 
-    def __init__(self, mod_dyn, mod_meas):
-        assert isinstance(mod_dyn, TransitionModel) and isinstance(mod_meas, MeasurementModel)
-        nq = mod_dyn.dim_in if mod_dyn.noise_additive else mod_dyn.dim_in + mod_dyn.dim_noise
-        nr = mod_meas.dim_in if mod_meas.noise_additive else mod_meas.dim_in + mod_meas.dim_noise
+    def __init__(self, dyn, obs):
+        assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
+        nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
+        nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
         tf = SphericalRadialTransform(nq)
         th = SphericalRadialTransform(nr)
-        super(CubatureKalman, self).__init__(mod_dyn, mod_meas, tf, th)
+        super(CubatureKalman, self).__init__(dyn, obs, tf, th)
 
 
 class CubatureTruncKalman(GaussianInference):
@@ -421,13 +421,13 @@ class UnscentedKalman(GaussianInference):
         State-space model to perform inference on.
     """
 
-    def __init__(self, mod_dyn, mod_meas, kappa=None, alpha=1.0, beta=2.0):
-        assert isinstance(mod_dyn, TransitionModel) and isinstance(mod_meas, MeasurementModel)
-        nq = mod_dyn.dim_in if mod_dyn.noise_additive else mod_dyn.dim_in + mod_dyn.dim_noise
-        nr = mod_meas.dim_in if mod_meas.noise_additive else mod_meas.dim_in + mod_meas.dim_noise
+    def __init__(self, dyn, obs, kappa=None, alpha=1.0, beta=2.0):
+        assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
+        nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
+        nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
         tf = UnscentedTransform(nq, kappa=kappa, alpha=alpha, beta=beta)
         th = UnscentedTransform(nr, kappa=kappa, alpha=alpha, beta=beta)
-        super(UnscentedKalman, self).__init__(mod_dyn, mod_meas, tf, th)
+        super(UnscentedKalman, self).__init__(dyn, obs, tf, th)
 
 
 class UnscentedTruncKalman(GaussianInference):
@@ -462,13 +462,13 @@ class GaussHermiteKalman(GaussianInference):
         Degree of the Gauss-Hermite integration rule. Determines the number of sigma-points.
     """
 
-    def __init__(self, mod_dyn, mod_meas, deg=3):
-        assert isinstance(mod_dyn, TransitionModel) and isinstance(mod_meas, MeasurementModel)
-        nq = mod_dyn.dim_in if mod_dyn.noise_additive else mod_dyn.dim_in + mod_dyn.dim_noise
-        nr = mod_meas.dim_in if mod_meas.noise_additive else mod_meas.dim_in + mod_meas.dim_noise
+    def __init__(self, dyn, obs, deg=3):
+        assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
+        nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
+        nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
         tf = GaussHermiteTransform(nq, degree=deg)
         th = GaussHermiteTransform(nr, degree=deg)
-        super(GaussHermiteKalman, self).__init__(mod_dyn, mod_meas, tf, th)
+        super(GaussHermiteKalman, self).__init__(dyn, obs, tf, th)
 
 
 class GaussHermiteTruncKalman(GaussianInference):
@@ -539,7 +539,7 @@ class GaussianProcessKalman(GaussianInference):
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None):
         assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
         nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
-        nr = obs.dim_in if obs.noise_additive else obs.dim_in + obs.dim_noise
+        nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
         t_dyn = GaussianProcessTransform(nq, dyn.dim_out, kern_par_dyn, kernel, points, point_hyp)
         t_obs = GaussianProcessTransform(nr, obs.dim_out, kern_par_obs, kernel, points, point_hyp)
         super(GaussianProcessKalman, self).__init__(dyn, obs, t_dyn, t_obs)
@@ -597,7 +597,7 @@ class TPQKalman(GaussianInference):
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None, nu=3.0):
         assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
         nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
-        nr = obs.dim_in if obs.noise_additive else obs.dim_in + obs.dim_noise
+        nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
         t_dyn = StudentTProcessTransform(nq, 1, kern_par_dyn, kernel, points, point_hyp)
         t_obs = StudentTProcessTransform(nr, 1, kern_par_obs, kernel, points, point_hyp)
         super(TPQKalman, self).__init__(dyn, obs, t_dyn, t_obs)
@@ -646,7 +646,7 @@ class BayesSardKalman(GaussianInference):
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, mulind_dyn=2, mulind_obs=2, points='ut', point_hyp=None):
         assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
         nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
-        nr = obs.dim_in if obs.noise_additive else obs.dim_in + obs.dim_noise
+        nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
         t_dyn = BayesSardTransform(nq, dyn.dim_out, kern_par_dyn, mulind_dyn, points, point_hyp)
         t_obs = BayesSardTransform(nr, obs.dim_out, kern_par_obs, mulind_obs, points, point_hyp)
         super(BayesSardKalman, self).__init__(dyn, obs, t_dyn, t_obs)
@@ -1200,14 +1200,14 @@ class TPQStudent(StudentInference):
            Numerische Mathematik, vol. 10, pp. 327–344, 1967
     """
 
-    def __init__(self, mod_dyn, mod_obs, kern_par_dyn, kern_par_obs, point_par=None, dof=4.0, fixed_dof=True, dof_tp=4.0):
-        assert isinstance(mod_dyn, TransitionModel) and isinstance(mod_obs, MeasurementModel)
-        nq = mod_dyn.dim_in if mod_dyn.noise_additive else mod_dyn.dim_in + mod_dyn.dim_noise
-        nr = mod_obs.dim_in if mod_obs.noise_additive else mod_obs.dim_in + mod_obs.dim_noise
+    def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, point_par=None, dof=4.0, fixed_dof=True, dof_tp=4.0):
+        assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
+        nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
+        nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
 
         # degrees of freedom for SSM noises
-        assert isinstance(mod_dyn.init_rv, StudentRV) and isinstance(mod_dyn.noise_rv, StudentRV)
-        q_dof, r_dof = mod_dyn.noise_rv.dof, mod_obs.noise_rv.dof
+        assert isinstance(dyn.init_rv, StudentRV) and isinstance(dyn.noise_rv, StudentRV)
+        q_dof, r_dof = dyn.noise_rv.dof, obs.noise_rv.dof
 
         # add DOF of the noises to the sigma-point parameters
         if point_par is None:
@@ -1221,7 +1221,7 @@ class TPQStudent(StudentInference):
 
         t_dyn = StudentTProcessTransform(nq, 1, kern_par_dyn, 'rbf-student', 'fs', point_par_dyn, dof_tp)
         t_obs = StudentTProcessTransform(nr, 1, kern_par_obs, 'rbf-student', 'fs', point_par_obs, dof_tp)
-        super(TPQStudent, self).__init__(mod_dyn, mod_obs, t_dyn, t_obs, dof, fixed_dof)
+        super(TPQStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
 
 
 class TPQMOStudent(StudentInference):
