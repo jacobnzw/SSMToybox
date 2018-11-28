@@ -1,8 +1,6 @@
 from abc import ABCMeta, abstractmethod
 
 import numpy as np
-from numpy import newaxis as na
-from ssmtoybox.utils import multivariate_t
 
 
 """
