@@ -31,13 +31,13 @@ class TestUNGM(unittest.TestCase):
         init_dist = GaussRV(dim)
         noise_dist = GaussRV(dim, cov=np.atleast_2d(10.0))
         ungm_dyn = UNGMTransition(init_dist, noise_dist)
-        ungm_meas = UNGMMeasurement(GaussRV(dim))
+        ungm_meas = UNGMMeasurement(GaussRV(dim), ungm_dyn.dim_out)
         x = ungm_dyn.simulate_discrete(time_steps, mc_sims=20)
         y = ungm_meas.simulate_measurements(x)
 
         # UNGM non-additive noise
         ungmna_dyn = UNGMNATransition(init_dist, noise_dist)
-        ungmna_meas = UNGMNAMeasurement(GaussRV(dim))
+        ungmna_meas = UNGMNAMeasurement(GaussRV(dim), ungm_dyn.dim_out)
         x = ungmna_dyn.simulate_discrete(time_steps, mc_sims=20)
         y = ungmna_meas.simulate_measurements(x)
 
@@ -49,17 +49,17 @@ class TestUNGM(unittest.TestCase):
         init_dist = GaussRV(dim)
         noise_dist = GaussRV(dim, cov=np.atleast_2d(10.0))
         dyn = UNGMTransition(init_dist, noise_dist)
-        meas = UNGMMeasurement(GaussRV(dim))
+        obs = UNGMMeasurement(GaussRV(dim), dyn.dim_out)
         x = dyn.simulate_discrete(100, mc_sims=1)
-        z = meas.simulate_measurements(x)
-        hyp_dyn, hyp_meas = default_bq_hypers(dyn, meas)
+        z = obs.simulate_measurements(x)
+        hyp_dyn, hyp_meas = default_bq_hypers(dyn, obs)
         inf_method = (
-            ExtendedKalman(dyn, meas),
-            UnscentedKalman(dyn, meas),
-            CubatureKalman(dyn, meas),
-            GaussHermiteKalman(dyn, meas),
-            GaussianProcessKalman(dyn, meas, hyp_dyn, hyp_meas),
-            TPQKalman(dyn, meas, hyp_dyn, hyp_meas),
+            ExtendedKalman(dyn, obs),
+            UnscentedKalman(dyn, obs),
+            CubatureKalman(dyn, obs),
+            GaussHermiteKalman(dyn, obs),
+            GaussianProcessKalman(dyn, obs, hyp_dyn, hyp_meas),
+            TPQKalman(dyn, obs, hyp_dyn, hyp_meas),
         )
         for inf in inf_method:
             inf.forward_pass(z[..., 0])
@@ -80,18 +80,18 @@ class TestUNGM(unittest.TestCase):
         dim = 1
         init_dist = GaussRV(dim)
         noise_dist = GaussRV(dim, cov=np.atleast_2d(10.0))
-        mod_dyn = UNGMNATransition(init_dist, noise_dist)
-        mod_meas = UNGMNAMeasurement(GaussRV(dim))
-        x = mod_dyn.simulate_discrete(100)
-        z = mod_meas.simulate_measurements(x)
-        hyp_dyn, hyp_meas = default_bq_hypers(mod_dyn, mod_meas)
+        dyn = UNGMNATransition(init_dist, noise_dist)
+        obs = UNGMNAMeasurement(GaussRV(dim), dyn.dim_out)
+        x = dyn.simulate_discrete(100)
+        z = obs.simulate_measurements(x)
+        hyp_dyn, hyp_meas = default_bq_hypers(dyn, obs)
         inf_method = (
-            ExtendedKalman(mod_dyn, mod_meas),
-            UnscentedKalman(mod_dyn, mod_meas),
-            CubatureKalman(mod_dyn, mod_meas),
-            GaussHermiteKalman(mod_dyn, mod_meas),
-            GaussianProcessKalman(mod_dyn, mod_meas, hyp_dyn, hyp_meas),
-            TPQKalman(mod_dyn, mod_meas, hyp_dyn, hyp_meas),
+            ExtendedKalman(dyn, obs),
+            UnscentedKalman(dyn, obs),
+            CubatureKalman(dyn, obs),
+            GaussHermiteKalman(dyn, obs),
+            GaussianProcessKalman(dyn, obs, hyp_dyn, hyp_meas),
+            TPQKalman(dyn, obs, hyp_dyn, hyp_meas),
         )
         for inf in inf_method:
             print(r"Testing {} ...".format(inf.__class__.__name__), end=' ')
@@ -114,22 +114,22 @@ class TestPendulum(unittest.TestCase):
         x0 = GaussRV(2, mean=np.array([1.5, 0]), cov=0.01 * np.eye(2))
         dt = 0.01
         q = GaussRV(2, cov=0.01 * np.array([[(dt ** 3) / 3, (dt ** 2) / 2], [(dt ** 2) / 2, dt]]))
-        mod_dyn = Pendulum2DTransition(x0, q, dt=dt)
+        dyn = Pendulum2DTransition(x0, q, dt=dt)
 
         # measurement model: r = measurement noise RV
         r = GaussRV(1, cov=np.array([[0.1]]))
-        mod_meas = Pendulum2DMeasurement(r)
+        obs = Pendulum2DMeasurement(r, dyn.dim_out)
 
-        x = mod_dyn.simulate_discrete(100)
-        z = mod_meas.simulate_measurements(x)
-        hyp_dyn, hyp_meas = default_bq_hypers(mod_dyn, mod_meas)
+        x = dyn.simulate_discrete(100)
+        z = obs.simulate_measurements(x)
+        hyp_dyn, hyp_meas = default_bq_hypers(dyn, obs)
         inf_method = (
-            ExtendedKalman(mod_dyn, mod_meas),
-            UnscentedKalman(mod_dyn, mod_meas),
-            CubatureKalman(mod_dyn, mod_meas),
-            GaussHermiteKalman(mod_dyn, mod_meas),
-            GaussianProcessKalman(mod_dyn, mod_meas, hyp_dyn, hyp_meas),
-            TPQKalman(mod_dyn, mod_meas, hyp_dyn, hyp_meas),
+            ExtendedKalman(dyn, obs),
+            UnscentedKalman(dyn, obs),
+            CubatureKalman(dyn, obs),
+            GaussHermiteKalman(dyn, obs),
+            GaussianProcessKalman(dyn, obs, hyp_dyn, hyp_meas),
+            TPQKalman(dyn, obs, hyp_dyn, hyp_meas),
         )
         for inf in inf_method:
             inf.forward_pass(z[..., 0])

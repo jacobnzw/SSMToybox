@@ -807,16 +807,17 @@ class MeasurementModel(metaclass=ABCMeta):
     dim_noise = None
     noise_additive = None
 
-    def __init__(self, noise_rv, state_index):
+    def __init__(self, noise_rv, dim_state, state_index):
         # distribution of process noise
         self.noise_rv = noise_rv
         # zero vec for convenience
         self.zero_r = np.zeros(self.dim_noise)  # TODO: rename to r_zero
         # state index must contain same # of elements as input dimensionality of the measurement model
         if state_index is not None and len(state_index) != self.dim_in:
-            ValueError("len(state_index) != self.dim_in: State index must contain same number of elements as input "
-                       "dimensionality of the measurement model.")
+            ValueError("State index must contain same number of elements as input dimensionality of the measurement "
+                       "model: len(state_index) != self.dim_in:")
         self.state_index = state_index
+        self.dim_state = dim_state
 
     @abstractmethod
     def meas_fcn(self, x, r, time):
@@ -877,6 +878,7 @@ class MeasurementModel(metaclass=ABCMeta):
         ----------
         xr : (dim_in + dim_noise) ndarray
             System state augmented with the measurement noise.
+            # TODO: not true, xr is just state when the noise is additive
 
         time : int
             Time index.
@@ -897,22 +899,21 @@ class MeasurementModel(metaclass=ABCMeta):
         # pick indices of the state relevant for the measurement model
         if self.state_index is not None:
             xr = xr[self.state_index]
-        else:  # if state index not specifies not restriction will happen
-            # check that supplied augmented state has expected dimension
-            if len(xr) != self.dim_in + self.dim_noise:
-                ValueError("Unexpected dimension of the augmented state vector: "
-                           "len(xr) != self.dim_in + self.dim_noise")
 
         if self.noise_additive:
             if dx:
-                out = (self.meas_fcn_dx(xr, self.zero_r, time).T.flatten())
+                out = np.zeros((self.dim_out, self.dim_state))
+                out[:, self.state_index] = self.meas_fcn_dx(xr, self.zero_r, time).T.flatten()
             else:
                 out = self.meas_fcn(xr, self.zero_r, time)
         else:
             assert len(xr) == self.dim_in + self.dim_noise
             x, r = xr[:self.dim_in], xr[-self.dim_noise:]
             if dx:
-                out = (self.meas_fcn_dx(x, r, time).T.flatten())
+                out = np.zeros((self.dim_out, self.dim_state + self.dim_noise))
+                jac_out = self.meas_fcn_dx(x, r, time).T.flatten()
+                out[:, self.state_index] = jac_out[:, :self.dim_in]
+                out[:, self.dim_state:] = jac_out[:, self.dim_in:]
             else:
                 out = self.meas_fcn(x, r, time)
         return out
@@ -963,8 +964,8 @@ class UNGMMeasurement(MeasurementModel):
     dim_noise = 1
     noise_additive = True
 
-    def __init__(self, noise_rv, state_index=None):
-        super(UNGMMeasurement, self).__init__(noise_rv, state_index)
+    def __init__(self, noise_rv, dim_state, state_index=None):
+        super(UNGMMeasurement, self).__init__(noise_rv, dim_state, state_index)
 
     def meas_fcn(self, x, r, time):
         return np.asarray([0.05 * x[0] ** 2]) + r
@@ -988,8 +989,8 @@ class UNGMNAMeasurement(MeasurementModel):
     dim_noise = 1
     noise_additive = False
 
-    def __init__(self, noise_rv, state_index=None):
-        super(UNGMNAMeasurement, self).__init__(noise_rv, state_index)
+    def __init__(self, noise_rv, dim_state, state_index=None):
+        super(UNGMNAMeasurement, self).__init__(noise_rv, dim_state, state_index)
 
     def meas_fcn(self, x, r, time):
         return np.asarray([0.05 * r[0] * x[0] ** 2])
@@ -1017,8 +1018,8 @@ class Pendulum2DMeasurement(MeasurementModel):
     dim_noise = 1
     noise_additive = True
 
-    def __init__(self, noise_rv, state_index=None):
-        super(Pendulum2DMeasurement, self).__init__(noise_rv, state_index)
+    def __init__(self, noise_rv, dim_state, state_index=None):
+        super(Pendulum2DMeasurement, self).__init__(noise_rv, dim_state, state_index)
 
     def meas_fcn(self, x, r, time):
         return np.array([np.sin(x[0])]) + r
@@ -1049,8 +1050,8 @@ class RangeMeasurement(MeasurementModel):
     dim_noise = 1
     noise_additive = True
 
-    def __init__(self, noise_rv, state_index=None):
-        super(RangeMeasurement, self).__init__(noise_rv, state_index)
+    def __init__(self, noise_rv, dim_state, state_index=None):
+        super(RangeMeasurement, self).__init__(noise_rv, dim_state, state_index)
         # radar location: 30km (~100k ft) above the surface, radar-to-body horizontal distance
         self.sx = 30
         self.sy = 30
@@ -1087,8 +1088,8 @@ class BearingMeasurement(MeasurementModel):
     dim_noise = 1
 
     # TODO: can be generalized to 3D
-    def __init__(self, noise_rv, state_index=None, sensor_pos=None):
-        super(BearingMeasurement, self).__init__(noise_rv, state_index)
+    def __init__(self, noise_rv, dim_state, state_index=None, sensor_pos=None):
+        super(BearingMeasurement, self).__init__(noise_rv, dim_state, state_index)
         # default: 4 sensor positions
         if sensor_pos is None:
             self.sensor_pos = np.vstack((np.eye(2), -np.eye(2)))
@@ -1126,8 +1127,8 @@ class Radar2DMeasurement(MeasurementModel):
     dim_noise = 2
     noise_additive = True
 
-    def __init__(self, noise_rv, state_index=None, radar_loc=None):
-        super(Radar2DMeasurement, self).__init__(noise_rv, state_index)
+    def __init__(self, noise_rv, dim_state, state_index=None, radar_loc=None):
+        super(Radar2DMeasurement, self).__init__(noise_rv, dim_state, state_index)
         # set default radar location
         if radar_loc is None:
             self.radar_loc = np.array([0, 0])
