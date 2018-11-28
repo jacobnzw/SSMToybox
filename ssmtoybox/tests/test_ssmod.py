@@ -8,9 +8,9 @@ from ssmtoybox.ssmod import UNGMTransition, UNGMMeasurement, UNGMNATransition, U
 from ssmtoybox.utils import GaussRV
 
 
-def default_bq_hypers(mod_dyn, mod_meas):
-    nq = mod_dyn.dim_in if mod_dyn.noise_additive else mod_dyn.dim_in + mod_dyn.dim_noise
-    nr = mod_meas.dim_in if mod_meas.noise_additive else mod_meas.dim_in + mod_meas.dim_noise
+def default_bq_hypers(dyn, obs):
+    nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
+    nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
     hypers_f = np.atleast_2d(np.hstack((1, 3.0 * np.ones(nq))))
     hypers_h = np.atleast_2d(np.hstack((1, 3.0 * np.ones(nr))))
     return hypers_f, hypers_h
@@ -134,3 +134,7 @@ class TestPendulum(unittest.TestCase):
         for inf in inf_method:
             inf.forward_pass(z[..., 0])
             inf.backward_pass()
+
+
+class TestReentry(unittest.TestCase):
+    pass
