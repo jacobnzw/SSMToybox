@@ -827,7 +827,7 @@ class MeasurementModel(metaclass=ABCMeta):
 
         Parameters
         ----------
-        x : (dim_in, ) ndarray  # TODO: there will be more to say once the mask is implemented
+        x : (dim_in, ) ndarray
             System state.
         
         r : (dim_noise, ) ndarray
@@ -876,9 +876,9 @@ class MeasurementModel(metaclass=ABCMeta):
 
         Parameters
         ----------
-        xr : (dim_in + dim_noise) ndarray
-            System state augmented with the measurement noise.
-            # TODO: not true, xr is just state when the noise is additive
+        xr : ndarray
+            System state (potentially) augmented with the measurement noise and thus shape is
+            (dim_state + dim_noise) or (dim_state, ) depending on noise additivity.
 
         time : int
             Time index.
@@ -1084,15 +1084,20 @@ class BearingMeasurement(MeasurementModel):
     """
 
     dim_in = 2
-    dim_out = 1
-    dim_noise = 1
+    dim_out = None
+    dim_noise = None
+    noise_additive = True
 
     # TODO: can be generalized to 3D
     def __init__(self, noise_rv, dim_state, state_index=None, sensor_pos=None):
         super(BearingMeasurement, self).__init__(noise_rv, dim_state, state_index)
         # default: 4 sensor positions
         if sensor_pos is None:
-            self.sensor_pos = np.vstack((np.eye(2), -np.eye(2)))
+            sensor_pos = np.vstack((np.eye(2), -np.eye(2)))
+        self.sensor_pos = sensor_pos
+        # outputs == # sensors
+        self.dim_out = len(self.sensor_pos)
+        self.dim_noise = self.dim_out
 
     def meas_fcn(self, x, r, time):
         """
