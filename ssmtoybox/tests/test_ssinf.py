@@ -3,7 +3,7 @@ from unittest import TestCase
 import numpy as np
 import numpy.linalg as la
 
-from ssmtoybox.ssinf import GPQMKalman, BayesSardKalman, TPQStudent
+from ssmtoybox.ssinf import GPQMKalman, GaussianProcessKalman, BayesSardKalman, TPQStudent
 from ssmtoybox.ssinf import UnscentedKalman, ExtendedKalman, GaussHermiteKalman
 from ssmtoybox.ssmod import UNGMTransition, Pendulum2DTransition, CoordinatedTurnTransition, ReentryVehicle2DTransition
 from ssmtoybox.ssmod import UNGMMeasurement, Pendulum2DMeasurement, BearingMeasurement, Radar2DMeasurement
@@ -94,6 +94,20 @@ class GaussianInferenceTest(TestCase):
         """
         for ssm_name, data in self.ssm.items():
             alg = GaussHermiteKalman(data['dyn'], data['obs'])
+            alg.forward_pass(data['y'][..., 0])
+            alg.reset()
+
+    def test_gaussian_process_kalman(self):
+        """
+        Test Gaussian Process Quadrature KF on range of SSMs.
+        """
+        for ssm_name, data in self.ssm.items():
+            if ssm_name in ['rer', 'ctb']:
+                # GPQ kernel pars hard to find on higher-dimensional systems like reentry or CT
+                continue
+            dim = data['x'].shape[0]
+            kpar = np.atleast_2d(np.ones(dim + 1))
+            alg = GaussianProcessKalman(data['dyn'], data['obs'], kpar, kpar)
             alg.forward_pass(data['y'][..., 0])
             alg.reset()
 
