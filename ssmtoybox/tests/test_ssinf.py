@@ -4,34 +4,49 @@ import numpy as np
 import numpy.linalg as la
 
 from ssmtoybox.ssinf import GPQMKalman, BayesSardKalman, TPQStudent
-from ssmtoybox.ssinf import UnscentedKalman
-from ssmtoybox.ssmod import UNGMTransition, Pendulum2DTransition, CoordinatedTurnTransition
-from ssmtoybox.ssmod import UNGMMeasurement, Pendulum2DMeasurement, BearingMeasurement
+from ssmtoybox.ssinf import UnscentedKalman, ExtendedKalman, GaussHermiteKalman
+from ssmtoybox.ssmod import UNGMTransition, Pendulum2DTransition, CoordinatedTurnTransition, ReentryVehicle2DTransition
+from ssmtoybox.ssmod import UNGMMeasurement, Pendulum2DMeasurement, BearingMeasurement, Radar2DMeasurement
 from ssmtoybox.utils import GaussRV, StudentRV
 
 
-class BSQKalmanTest(TestCase):
+class GaussianInferenceTest(TestCase):
 
     @classmethod
     def setUpClass(cls):
+        cls.ssm = {}
         # setup UNGM
         x0 = GaussRV(1)
         q = GaussRV(1, cov=np.array([[10.0]]))
         r = GaussRV(1)
-        cls.ungm_dyn = UNGMTransition(x0, q)
-        cls.ungm_obs = UNGMMeasurement(r, cls.ungm_dyn.dim_out)
-        ungm_x = cls.ungm_dyn.simulate_discrete(100)
-        cls.ungm_y = cls.ungm_obs.simulate_measurements(ungm_x)
+        dyn = UNGMTransition(x0, q)
+        obs = UNGMMeasurement(r, 1)
+        x = dyn.simulate_discrete(100)
+        y = obs.simulate_measurements(x)
+        cls.ssm.update({'ungm': {'dyn': dyn, 'obs': obs, 'x': x, 'y': y}})
 
         # setup 2D pendulum
         x0 = GaussRV(2, mean=np.array([1.5, 0]), cov=0.01 * np.eye(2))
         dt = 0.01
         q = GaussRV(2, cov=0.01 * np.array([[(dt ** 3) / 3, (dt ** 2) / 2], [(dt ** 2) / 2, dt]]))
         r = GaussRV(1, cov=np.array([[0.1]]))
-        cls.pend_dyn = Pendulum2DTransition(x0, q, dt=dt)
-        cls.pend_obs = Pendulum2DMeasurement(r, cls.pend_dyn.dim_out)
-        x = cls.pend_dyn.simulate_discrete(100)
-        cls.pend_y = cls.pend_obs.simulate_measurements(x)
+        dyn = Pendulum2DTransition(x0, q, dt=dt)
+        obs = Pendulum2DMeasurement(r, dyn.dim_out)
+        x = dyn.simulate_discrete(100)
+        y = obs.simulate_measurements(x)
+        cls.ssm.update({'pend': {'dyn': dyn, 'obs': obs, 'x': x, 'y': y}})
+
+        # setup reentry vehicle radar tracking
+        m0 = np.array([6500.4, 349.14, -1.8093, -6.7967, 0.6932])
+        P0 = np.diag([1e-6, 1e-6, 1e-6, 1e-6, 1])
+        x0 = GaussRV(5, m0, P0)
+        q = GaussRV(3, cov=np.diag([2.4064e-5, 2.4064e-5, 1e-6]))
+        r = GaussRV(2, cov=np.diag([1e-6, 0.17e-6]))
+        dyn = ReentryVehicle2DTransition(x0, q)
+        obs = Radar2DMeasurement(r, 5)
+        x = dyn.simulate_discrete(100)
+        y = obs.simulate_measurements(x)
+        cls.ssm.update({'rer': {'dyn': dyn, 'obs': obs, 'x': x, 'y': y}})
 
         # setup coordinated turn bearing only tracking
         m0 = np.array([1000, 300, 1000, 0, np.deg2rad(-3.0)])
@@ -46,58 +61,84 @@ class BSQKalmanTest(TestCase):
         q = GaussRV(5, cov=Q)
         r = GaussRV(4, cov=10e-3*np.eye(4))
         sen = np.vstack((1000 * np.eye(2), -1000 * np.eye(2))).astype(np.float)
-        cls.ctb_dyn = CoordinatedTurnTransition(x0, q)
-        cls.ctb_obs = BearingMeasurement(r, 5, state_index=[0, 2], sensor_pos=sen)
-        x = cls.ctb_dyn.simulate_discrete(100)
-        cls.ctb_y = cls.ctb_obs.simulate_measurements(x)
+        dyn = CoordinatedTurnTransition(x0, q)
+        obs = BearingMeasurement(r, 5, state_index=[0, 2], sensor_pos=sen)
+        x = dyn.simulate_discrete(100)
+        y = obs.simulate_measurements(x)
+        cls.ssm.update({'ctb': {'dyn': dyn, 'obs': obs, 'x': x, 'y': y}})
 
-    def test_init(self):
-        kpar = np.array([[1, 1]], dtype=np.float)
-        alpha = np.array([[0, 1, 2]])
-        BayesSardKalman(self.ungm_dyn, self.ungm_obs, kpar, kpar, alpha, alpha)
+    def test_extended_kalman(self):
+        """
+        Test Extended KF on range of SSMs.
+        """
+        for ssm_name, data in self.ssm.items():
+            if ssm_name in ['rer', 'ctb']:
+                # Jacobians not implemented for reentry and coordinate turn
+                continue
+            alg = ExtendedKalman(data['dyn'], data['obs'])
+            alg.forward_pass(data['y'][..., 0])
+            alg.reset()
 
-    def test_filtering_ungm(self):
-        kpar = np.array([[1, 1]], dtype=np.float)
-        alpha = np.array([[0, 1, 2]])
-        alg = BayesSardKalman(self.ungm_dyn, self.ungm_obs, kpar, kpar, alpha, alpha)
-        alg.forward_pass(self.ungm_y[..., 0])
+    def test_unscented_kalman(self):
+        """
+        Test Unscented KF on range of SSMs.
+        """
+        for ssm_name, data in self.ssm.items():
+            alg = UnscentedKalman(data['dyn'], data['obs'])
+            alg.forward_pass(data['y'][..., 0])
+            alg.reset()
 
-    def test_filtering_pendulum(self):
-        kpar = np.array([[1, 1, 1]], dtype=np.float)
-        alpha = np.array([[0, 1, 0, 2, 0],
-                          [0, 0, 1, 0, 2]])
-        alg = BayesSardKalman(self.pend_dyn, self.pend_obs, kpar, kpar, alpha, alpha)
-        alg.forward_pass(self.pend_y[..., 0])
+    def test_gauss_hermite_kalman(self):
+        """
+        Test Gauss-Hermite KF on range of SSMs.
+        """
+        for ssm_name, data in self.ssm.items():
+            alg = GaussHermiteKalman(data['dyn'], data['obs'])
+            alg.forward_pass(data['y'][..., 0])
+            alg.reset()
 
-    def test_filtering_ct_bearing(self):
-        kpar = np.array([[1, 100, 100, 100, 100, 1]], dtype=np.float)
-        alpha = np.hstack((np.eye(5), 2*np.eye(5))).astype(int)
-        alg = BayesSardKalman(self.ctb_dyn, self.ctb_obs, kpar, kpar, alpha, alpha)
-        alg.tf_dyn.model.model_var = 0 #np.diag([0.2])
-        alg.tf_meas.model.model_var = 0
-        # alg = UnscentedKalman(self.ctb_dyn, self.ctb_obs)
-        alg.forward_pass(self.ctb_y[..., 0])
+    def test_bayes_sard_kalman(self):
+        """
+        Test Bayes-Sard Quadrature KF on range of SSMs.
+        """
+        for ssm_name, data in self.ssm.items():
+            dim = data['x'].shape[0]
+            kpar = np.atleast_2d(np.ones(dim + 1))
+            alpha = np.hstack((np.zeros((dim, 1)), np.eye(dim), 2*np.eye(dim))).astype(int)
+            alg = BayesSardKalman(data['dyn'], data['obs'], kpar, kpar, alpha, alpha)
+            alg.forward_pass(data['y'][..., 0])
+            alg.reset()
 
 
-class TPQStudentTest(TestCase):
+class StudentInferenceTest(TestCase):
 
-    def test_ungm_filtering(self):
+    @classmethod
+    def setUpClass(cls):
+        cls.ssm = {}
         # setup UNGM with Student RVs
         x0 = StudentRV(1)
         q = StudentRV(1, scale=np.array([[10.0]]))
         r = StudentRV(1)
         dyn = UNGMTransition(x0, q)
         obs = UNGMMeasurement(r, dyn.dim_out)
-        # simulate data
         x = dyn.simulate_discrete(100)
         y = obs.simulate_measurements(x)
+        cls.ssm.update({'ungm': {'dyn': dyn, 'obs': obs, 'x': x, 'y': y}})
 
-        kerpar = np.array([[1.0, 1.0]])
-        filt = TPQStudent(dyn, obs, kerpar, kerpar)
-        filt.forward_pass(y[..., 0])
+    def test_student_process_student(self):
+        """
+        Test t-Process Quadrature SF on a range of SSMs.
+        """
+        for ssm_name, data in self.ssm.items():
+            dim = data['x'].shape[0]
+            kerpar = np.atleast_2d(np.ones(dim + 1))
+            filt = TPQStudent(data['dyn'], data['obs'], kerpar, kerpar)
+            filt.forward_pass(data['y'][..., 0])
 
-    def test_tracking_filtering(self):
-        # some higher dim tracking
+    def test_fully_symmetric_student(self):
+        """
+        Test fully-symmetric SF.
+        """
         pass
 
 
