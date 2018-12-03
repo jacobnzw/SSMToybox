@@ -6,6 +6,8 @@ from abc import ABCMeta, abstractmethod
 Transition models
 """
 
+# TODO: add constant turn-rate and speed (CTRS) process model
+
 
 class TransitionModel(metaclass=ABCMeta):
     """State transition model
@@ -20,16 +22,13 @@ class TransitionModel(metaclass=ABCMeta):
     noise_rv : RandomVariable
         Distribution of the process (state) noise.
 
-    noise_gain : (dim_out, dim_noise) ndarray, optional
+    noise_gain : (dim_state, dim_noise) ndarray, optional
         Noise gain matrix.
 
     Attributes
     ----------
-    dim_in : int
-        Input dimension of the state transition function.
-
-    dim_out : int
-        Output dimension of the state transition function.
+    dim_state : int
+        Input dimensionality of the state transition function.
 
     dim_noise : int
         Dimensionality of the process noise vector.
@@ -39,13 +38,13 @@ class TransitionModel(metaclass=ABCMeta):
     """
 
     dim_in = None
-    # TODO: improvement: have only dim_state and dim_noise,
-    #  self.dim_in = dim_state if self.noise_additive else dim_state + dim_noise
-    dim_out = None
+    dim_state = None
     dim_noise = None
     noise_additive = None
 
     def __init__(self, init_rv, noise_rv, noise_gain=None):
+        # input dimensionality of the dynamics function depends on noise additivity
+        self.dim_in = self.dim_state if self.noise_additive else self.dim_state + self.dim_noise
         # distribution of initial conditions
         self.init_rv = init_rv
         # distribution of process noise
@@ -53,7 +52,7 @@ class TransitionModel(metaclass=ABCMeta):
         # zero vec for convenience
         self.zero_q = np.zeros(self.dim_noise)  # TODO rename to q_zero
         if noise_gain is None:
-            self.noise_gain = np.eye(self.dim_out, self.dim_noise)
+            self.noise_gain = np.eye(self.dim_state, self.dim_noise)
 
     @abstractmethod
     def dyn_fcn(self, x, q, time):
@@ -63,7 +62,7 @@ class TransitionModel(metaclass=ABCMeta):
 
         Parameters
         ----------
-        x : (dim_in, ) ndarray
+        x : (dim_state, ) ndarray
             System state.
 
         q : (dim_noise, ) ndarray
@@ -87,7 +86,7 @@ class TransitionModel(metaclass=ABCMeta):
 
         Parameters
         ----------
-        x : (dim_in, ) ndarray
+        x : (dim_state, ) ndarray
             System state.
 
         q : (dim_noise, ) ndarray
@@ -104,14 +103,14 @@ class TransitionModel(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def dyn_fcn_dx(self, x, r, time):
+    def dyn_fcn_dx(self, x, q, time):
         """Jacobian of the system dynamics.
 
         Abstract method for the Jacobian of system dynamics. Jacobian is a matrix of first partial derivatives.
 
         Parameters
         ----------
-        x : (dim_in, ) ndarray
+        x : (dim_state, ) ndarray
             System state.
 
         q : (dim_noise, ) ndarray
@@ -122,8 +121,9 @@ class TransitionModel(metaclass=ABCMeta):
 
         Returns
         -------
-        : (dim_out, dim_in) ndarray
-            Jacobian matrix of the system dynamics. Note that in non-additive noise case `dim_in = dim_out + dim_noise`.
+        : (dim_state, dim_in) ndarray
+            Jacobian matrix of the system dynamics. Note that in non-additive noise case
+            `dim_in = dim_state + dim_noise`.
         """
         pass
 
@@ -152,14 +152,14 @@ class TransitionModel(metaclass=ABCMeta):
         """
 
         if self.noise_additive:
-            assert len(xq) == self.dim_in
+            assert len(xq) == self.dim_state
             if dx:
                 out = self.dyn_fcn_dx(xq, self.zero_q, time)
             else:
                 out = self.dyn_fcn(xq, self.zero_q, time)
         else:
-            assert len(xq) == self.dim_in + self.dim_noise
-            x, q = xq[:self.dim_in], xq[-self.dim_noise:]
+            assert len(xq) == self.dim_state + self.dim_noise
+            x, q = xq[:self.dim_state], xq[-self.dim_noise:]
             if dx:
                 out = self.dyn_fcn_dx(x, q, time)
             else:
@@ -343,8 +343,7 @@ class UNGMTransition(TransitionModel):
     Typically used with :math:`x_0 ~ N(0, 1)`, :math:`q_k ~ N(0, 10)`.
     """
 
-    dim_in = 1
-    dim_out = 1
+    dim_state = 1
     dim_noise = 1
     noise_additive = True
 
@@ -375,8 +374,7 @@ class UNGMNATransition(TransitionModel):
     Typically used with :math:`x_0 ~ N(0, 1)`, :math:`q_k ~ N(0, 10)`.
     """
 
-    dim_in = 1
-    dim_out = 1
+    dim_state = 1
     dim_noise = 1
     noise_additive = False
 
@@ -433,8 +431,7 @@ class Pendulum2DTransition(TransitionModel):
     .. [1] Sarkka, S., Bayesian Filtering and Smoothing, Cambridge University Press, 2013.
     """
 
-    dim_in = 2
-    dim_out = 2
+    dim_state = 2
     dim_noise = 2
     noise_additive = True
 
@@ -504,8 +501,7 @@ class ReentryVehicle1DTransition(TransitionModel):
            Distributions, 1996
     """
 
-    dim_in = 3
-    dim_out = 3
+    dim_state = 3
     dim_noise = 3
     noise_additive = True
 
@@ -599,8 +595,7 @@ class ReentryVehicle2DTransition(TransitionModel):
            IEEE Trans. Automat. Contr., vol. AC-16, pp. 307–319, Aug. 1971.
     """
 
-    dim_in = 5
-    dim_out = 5
+    dim_state = 5
     dim_noise = 3
     noise_additive = True
 
@@ -731,8 +726,7 @@ class CoordinatedTurnTransition(TransitionModel):
            On the relation between Gaussian process quadratures and sigma-point methods.
     """
 
-    dim_in = 5
-    dim_out = 5
+    dim_state = 5
     dim_noise = 5
 
     noise_additive = True
@@ -791,11 +785,12 @@ class MeasurementModel(metaclass=ABCMeta):
 
     Attributes
     ----------
-    dim_in : int
-        Input dimension of the state transition function.
+    dim_substate : int
+        Dimensionality of the states fed into the measurement function. Often times, not all states are used for
+        computation of the measurements (e.g. bearings only tracking).
 
     dim_out : int
-        Output dimension of the state transition function.
+        Output dimensionality of the measurement function (dimensionality of the measurement).
 
     dim_noise : int
         Dimensionality of the process noise vector.
@@ -804,8 +799,8 @@ class MeasurementModel(metaclass=ABCMeta):
         Indicates additivity of the measurement noise. `True` if noise is additive, `False` otherwise.
     """
 
-    dim_in = None
-    dim_out = None
+    dim_substate = None
+    dim_out = None  # dimensionality of the measurement
     dim_noise = None
     noise_additive = None
 
@@ -815,10 +810,13 @@ class MeasurementModel(metaclass=ABCMeta):
         # zero vec for convenience
         self.zero_r = np.zeros(self.dim_noise)  # TODO: rename to r_zero
         # state index must contain same # of elements as input dimensionality of the measurement model
-        if state_index is not None and len(state_index) != self.dim_in:
+        if state_index is not None and len(state_index) != self.dim_substate:
             ValueError("State index must contain same number of elements as input dimensionality of the measurement "
-                       "model: len(state_index) != self.dim_in:")
+                       "model: len(state_index) != self.dim_substate:")
         self.state_index = state_index
+        # dimensionality of the input to the measurement function depends on noise additivity
+        self.dim_in = dim_state if self.noise_additive else dim_state + self.dim_noise
+        # system state dimensionality
         self.dim_state = dim_state
 
     @abstractmethod
@@ -909,13 +907,13 @@ class MeasurementModel(metaclass=ABCMeta):
             else:
                 out = self.meas_fcn(xr, self.zero_r, time)
         else:
-            assert len(xr) == self.dim_in + self.dim_noise
-            x, r = xr[:self.dim_in], xr[-self.dim_noise:]
+            assert len(xr) == self.dim_substate + self.dim_noise
+            x, r = xr[:self.dim_substate], xr[-self.dim_noise:]
             if dx:
                 out = np.zeros((self.dim_out, self.dim_state + self.dim_noise))
                 jac_out = self.meas_fcn_dx(x, r, time)
-                out[:, self.state_index] = jac_out[:, :self.dim_in]
-                out[:, self.dim_state:] = jac_out[:, self.dim_in:]
+                out[:, self.state_index] = jac_out[:, :self.dim_substate]
+                out[:, self.dim_state:] = jac_out[:, self.dim_substate:]
             else:
                 out = self.meas_fcn(x, r, time)
         return out
@@ -961,7 +959,7 @@ class UNGMMeasurement(MeasurementModel):
     Reasonable statistics: r_k \sim N(0, 1)
     """
 
-    dim_in = 1
+    dim_substate = 1
     dim_out = 1
     dim_noise = 1
     noise_additive = True
@@ -986,7 +984,7 @@ class UNGMNAMeasurement(MeasurementModel):
     Reasonable statistics: r_k \sim N(0, 1)
     """
 
-    dim_in = 1
+    dim_substate = 1
     dim_out = 1
     dim_noise = 1
     noise_additive = False
@@ -1015,7 +1013,7 @@ class Pendulum2DMeasurement(MeasurementModel):
     Reasonable statistics: :math:`r_k \sim N(0, 0.1)`
     """
 
-    dim_in = 1
+    dim_substate = 1
     dim_out = 1
     dim_noise = 1
     noise_additive = True
@@ -1027,7 +1025,7 @@ class Pendulum2DMeasurement(MeasurementModel):
         return np.array([np.sin(x[0])]) + r
 
     def meas_fcn_dx(self, x, r, time):
-        return np.array([[np.cos(x[0]), 0.0]])
+        return np.array([[np.cos(x[0])]])
 
 
 class RangeMeasurement(MeasurementModel):
@@ -1047,7 +1045,7 @@ class RangeMeasurement(MeasurementModel):
 
     """
 
-    dim_in = 1
+    dim_substate = 1
     dim_out = 1
     dim_noise = 1
     noise_additive = True
@@ -1085,7 +1083,7 @@ class BearingMeasurement(MeasurementModel):
 
     """
 
-    dim_in = 2
+    dim_substate = 2
     dim_out = None
     dim_noise = None
     noise_additive = True
@@ -1129,7 +1127,7 @@ class Radar2DMeasurement(MeasurementModel):
     # TODO: (optionally) range rate measurements
     """
 
-    dim_in = 2
+    dim_substate = 2
     dim_out = 2
     dim_noise = 2
     noise_additive = True

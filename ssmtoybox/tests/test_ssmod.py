@@ -9,10 +9,8 @@ from ssmtoybox.utils import GaussRV
 
 
 def default_bq_hypers(dyn, obs):
-    nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
-    nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
-    hypers_f = np.atleast_2d(np.hstack((1, 3.0 * np.ones(nq))))
-    hypers_h = np.atleast_2d(np.hstack((1, 3.0 * np.ones(nr))))
+    hypers_f = np.atleast_2d(np.hstack((1, 3.0 * np.ones(dyn.dim_in))))
+    hypers_h = np.atleast_2d(np.hstack((1, 3.0 * np.ones(obs.dim_in))))
     return hypers_f, hypers_h
 
 
@@ -31,13 +29,13 @@ class TestUNGM(unittest.TestCase):
         init_dist = GaussRV(dim)
         noise_dist = GaussRV(dim, cov=np.atleast_2d(10.0))
         ungm_dyn = UNGMTransition(init_dist, noise_dist)
-        ungm_meas = UNGMMeasurement(GaussRV(dim), ungm_dyn.dim_out)
+        ungm_meas = UNGMMeasurement(GaussRV(dim), ungm_dyn.dim_state)
         x = ungm_dyn.simulate_discrete(time_steps, mc_sims=20)
         y = ungm_meas.simulate_measurements(x)
 
         # UNGM non-additive noise
         ungmna_dyn = UNGMNATransition(init_dist, noise_dist)
-        ungmna_meas = UNGMNAMeasurement(GaussRV(dim), ungm_dyn.dim_out)
+        ungmna_meas = UNGMNAMeasurement(GaussRV(dim), ungm_dyn.dim_state)
         x = ungmna_dyn.simulate_discrete(time_steps, mc_sims=20)
         y = ungmna_meas.simulate_measurements(x)
 
@@ -49,7 +47,7 @@ class TestUNGM(unittest.TestCase):
         init_dist = GaussRV(dim)
         noise_dist = GaussRV(dim, cov=np.atleast_2d(10.0))
         dyn = UNGMTransition(init_dist, noise_dist)
-        obs = UNGMMeasurement(GaussRV(dim), dyn.dim_out)
+        obs = UNGMMeasurement(GaussRV(dim), dyn.dim_state)
         x = dyn.simulate_discrete(100, mc_sims=1)
         z = obs.simulate_measurements(x)
         hyp_dyn, hyp_meas = default_bq_hypers(dyn, obs)
@@ -81,7 +79,7 @@ class TestUNGM(unittest.TestCase):
         init_dist = GaussRV(dim)
         noise_dist = GaussRV(dim, cov=np.atleast_2d(10.0))
         dyn = UNGMNATransition(init_dist, noise_dist)
-        obs = UNGMNAMeasurement(GaussRV(dim), dyn.dim_out)
+        obs = UNGMNAMeasurement(GaussRV(dim), dyn.dim_state)
         x = dyn.simulate_discrete(100)
         z = obs.simulate_measurements(x)
         hyp_dyn, hyp_meas = default_bq_hypers(dyn, obs)
@@ -118,7 +116,7 @@ class TestPendulum(unittest.TestCase):
 
         # measurement model: r = measurement noise RV
         r = GaussRV(1, cov=np.array([[0.1]]))
-        obs = Pendulum2DMeasurement(r, dyn.dim_out)
+        obs = Pendulum2DMeasurement(r, dyn.dim_state)
 
         x = dyn.simulate_discrete(100)
         z = obs.simulate_measurements(x)

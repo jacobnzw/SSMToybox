@@ -43,7 +43,7 @@ class GaussianInferenceTest(TestCase):
         q = GaussRV(2, cov=0.01 * np.array([[(dt ** 3) / 3, (dt ** 2) / 2], [(dt ** 2) / 2, dt]]))
         r = GaussRV(1, cov=np.array([[0.1]]))
         dyn = Pendulum2DTransition(x0, q, dt=dt)
-        obs = Pendulum2DMeasurement(r, dyn.dim_out)
+        obs = Pendulum2DMeasurement(r, dyn.dim_state)
         x = dyn.simulate_discrete(100)
         y = obs.simulate_measurements(x)
         cls.ssm.update({'pend': {'dyn': dyn, 'obs': obs, 'x': x, 'y': y}})
@@ -119,11 +119,8 @@ class GaussianInferenceTest(TestCase):
                 continue
 
             # setup kernel parameters
-            dyn_add, obs_add = data['dyn'].noise_additive, data['obs'].noise_additive
-            dim = data['dyn'].dim_in if dyn_add else data['dyn'].dim_in + data['dyn'].dim_noise
-            kpar_dyn = np.atleast_2d(np.ones(dim + 1))
-            dim = data['obs'].dim_state if obs_add else data['obs'].dim_state + data['obs'].dim_noise
-            kpar_obs = np.atleast_2d(np.ones(dim + 1))
+            kpar_dyn = np.atleast_2d(np.ones(data['dyn'].dim_in + 1))
+            kpar_obs = np.atleast_2d(np.ones(data['obs'].dim_in + 1))
 
             alg = GaussianProcessKalman(data['dyn'], data['obs'], kpar_dyn, kpar_obs)
             alg.forward_pass(data['y'][..., 0])
@@ -135,11 +132,10 @@ class GaussianInferenceTest(TestCase):
         """
         for ssm_name, data in self.ssm.items():
             # setup kernel parameters and multi-indices (for polynomial mean function)
-            dyn_add, obs_add = data['dyn'].noise_additive, data['obs'].noise_additive
-            dim = data['dyn'].dim_in if dyn_add else data['dyn'].dim_in + data['dyn'].dim_noise
+            dim = data['dyn'].dim_in
             kpar_dyn = np.atleast_2d(np.ones(dim + 1))
             alpha_dyn = np.hstack((np.zeros((dim, 1)), np.eye(dim), 2 * np.eye(dim))).astype(int)
-            dim = data['obs'].dim_state if obs_add else data['obs'].dim_state + data['obs'].dim_noise
+            dim = data['obs'].dim_in
             kpar_obs = np.atleast_2d(np.ones(dim + 1))
             alpha_obs = np.hstack((np.zeros((dim, 1)), np.eye(dim), 2 * np.eye(dim))).astype(int)
 
@@ -158,7 +154,7 @@ class StudentInferenceTest(TestCase):
         q = StudentRV(1, scale=np.array([[10.0]]))
         r = StudentRV(1)
         dyn = UNGMTransition(x0, q)
-        obs = UNGMMeasurement(r, dyn.dim_out)
+        obs = UNGMMeasurement(r, dyn.dim_state)
         x = dyn.simulate_discrete(100)
         y = obs.simulate_measurements(x)
         cls.ssm.update({'ungm': {'dyn': dyn, 'obs': obs, 'x': x, 'y': y}})

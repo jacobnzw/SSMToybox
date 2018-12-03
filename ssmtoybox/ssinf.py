@@ -80,8 +80,8 @@ class StateSpaceInference(metaclass=ABCMeta):
         """
 
         self.D, self.N = data.shape
-        self.fi_mean = np.zeros((self.mod_dyn.dim_in, self.N+1))
-        self.fi_cov = np.zeros((self.mod_dyn.dim_in, self.mod_dyn.dim_in, self.N+1))
+        self.fi_mean = np.zeros((self.mod_dyn.dim_state, self.N+1))
+        self.fi_cov = np.zeros((self.mod_dyn.dim_state, self.mod_dyn.dim_state, self.N+1))
         # FIXME: why save x0 to fi_mean, fi_cov when they get trimmed off in the end?
         # NOTE: if init. conds must be saved (smoother?) than fi_mean should be one larger than # measurements to
         # accommodate inits.
@@ -340,11 +340,8 @@ class ExtendedKalman(GaussianInference):
     """
 
     def __init__(self, dyn, obs):
-        assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
-        nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
-        nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
-        tf = LinearizationTransform(nq)
-        th = LinearizationTransform(nr)
+        tf = LinearizationTransform(dyn.dim_in)
+        th = LinearizationTransform(obs.dim_in)
         super(ExtendedKalman, self).__init__(dyn, obs, tf, th)
 
 
@@ -384,11 +381,8 @@ class CubatureKalman(GaussianInference):
     """
 
     def __init__(self, dyn, obs):
-        assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
-        nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
-        nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
-        tf = SphericalRadialTransform(nq)
-        th = SphericalRadialTransform(nr)
+        tf = SphericalRadialTransform(dyn.dim_in)
+        th = SphericalRadialTransform(obs.dim_in)
         super(CubatureKalman, self).__init__(dyn, obs, tf, th)
 
 
@@ -422,11 +416,8 @@ class UnscentedKalman(GaussianInference):
     """
 
     def __init__(self, dyn, obs, kappa=None, alpha=1.0, beta=2.0):
-        assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
-        nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
-        nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
-        tf = UnscentedTransform(nq, kappa=kappa, alpha=alpha, beta=beta)
-        th = UnscentedTransform(nr, kappa=kappa, alpha=alpha, beta=beta)
+        tf = UnscentedTransform(dyn.dim_in, kappa=kappa, alpha=alpha, beta=beta)
+        th = UnscentedTransform(obs.dim_in, kappa=kappa, alpha=alpha, beta=beta)
         super(UnscentedKalman, self).__init__(dyn, obs, tf, th)
 
 
@@ -463,11 +454,8 @@ class GaussHermiteKalman(GaussianInference):
     """
 
     def __init__(self, dyn, obs, deg=3):
-        assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
-        nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
-        nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
-        tf = GaussHermiteTransform(nq, degree=deg)
-        th = GaussHermiteTransform(nr, degree=deg)
+        tf = GaussHermiteTransform(dyn.dim_in, degree=deg)
+        th = GaussHermiteTransform(obs.dim_in, degree=deg)
         super(GaussHermiteKalman, self).__init__(dyn, obs, tf, th)
 
 
@@ -537,12 +525,55 @@ class GaussianProcessKalman(GaussianInference):
     """
 
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None):
-        assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
-        nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
-        nr = obs.dim_state if obs.noise_additive else obs.dim_state + obs.dim_noise
-        t_dyn = GaussianProcessTransform(nq, dyn.dim_out, kern_par_dyn, kernel, points, point_hyp)
-        t_obs = GaussianProcessTransform(nr, obs.dim_out, kern_par_obs, kernel, points, point_hyp)
+        t_dyn = GaussianProcessTransform(dyn.dim_in, dyn.dim_state, kern_par_dyn, kernel, points, point_hyp)
+        t_obs = GaussianProcessTransform(obs.dim_in, obs.dim_out, kern_par_obs, kernel, points, point_hyp)
         super(GaussianProcessKalman, self).__init__(dyn, obs, t_dyn, t_obs)
+
+
+class BayesSardKalman(GaussianInference):
+    """
+    Bayes-Sard quadrature Kalman filter (BSQKF) and smoother.
+
+    Parameters
+    ----------
+    ssm : GaussianStateSpaceModel
+        State-space model to perform inference on.
+
+    kern_par_dyn : ndarray
+        Kernel parameters for GPQ transformation of the state moments.
+
+    kern_par_obs : ndarray
+        Kernel parameters for GPQ transformation of the measurement moments.
+
+    mulind_dyn : int or ndarray, optional
+    mulind_obs : int or ndarray, optional
+        Multi-indices for dynamics and observation models.
+
+        ``int``
+            Equivalent to multi-index defining all monomials of total degree less then or equal to the supplied int.
+        ``ndarray``
+            Matrix, where columns are multi-indices defining the basis functions (monomials) of the polynomial space.
+
+    points : str {'sr', 'ut', 'gh', 'fs'}, optional
+        Sigma-point set:
+
+        ``sr``
+            Spherical-radial sigma-points (originally used in CKF).
+        ``ut``
+            Unscented transform sigma-points (originally used in UKF).
+        ``gh``
+            Gauss-Hermite sigma-points (originally used in GHKF).
+        ``fs``
+            Fully-symmetric sigma-points [3]_ (originally used in [2]_).
+
+    point_hyp : dict, optional
+        Hyper-parameters of the sigma-point set.
+    """
+
+    def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, mulind_dyn=2, mulind_obs=2, points='ut', point_hyp=None):
+        t_dyn = BayesSardTransform(dyn.dim_in, dyn.dim_state, kern_par_dyn, mulind_dyn, points, point_hyp)
+        t_obs = BayesSardTransform(obs.dim_in, obs.dim_out, kern_par_obs, mulind_obs, points, point_hyp)
+        super(BayesSardKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
 
 class TPQKalman(GaussianInference):
@@ -595,61 +626,9 @@ class TPQKalman(GaussianInference):
     """
 
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None, nu=3.0):
-        assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
-        nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
-        nr = obs.dim_state if obs.noise_additive else obs.dim_state + obs.dim_noise
-        t_dyn = StudentTProcessTransform(nq, 1, kern_par_dyn, kernel, points, point_hyp)
-        t_obs = StudentTProcessTransform(nr, 1, kern_par_obs, kernel, points, point_hyp)
+        t_dyn = StudentTProcessTransform(dyn.dim_in, 1, kern_par_dyn, kernel, points, point_hyp)
+        t_obs = StudentTProcessTransform(obs.dim_in, 1, kern_par_obs, kernel, points, point_hyp)
         super(TPQKalman, self).__init__(dyn, obs, t_dyn, t_obs)
-
-
-class BayesSardKalman(GaussianInference):
-    """
-    Bayes-Sard quadrature Kalman filter (BSQKF) and smoother.
-
-    Parameters
-    ----------
-    ssm : GaussianStateSpaceModel
-        State-space model to perform inference on.
-
-    kern_par_dyn : ndarray
-        Kernel parameters for GPQ transformation of the state moments.
-
-    kern_par_obs : ndarray
-        Kernel parameters for GPQ transformation of the measurement moments.
-
-    mulind_dyn : int or ndarray, optional
-    mulind_obs : int or ndarray, optional
-        Multi-indices for dynamics and observation models.
-
-        ``int``
-            Equivalent to multi-index defining all monomials of total degree less then or equal to the supplied int.
-        ``ndarray``
-            Matrix, where columns are multi-indices defining the basis functions (monomials) of the polynomial space.
-
-    points : str {'sr', 'ut', 'gh', 'fs'}, optional
-        Sigma-point set:
-
-        ``sr``
-            Spherical-radial sigma-points (originally used in CKF).
-        ``ut``
-            Unscented transform sigma-points (originally used in UKF).
-        ``gh``
-            Gauss-Hermite sigma-points (originally used in GHKF).
-        ``fs``
-            Fully-symmetric sigma-points [3]_ (originally used in [2]_).
-
-    point_hyp : dict, optional
-        Hyper-parameters of the sigma-point set.
-    """
-
-    def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, mulind_dyn=2, mulind_obs=2, points='ut', point_hyp=None):
-        assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
-        nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
-        nr = obs.dim_state if obs.noise_additive else obs.dim_state + obs.dim_noise
-        t_dyn = BayesSardTransform(nq, dyn.dim_out, kern_par_dyn, mulind_dyn, points, point_hyp)
-        t_obs = BayesSardTransform(nr, obs.dim_out, kern_par_obs, mulind_obs, points, point_hyp)
-        super(BayesSardKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
 
 class GPQMOKalman(GaussianInference):
@@ -1002,9 +981,6 @@ class StudentInference(StateSpaceInference):
     """
 
     def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas, dof=4.0, fixed_dof=True):
-        # require Student state-space model
-        assert isinstance(mod_dyn, TransitionModel) and isinstance(mod_meas, MeasurementModel)
-
         # make sure initial state and noises are Student RVs
         if not isinstance(mod_dyn.init_rv, StudentRV):
             ValueError("Initial state is not Student RV.")
@@ -1201,10 +1177,6 @@ class TPQStudent(StudentInference):
     """
 
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, point_par=None, dof=4.0, fixed_dof=True, dof_tp=4.0):
-        assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
-        nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
-        nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
-
         # degrees of freedom for SSM noises
         assert isinstance(dyn.init_rv, StudentRV) and isinstance(dyn.noise_rv, StudentRV)
         q_dof, r_dof = dyn.noise_rv.dof, obs.noise_rv.dof
@@ -1219,8 +1191,8 @@ class TPQStudent(StudentInference):
         # TODO: why is q_dof parameter for unit-points of the dynamics?
         # TODO: finish fixing DOFs, DOF for TPQ and DOF for the filtered state.
 
-        t_dyn = StudentTProcessTransform(nq, 1, kern_par_dyn, 'rbf-student', 'fs', point_par_dyn, dof_tp)
-        t_obs = StudentTProcessTransform(nr, 1, kern_par_obs, 'rbf-student', 'fs', point_par_obs, dof_tp)
+        t_dyn = StudentTProcessTransform(dyn.dim_in, 1, kern_par_dyn, 'rbf-student', 'fs', point_par_dyn, dof_tp)
+        t_obs = StudentTProcessTransform(obs.dim_in, 1, kern_par_obs, 'rbf-student', 'fs', point_par_obs, dof_tp)
         super(TPQStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
 
 
