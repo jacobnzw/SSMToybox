@@ -39,6 +39,8 @@ class TransitionModel(metaclass=ABCMeta):
     """
 
     dim_in = None
+    # TODO: improvement: have only dim_state and dim_noise,
+    #  self.dim_in = dim_state if self.noise_additive else dim_state + dim_noise
     dim_out = None
     dim_noise = None
     noise_additive = None
@@ -152,14 +154,14 @@ class TransitionModel(metaclass=ABCMeta):
         if self.noise_additive:
             assert len(xq) == self.dim_in
             if dx:
-                out = (self.dyn_fcn_dx(xq, self.zero_q, time).T.flatten())
+                out = self.dyn_fcn_dx(xq, self.zero_q, time)
             else:
                 out = self.dyn_fcn(xq, self.zero_q, time)
         else:
             assert len(xq) == self.dim_in + self.dim_noise
             x, q = xq[:self.dim_in], xq[-self.dim_noise:]
             if dx:
-                out = (self.dyn_fcn_dx(x, q, time).T.flatten())
+                out = self.dyn_fcn_dx(x, q, time)
             else:
                 out = self.dyn_fcn(x, q, time)
         return out
@@ -353,7 +355,7 @@ class UNGMTransition(TransitionModel):
         return np.asarray(0.5 * x[0] + 25 * (x[0] / (1 + x[0] ** 2)) + 8 * np.cos(1.2 * time)) + q
 
     def dyn_fcn_dx(self, x, q, time):
-        return np.asarray([0.5 + 25 * (1 - x[0] ** 2) / (1 + x[0] ** 2) ** 2])
+        return np.asarray([[0.5 + 25 * (1 - x[0] ** 2) / (1 + x[0] ** 2) ** 2]])
 
     def dyn_fcn_cont(self, x, q, time):
         pass
@@ -388,7 +390,7 @@ class UNGMNATransition(TransitionModel):
         pass
 
     def dyn_fcn_dx(self, x, q, time):
-        return np.asarray([0.5 + 25 * (1 - x[0] ** 2) / (1 + x[0] ** 2) ** 2, 8 * np.cos(1.2 * time)])
+        return np.asarray([[0.5 + 25 * (1 - x[0] ** 2) / (1 + x[0] ** 2) ** 2, 8 * np.cos(1.2 * time)]])
 
 
 class Pendulum2DTransition(TransitionModel):
@@ -903,7 +905,7 @@ class MeasurementModel(metaclass=ABCMeta):
         if self.noise_additive:
             if dx:
                 out = np.zeros((self.dim_out, self.dim_state))
-                out[:, self.state_index] = self.meas_fcn_dx(xr, self.zero_r, time).T.flatten()
+                out[:, self.state_index] = self.meas_fcn_dx(xr, self.zero_r, time)
             else:
                 out = self.meas_fcn(xr, self.zero_r, time)
         else:
@@ -911,7 +913,7 @@ class MeasurementModel(metaclass=ABCMeta):
             x, r = xr[:self.dim_in], xr[-self.dim_noise:]
             if dx:
                 out = np.zeros((self.dim_out, self.dim_state + self.dim_noise))
-                jac_out = self.meas_fcn_dx(x, r, time).T.flatten()
+                jac_out = self.meas_fcn_dx(x, r, time)
                 out[:, self.state_index] = jac_out[:, :self.dim_in]
                 out[:, self.dim_state:] = jac_out[:, self.dim_in:]
             else:
@@ -996,7 +998,7 @@ class UNGMNAMeasurement(MeasurementModel):
         return np.asarray([0.05 * r[0] * x[0] ** 2])
 
     def meas_fcn_dx(self, x, r, time):
-        return np.asarray([0.1 * r[0] * x[0], 0.05 * x[0] ** 2])
+        return np.asarray([[0.1 * r[0] * x[0], 0.05 * x[0] ** 2]])
 
 
 class Pendulum2DMeasurement(MeasurementModel):
@@ -1025,7 +1027,7 @@ class Pendulum2DMeasurement(MeasurementModel):
         return np.array([np.sin(x[0])]) + r
 
     def meas_fcn_dx(self, x, r, time):
-        return np.array([np.cos(x[0]), 0.0])
+        return np.array([[np.cos(x[0]), 0.0]])
 
 
 class RangeMeasurement(MeasurementModel):
