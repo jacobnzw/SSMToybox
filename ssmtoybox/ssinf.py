@@ -276,8 +276,8 @@ class GaussianInference(StateSpaceInference):
             self.y_cov_pr += self.r_cov
 
         # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)
-        self.xy_cov = self.xy_cov[:, :self.mod_dyn.dim_in]
-        self.xx_cov = self.xx_cov[:, :self.mod_dyn.dim_in]
+        self.xy_cov = self.xy_cov[:, :self.mod_dyn.dim_state]
+        self.xx_cov = self.xx_cov[:, :self.mod_dyn.dim_state]
 
     def _measurement_update(self, y, time=None):
         """
