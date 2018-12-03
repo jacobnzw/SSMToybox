@@ -5,8 +5,10 @@ import numpy.linalg as la
 
 from ssmtoybox.ssinf import GPQMKalman, GaussianProcessKalman, BayesSardKalman, TPQStudent
 from ssmtoybox.ssinf import UnscentedKalman, ExtendedKalman, GaussHermiteKalman
-from ssmtoybox.ssmod import UNGMTransition, Pendulum2DTransition, CoordinatedTurnTransition, ReentryVehicle2DTransition
-from ssmtoybox.ssmod import UNGMMeasurement, Pendulum2DMeasurement, BearingMeasurement, Radar2DMeasurement
+from ssmtoybox.ssmod import UNGMTransition, UNGMNATransition, Pendulum2DTransition, CoordinatedTurnTransition, \
+    ReentryVehicle2DTransition
+from ssmtoybox.ssmod import UNGMMeasurement, UNGMNAMeasurement, Pendulum2DMeasurement, BearingMeasurement, \
+    Radar2DMeasurement
 from ssmtoybox.utils import GaussRV, StudentRV
 
 
@@ -24,6 +26,16 @@ class GaussianInferenceTest(TestCase):
         x = dyn.simulate_discrete(100)
         y = obs.simulate_measurements(x)
         cls.ssm.update({'ungm': {'dyn': dyn, 'obs': obs, 'x': x, 'y': y}})
+
+        # setup UNGM with non-additive noise
+        x0 = GaussRV(1)
+        q = GaussRV(1, cov=np.array([[10.0]]))
+        r = GaussRV(1)
+        dyn = UNGMNATransition(x0, q)
+        obs = UNGMNAMeasurement(r, 1)
+        x = dyn.simulate_discrete(100)
+        y = obs.simulate_measurements(x)
+        cls.ssm.update({'ungmna': {'dyn': dyn, 'obs': obs, 'x': x, 'y': y}})
 
         # setup 2D pendulum
         x0 = GaussRV(2, mean=np.array([1.5, 0]), cov=0.01 * np.eye(2))
@@ -105,9 +117,15 @@ class GaussianInferenceTest(TestCase):
             if ssm_name in ['rer', 'ctb']:
                 # GPQ kernel pars hard to find on higher-dimensional systems like reentry or CT
                 continue
-            dim = data['x'].shape[0]
-            kpar = np.atleast_2d(np.ones(dim + 1))
-            alg = GaussianProcessKalman(data['dyn'], data['obs'], kpar, kpar)
+
+            # setup kernel parameters
+            dyn_add, obs_add = data['dyn'].noise_additive, data['obs'].noise_additive
+            dim = data['dyn'].dim_in if dyn_add else data['dyn'].dim_in + data['dyn'].dim_noise
+            kpar_dyn = np.atleast_2d(np.ones(dim + 1))
+            dim = data['obs'].dim_state if obs_add else data['obs'].dim_state + data['obs'].dim_noise
+            kpar_obs = np.atleast_2d(np.ones(dim + 1))
+
+            alg = GaussianProcessKalman(data['dyn'], data['obs'], kpar_dyn, kpar_obs)
             alg.forward_pass(data['y'][..., 0])
             alg.reset()
 
@@ -116,10 +134,16 @@ class GaussianInferenceTest(TestCase):
         Test Bayes-Sard Quadrature KF on range of SSMs.
         """
         for ssm_name, data in self.ssm.items():
-            dim = data['x'].shape[0]
-            kpar = np.atleast_2d(np.ones(dim + 1))
-            alpha = np.hstack((np.zeros((dim, 1)), np.eye(dim), 2*np.eye(dim))).astype(int)
-            alg = BayesSardKalman(data['dyn'], data['obs'], kpar, kpar, alpha, alpha)
+            # setup kernel parameters and multi-indices (for polynomial mean function)
+            dyn_add, obs_add = data['dyn'].noise_additive, data['obs'].noise_additive
+            dim = data['dyn'].dim_in if dyn_add else data['dyn'].dim_in + data['dyn'].dim_noise
+            kpar_dyn = np.atleast_2d(np.ones(dim + 1))
+            alpha_dyn = np.hstack((np.zeros((dim, 1)), np.eye(dim), 2 * np.eye(dim))).astype(int)
+            dim = data['obs'].dim_state if obs_add else data['obs'].dim_state + data['obs'].dim_noise
+            kpar_obs = np.atleast_2d(np.ones(dim + 1))
+            alpha_obs = np.hstack((np.zeros((dim, 1)), np.eye(dim), 2 * np.eye(dim))).astype(int)
+
+            alg = BayesSardKalman(data['dyn'], data['obs'], kpar_dyn, kpar_obs, alpha_dyn, alpha_obs)
             alg.forward_pass(data['y'][..., 0])
             alg.reset()
 

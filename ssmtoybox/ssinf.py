@@ -539,7 +539,7 @@ class GaussianProcessKalman(GaussianInference):
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None):
         assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
         nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
-        nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
+        nr = obs.dim_state if obs.noise_additive else obs.dim_state + obs.dim_noise
         t_dyn = GaussianProcessTransform(nq, dyn.dim_out, kern_par_dyn, kernel, points, point_hyp)
         t_obs = GaussianProcessTransform(nr, obs.dim_out, kern_par_obs, kernel, points, point_hyp)
         super(GaussianProcessKalman, self).__init__(dyn, obs, t_dyn, t_obs)
@@ -597,7 +597,7 @@ class TPQKalman(GaussianInference):
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None, nu=3.0):
         assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
         nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
-        nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
+        nr = obs.dim_state if obs.noise_additive else obs.dim_state + obs.dim_noise
         t_dyn = StudentTProcessTransform(nq, 1, kern_par_dyn, kernel, points, point_hyp)
         t_obs = StudentTProcessTransform(nr, 1, kern_par_obs, kernel, points, point_hyp)
         super(TPQKalman, self).__init__(dyn, obs, t_dyn, t_obs)
@@ -646,7 +646,7 @@ class BayesSardKalman(GaussianInference):
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, mulind_dyn=2, mulind_obs=2, points='ut', point_hyp=None):
         assert isinstance(dyn, TransitionModel) and isinstance(obs, MeasurementModel)
         nq = dyn.dim_in if dyn.noise_additive else dyn.dim_in + dyn.dim_noise
-        nr = dyn.dim_in if obs.noise_additive else dyn.dim_in + obs.dim_noise
+        nr = obs.dim_state if obs.noise_additive else obs.dim_state + obs.dim_noise
         t_dyn = BayesSardTransform(nq, dyn.dim_out, kern_par_dyn, mulind_dyn, points, point_hyp)
         t_obs = BayesSardTransform(nr, obs.dim_out, kern_par_obs, mulind_obs, points, point_hyp)
         super(BayesSardKalman, self).__init__(dyn, obs, t_dyn, t_obs)
