@@ -53,7 +53,7 @@ class LinearizationTransform(MomentTransform):
     def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
         mean_f = f(mean, fcn_pars)
         jacobian_f = f(mean, fcn_pars, dx=True)
-        jacobian_f = jacobian_f.reshape(len(mean_f), self.dim)
+        # jacobian_f = jacobian_f.reshape(len(mean_f), self.dim)
         cov_fx = jacobian_f.dot(cov)
         cov_f = cov_fx.dot(jacobian_f.T)
         return mean_f, cov_f, cov_fx
