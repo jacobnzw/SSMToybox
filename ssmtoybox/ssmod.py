@@ -6,8 +6,6 @@ from abc import ABCMeta, abstractmethod
 Transition models
 """
 
-# TODO: add constant turn-rate and speed (CTRS) process model
-
 
 class TransitionModel(metaclass=ABCMeta):
     """State transition model
@@ -52,7 +50,8 @@ class TransitionModel(metaclass=ABCMeta):
         # zero vec for convenience
         self.zero_q = np.zeros(self.dim_noise)  # TODO rename to q_zero
         if noise_gain is None:
-            self.noise_gain = np.eye(self.dim_state, self.dim_noise)
+            noise_gain = np.eye(self.dim_state, self.dim_noise)
+        self.noise_gain = noise_gain
 
     @abstractmethod
     def dyn_fcn(self, x, q, time):
@@ -847,6 +846,76 @@ class ConstantTurnRateSpeed(TransitionModel):
 
     def dyn_fcn_cont(self, x, q, time):
         return np.array([x[2]*np.cos(x[3]), x[2]*np.sin(x[3]), 0, x[4], 0])
+
+
+class ConstantVelocity(TransitionModel):
+    """
+    Constant velocity (CT) model.
+
+    State vector: :math:`[p_x, v_x, p_y, v_y]`
+    Noise vector: :math:`[q_1, q_2]`
+
+    Process equation:
+
+    .. math::
+        x_{k+1} =
+        \\begin{bmatrix}
+            1 & \\tau & 0 & 0 \\
+            0 & 1 & 0 & 0 \\
+            0 & 0 & 1 & \\tau \\
+            0 & 0 & 0 & 1 \\
+        \\end{bmatrix} x_k +
+        \\begin{bmatrix}
+            \\frac{\\tau^2}{2} & 0 \\
+            \\tau & 0 \\
+            0 & \\frac{\\tau^2}{2} \\
+            0 & \\tau \\
+        \\end{bmatrix} q_k
+
+    Reasonable statistics:
+    :math:`x_0 \\sim N(m_0, P_0)`
+    m_0 =
+    \\begin{bmatrix}
+        10000 & 300 & 1000 & -40
+    \\end{bmatrix}
+    P_0 =
+    \\mathrm{diag}
+    \\begin{bmatrix}
+        10000 & 100 & 10000 & 100
+    \\end{bmatrix}
+
+    :math:`q_k \\sim N(0, \\mathrm{diag}([50 \\ 5]))`
+
+    """
+
+    dim_state = 4
+    dim_noise = 2
+
+    def __init__(self, init_rv, noise_rv, dt=0.1):
+        self.dt = dt
+        noise_gain = np.array([[self.dt**2/2, 0],
+                               [self.dt, 0],
+                               [0, self.dt**2/2],
+                               [0, self.dt]])
+        super(ConstantVelocity, self).__init__(init_rv, noise_rv, noise_gain)
+
+    def dyn_fcn(self, x, q, time):
+        A = np.array([
+            [1, self.dt, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 1, self.dt],
+            [0, 0, 0, 1]
+        ])
+        return A.dot(x) + self.noise_gain.dot(q)
+
+    def dyn_fcn_dx(self, x, q, time):
+        return np.array([[1, self.dt, 0, 0],
+                         [0, 1, 0, 0],
+                         [0, 0, 1, self.dt],
+                         [0, 0, 0, 1]]).T
+
+    def dyn_fcn_cont(self, x, q, time):
+        pass
 
 
 """
