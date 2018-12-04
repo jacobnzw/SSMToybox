@@ -6,7 +6,7 @@ import numpy.linalg as la
 from ssmtoybox.ssinf import GPQMKalman, GaussianProcessKalman, BayesSardKalman, TPQStudent
 from ssmtoybox.ssinf import UnscentedKalman, ExtendedKalman, GaussHermiteKalman
 from ssmtoybox.ssmod import UNGMTransition, UNGMNATransition, Pendulum2DTransition, CoordinatedTurnTransition, \
-    ReentryVehicle2DTransition, ConstantTurnRateSpeed
+    ReentryVehicle2DTransition, ConstantTurnRateSpeed, ConstantVelocity
 from ssmtoybox.ssmod import UNGMMeasurement, UNGMNAMeasurement, Pendulum2DMeasurement, BearingMeasurement, \
     Radar2DMeasurement
 from ssmtoybox.utils import GaussRV, StudentRV
@@ -201,23 +201,45 @@ class StudentInferenceTest(TestCase):
         y = obs.simulate_measurements(x)
         cls.ssm.update({'ungm': {'dyn': dyn, 'obs': obs, 'x': x, 'y': y}})
 
-        # TODO setup radar tracking with Student RVs
+        # setup CV with Student RVs
+        m_0 = np.array([10000, 300, 1000, -40]).astype(np.float)
+        P_0 = np.diag([10000, 100, 10000, 100]).astype(np.float)
+        nu_0 = 1000.0
+        x0 = StudentRV(4, m_0, P_0, nu_0)
+        Q = np.diag([50, 5]).astype(np.float)
+        nu_q = 1000.0
+        q = StudentRV(2, scale=Q, dof=nu_q)
+        R = np.diag([50, 0.4e-6]).astype(np.float)
+        nu_r = 4.0
+        r = StudentRV(2, scale=R, dof=nu_r)
+        dyn = ConstantVelocity(x0, q)
+        obs = Radar2DMeasurement(r, 4)
+        x = dyn.simulate_discrete(100)
+        y = obs.simulate_measurements(x)
+        cls.ssm.update({'cv': {'dyn': dyn, 'obs': obs, 'x': x, 'y': y}})
 
     def test_student_process_student(self):
         """
         Test t-Process Quadrature SF on a range of SSMs.
         """
-        for ssm_name, data in self.ssm.items():
-            dim = data['x'].shape[0]
-            kerpar = np.atleast_2d(np.ones(dim + 1))
-            filt = TPQStudent(data['dyn'], data['obs'], kerpar, kerpar)
-            filt.forward_pass(data['y'][..., 0])
+        # for ssm_name, data in self.ssm.items():
+        #     dim = data['x'].shape[0]
+        #     kerpar = np.atleast_2d(np.ones(dim + 1))
+        #     filt = TPQStudent(data['dyn'], data['obs'], kerpar, kerpar)
+        #     filt.forward_pass(data['y'][..., 0])
+
+        dyn = self.ssm['cv']['dyn']
+        obs = self.ssm['cv']['obs']
+        kpar_dyn = np.array([[1.0, 100, 100, 100, 100]])
+        kpar_obs = np.array([[0.05, 10, 100, 10, 100]])
+        filt = TPQStudent(dyn, obs, kpar_dyn, kpar_obs)
+        filt.forward_pass(self.ssm['cv']['y'][..., 0])
 
     def test_fully_symmetric_student(self):
         """
         Test fully-symmetric SF.
         """
-        pass
+        self.fail("Not implemented yet!")
 
 
 class GPQMarginalizedTest(TestCase):

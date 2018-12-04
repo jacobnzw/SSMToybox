@@ -994,7 +994,7 @@ class StudentInference(StateSpaceInference):
 
         # extract SSM parameters  # TODO get_stats() returns scale mat., convert it to cov. mat.
         self.x0_mean, self.x0_cov, self.x0_dof = mod_dyn.init_rv.get_stats()
-        self.x0_cov = (self.x0_dof/(self.x0_dof-2)) * self.x0_cov
+        # self.x0_cov = (self.x0_dof/(self.x0_dof-2)) * self.x0_cov
         # initial filtered statistics are the initial state statistics
         self.x_mean_fi, self.x_cov_fi, self.dof_fi = self.x0_mean, self.x0_cov, self.x0_dof
 
@@ -1184,7 +1184,7 @@ class TPQStudent(StudentInference):
         # add DOF of the noises to the sigma-point parameters
         if point_par is None:
             point_par = dict()
-        point_par_dyn = point_par
+        point_par_dyn = point_par  # FIXME: point_par.copy(), for now keeping as is for compatibility with older version
         point_par_obs = point_par
         point_par_dyn.update({'dof': q_dof})
         point_par_obs.update({'dof': r_dof})
