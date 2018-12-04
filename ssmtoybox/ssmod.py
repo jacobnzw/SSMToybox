@@ -765,6 +765,90 @@ class CoordinatedTurnTransition(TransitionModel):
         pass
 
 
+class ConstantTurnRateSpeed(TransitionModel):
+    """
+    Constant Turn-Rate and Speed (velocity magnitude).
+
+
+    State vector: :math:`[p_x, p_y, v, \\psi, \\dot{\\psi}]`
+
+    Noise vector: :math:`[\\nu_a, \\nu_{\\ddot{\\psi}}]`
+
+    Process model:
+
+    For :math:`\\psi_k \\neq 0`:
+
+    .. math::
+
+        x_{k+1} = x_k +
+        \\begin{bmatrix}
+            \frac{v_k}{\\dot{\\psi}_k} (\\sin(\\psi_k + \\dot{\\psi}_k \\Delta t) - \\sin(\\psi_k)) \\
+            \frac{v_k}{\\dot{\\psi}_k} (-\\cos(\\psi_k + \\dot{\\psi}_k \\Delta t) + \\cos(\\psi_k)) \\
+            0 \\
+            \\dot{\\psi}_k \\Delta t \\
+            0
+        \\end{bmatrix} +
+        \\begin{bmatrix}
+             \\frac{1}{2} (\\Delta t)^2 \\cos(\\psi_k) \\nu_{a,k} \\
+             \\frac{1}{2} (\\Delta t)^2 \\sin(\\psi_k) \\nu_{\\dot{\\psi},k} \\
+             \\Delta t \\nu_{a,k} \\
+             \\frac{1}{2}(\\Delta t)^2 \\nu_{\\ddot{\\psi},k} \\
+             \\Delta t \\nu_{\\ddot{\\psi},k}
+        \\end{bmatrix}
+
+    For :math:`\\psi_k = 0`:
+
+    .. math::
+        x_{k+1} = x_k +
+        \\begin{bmatrix}
+            \\Delta t v_k \\cos(\\psi_k) \\
+            \\Delta t v_k \\sin(\\psi_k) \\
+            \\Delta t \\nu_{a,k} \\
+            \\Delta t \\psi_k + \frac{1}{2}(\\Delta t)^2 \\nu_{\\dot{\\psi},k}  \\
+            \\Delta t \\nu_{\\dot{\\psi},k}
+        \\end{bmatrix}
+
+    Reasonable statistics: :math:`x_0 \\sim N(0, 0.1I) \\ q_k \\sim N(0, \\mathrm{diag}([0.1, 0.1\\pi])`
+    :math:`r_k \\sim N(0, \\mathrm{diag}([0.3, 0.03]))`
+
+    """
+
+    dim_state = 5
+    dim_noise = 2
+    noise_additive = False
+
+    def __init__(self, init_rv, noise_rv, dt=0.05):
+        super(ConstantTurnRateSpeed, self).__init__(init_rv, noise_rv)
+        self.dt = dt
+
+    def dyn_fcn(self, x, q, time):
+        if x[4] == 0:
+            # zero yaw rate case
+            f = np.array([
+                self.dt * x[2] * np.cos(x[3]),
+                self.dt * x[2] * np.sin(x[3]),
+                self.dt * q[0],
+                self.dt * x[3] + 0.5 * self.dt ** 2 * q[1],
+                self.dt * q[1]
+            ])
+        else:
+            c = x[2] / x[4]
+            f = np.array([
+                c * (np.sin(x[3] + x[4] * self.dt) - np.sin(x[3])) + 0.5 * self.dt ** 2 * np.cos(x[3]) * q[0],
+                c * (-np.cos(x[3] + x[4] * self.dt) + np.cos(x[3])) + 0.5 * self.dt ** 2 * np.sin(x[3]) * q[0],
+                self.dt * q[0],
+                self.dt * x[3] + 0.5 * self.dt ** 2 * q[1],
+                self.dt * q[1]
+            ])
+        return x + f
+
+    def dyn_fcn_dx(self, x, q, time):
+        pass
+
+    def dyn_fcn_cont(self, x, q, time):
+        return np.array([x[2]*np.cos(x[3]), x[2]*np.sin(x[3]), 0, x[4], 0])
+
+
 """
 Measurement models
 """
