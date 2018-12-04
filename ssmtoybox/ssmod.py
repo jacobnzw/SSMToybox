@@ -185,7 +185,7 @@ class TransitionModel(metaclass=ABCMeta):
         """
 
         # allocate space for state and measurement sequences
-        x = np.zeros((self.dim_in, steps, mc_sims))
+        x = np.zeros((self.dim_state, steps, mc_sims))
         # generate initial conditions, store initial states at k=0
         x[:, 0, :] = self.init_rv.sample(mc_sims)  # (D, mc_sims)
 
@@ -229,7 +229,7 @@ class TransitionModel(metaclass=ABCMeta):
 
         # allocate space for system state and noise
         steps = int(np.floor(duration / dt))
-        x = np.zeros((self.dim_in, steps+1, mc_sims))
+        x = np.zeros((self.dim_state, steps+1, mc_sims))
         # sample initial conditions and process noise
         x[:, 0, :] = self.init_rv.sample(mc_sims)  # (D, mc_sims)
         q = self.noise_rv.sample((mc_sims, steps + 1))
@@ -890,6 +890,7 @@ class ConstantVelocity(TransitionModel):
 
     dim_state = 4
     dim_noise = 2
+    noise_additive = True
 
     def __init__(self, init_rv, noise_rv, dt=0.1):
         self.dt = dt
