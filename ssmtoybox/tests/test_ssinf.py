@@ -87,27 +87,45 @@ class GaussianInferenceTest(TestCase):
             if ssm_name in ['rer', 'ctb']:
                 # Jacobians not implemented for reentry and coordinate turn
                 continue
-            alg = ExtendedKalman(data['dyn'], data['obs'])
-            alg.forward_pass(data['y'][..., 0])
-            alg.reset()
+            print('Testing: {} ...'.format(ssm_name.upper()), end=' ')
+            try:
+                alg = ExtendedKalman(data['dyn'], data['obs'])
+                alg.forward_pass(data['y'][..., 0])
+                alg.reset()
+            except BaseException as e:
+                print('Failed: {}'.format(e))
+                continue
+            print('OK')
 
     def test_unscented_kalman(self):
         """
         Test Unscented KF on range of SSMs.
         """
         for ssm_name, data in self.ssm.items():
-            alg = UnscentedKalman(data['dyn'], data['obs'])
-            alg.forward_pass(data['y'][..., 0])
-            alg.reset()
+            print('Testing: {} ...'.format(ssm_name.upper()), end=' ')
+            try:
+                alg = UnscentedKalman(data['dyn'], data['obs'])
+                alg.forward_pass(data['y'][..., 0])
+                alg.reset()
+            except BaseException as e:
+                print('Failed: {}'.format(e))
+                continue
+            print('OK')
 
     def test_gauss_hermite_kalman(self):
         """
         Test Gauss-Hermite KF on range of SSMs.
         """
         for ssm_name, data in self.ssm.items():
-            alg = GaussHermiteKalman(data['dyn'], data['obs'])
-            alg.forward_pass(data['y'][..., 0])
-            alg.reset()
+            print('Testing: {} ...'.format(ssm_name.upper()), end=' ')
+            try:
+                alg = GaussHermiteKalman(data['dyn'], data['obs'])
+                alg.forward_pass(data['y'][..., 0])
+                alg.reset()
+            except BaseException as e:
+                print('Failed {}'.format(e))
+                continue
+            print('OK')
 
     def test_gaussian_process_kalman(self):
         """
@@ -117,20 +135,25 @@ class GaussianInferenceTest(TestCase):
             if ssm_name in ['rer', 'ctb']:
                 # GPQ kernel pars hard to find on higher-dimensional systems like reentry or CT
                 continue
-
+            print('Testing: {} ...'.format(ssm_name.upper()), end=' ')
             # setup kernel parameters
             kpar_dyn = np.atleast_2d(np.ones(data['dyn'].dim_in + 1))
             kpar_obs = np.atleast_2d(np.ones(data['obs'].dim_in + 1))
-
-            alg = GaussianProcessKalman(data['dyn'], data['obs'], kpar_dyn, kpar_obs)
-            alg.forward_pass(data['y'][..., 0])
-            alg.reset()
+            try:
+                alg = GaussianProcessKalman(data['dyn'], data['obs'], kpar_dyn, kpar_obs)
+                alg.forward_pass(data['y'][..., 0])
+                alg.reset()
+            except BaseException as e:
+                print('Failed: {}'.format(e))
+                continue
+            print('OK')
 
     def test_bayes_sard_kalman(self):
         """
         Test Bayes-Sard Quadrature KF on range of SSMs.
         """
         for ssm_name, data in self.ssm.items():
+            print('Testing: {} ...'.format(ssm_name.upper()), end=' ')
             # setup kernel parameters and multi-indices (for polynomial mean function)
             dim = data['dyn'].dim_in
             kpar_dyn = np.atleast_2d(np.ones(dim + 1))
@@ -138,10 +161,14 @@ class GaussianInferenceTest(TestCase):
             dim = data['obs'].dim_in
             kpar_obs = np.atleast_2d(np.ones(dim + 1))
             alpha_obs = np.hstack((np.zeros((dim, 1)), np.eye(dim), 2 * np.eye(dim))).astype(int)
-
-            alg = BayesSardKalman(data['dyn'], data['obs'], kpar_dyn, kpar_obs, alpha_dyn, alpha_obs)
-            alg.forward_pass(data['y'][..., 0])
-            alg.reset()
+            try:
+                alg = BayesSardKalman(data['dyn'], data['obs'], kpar_dyn, kpar_obs, alpha_dyn, alpha_obs)
+                alg.forward_pass(data['y'][..., 0])
+                alg.reset()
+            except BaseException as e:
+                print('Failed: {}'.format(e))
+                continue
+            print('OK')
 
 
 class StudentInferenceTest(TestCase):
@@ -158,6 +185,8 @@ class StudentInferenceTest(TestCase):
         x = dyn.simulate_discrete(100)
         y = obs.simulate_measurements(x)
         cls.ssm.update({'ungm': {'dyn': dyn, 'obs': obs, 'x': x, 'y': y}})
+
+        # TODO setup radar tracking with Student RVs
 
     def test_student_process_student(self):
         """
