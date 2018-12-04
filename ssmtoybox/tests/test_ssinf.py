@@ -6,7 +6,7 @@ import numpy.linalg as la
 from ssmtoybox.ssinf import GPQMKalman, GaussianProcessKalman, BayesSardKalman, TPQStudent
 from ssmtoybox.ssinf import UnscentedKalman, ExtendedKalman, GaussHermiteKalman
 from ssmtoybox.ssmod import UNGMTransition, UNGMNATransition, Pendulum2DTransition, CoordinatedTurnTransition, \
-    ReentryVehicle2DTransition
+    ReentryVehicle2DTransition, ConstantTurnRateSpeed
 from ssmtoybox.ssmod import UNGMMeasurement, UNGMNAMeasurement, Pendulum2DMeasurement, BearingMeasurement, \
     Radar2DMeasurement
 from ssmtoybox.utils import GaussRV, StudentRV
@@ -79,12 +79,22 @@ class GaussianInferenceTest(TestCase):
         y = obs.simulate_measurements(x)
         cls.ssm.update({'ctb': {'dyn': dyn, 'obs': obs, 'x': x, 'y': y}})
 
+        # setup CTRS with radar measurements
+        x0 = GaussRV(5, cov=0.1*np.eye(5))
+        q = GaussRV(2, cov=np.diag([0.1, 0.1*np.pi]))
+        r = GaussRV(2, cov=np.diag([0.3, 0.03]))
+        dyn = ConstantTurnRateSpeed(x0, q)
+        obs = Radar2DMeasurement(r, 5)
+        x = dyn.simulate_discrete(100)
+        y = obs.simulate_measurements(x)
+        cls.ssm.update({'ctrs': {'dyn': dyn, 'obs': obs, 'x': x, 'y': y}})
+
     def test_extended_kalman(self):
         """
         Test Extended KF on range of SSMs.
         """
         for ssm_name, data in self.ssm.items():
-            if ssm_name in ['rer', 'ctb']:
+            if ssm_name in ['rer', 'ctb', 'ctrs']:
                 # Jacobians not implemented for reentry and coordinate turn
                 continue
             print('Testing: {} ...'.format(ssm_name.upper()), end=' ')
