@@ -101,6 +101,7 @@ class GaussianInferenceTest(TestCase):
             try:
                 alg = ExtendedKalman(data['dyn'], data['obs'])
                 alg.forward_pass(data['y'][..., 0])
+                alg.backward_pass()
                 alg.reset()
             except BaseException as e:
                 print('Failed: {}'.format(e))
@@ -116,6 +117,7 @@ class GaussianInferenceTest(TestCase):
             try:
                 alg = UnscentedKalman(data['dyn'], data['obs'])
                 alg.forward_pass(data['y'][..., 0])
+                alg.backward_pass()
                 alg.reset()
             except BaseException as e:
                 print('Failed: {}'.format(e))
@@ -131,6 +133,7 @@ class GaussianInferenceTest(TestCase):
             try:
                 alg = GaussHermiteKalman(data['dyn'], data['obs'])
                 alg.forward_pass(data['y'][..., 0])
+                alg.backward_pass()
                 alg.reset()
             except BaseException as e:
                 print('Failed {}'.format(e))
@@ -152,6 +155,7 @@ class GaussianInferenceTest(TestCase):
             try:
                 alg = GaussianProcessKalman(data['dyn'], data['obs'], kpar_dyn, kpar_obs)
                 alg.forward_pass(data['y'][..., 0])
+                alg.backward_pass()
                 alg.reset()
             except BaseException as e:
                 print('Failed: {}'.format(e))
@@ -174,6 +178,7 @@ class GaussianInferenceTest(TestCase):
             try:
                 alg = BayesSardKalman(data['dyn'], data['obs'], kpar_dyn, kpar_obs, alpha_dyn, alpha_obs)
                 alg.forward_pass(data['y'][..., 0])
+                alg.backward_pass()
                 alg.reset()
             except BaseException as e:
                 print('Failed: {}'.format(e))
