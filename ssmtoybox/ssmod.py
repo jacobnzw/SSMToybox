@@ -198,9 +198,9 @@ class TransitionModel(metaclass=ABCMeta):
                 x[:, k, imc] = self.dyn_fcn(x[:, k-1, imc], q[:, k-1, imc], k-1)
         return x
 
-    def simulate_continuous(self, duration, dt=0.1, mc_sims=1, method='euler'):
+    def simulate_continuous(self, duration, dt=0.1, mc_sims=1):
         """
-        Computes continuous-time system state trajectory using the given ODE integration method.
+        Computes continuous-time system state trajectory using the Euler-Maruyama SDE integration method.
 
         Parameters
         ----------
@@ -213,119 +213,31 @@ class TransitionModel(metaclass=ABCMeta):
         mc_sims : int, optional
             Number of Monte Carlo simulations.
 
-        method : str {'euler', 'rk4'}, optional
-            ODE integration method.
-
         Returns
         -------
         : (dim_x, num_time_steps, num_mc_sims) ndarray
             State trajectories of the continuous-time dynamic system.
         """
-        # ensure sensible values of dt
-        assert dt < duration
 
-        # get ODE integration method
-        ode_method = self._get_ode_method(method)
+        # ensure sensible values of dt
+        if dt < duration:
+            ValueError('Discretization step dt should be smaller than duration.')
 
         # allocate space for system state and noise
         steps = int(np.floor(duration / dt))
         x = np.zeros((self.dim_state, steps+1, mc_sims))
         # sample initial conditions and process noise
         x[:, 0, :] = self.init_rv.sample(mc_sims)  # (D, mc_sims)
-        q = self.noise_rv.sample((mc_sims, steps + 1))
+        # Euler-Maruyama: noise must be sampled with variance V[q_k] = dt*Q
+        q = np.sqrt(dt) * self.noise_rv.sample((mc_sims, steps + 1))
 
         # continuous-time system simulation
         for imc in range(mc_sims):
             for k in range(1, steps+1):
-                # computes next state x(t + dt) by ODE integration
-                x[:, k, imc] = ode_method(self.dyn_fcn, x[:, k - 1, imc], q[:, k - 1, imc], k-1, dt)
+                # computes next state x(t + dt) by SDE integration
+                # TODO: what about non-additive noise?
+                x[:, k, imc] = x[:, k-1, imc] + self.dyn_fcn(x[:, k-1, imc], self.zero_q, k-1)*dt + q[:, k-1, imc]
         return x[:, 1:, :]
-
-    @staticmethod
-    def ode_euler(func, x, q, time, dt):
-        """
-        ODE integration using Euler approximation.
-
-        Parameters
-        ----------
-        func : function
-            Function defining the system dynamics.
-
-        x : (dim_x, ) ndarray
-            Previous system state.
-
-        q : (dim_q, ) ndarray
-            System (process) noise.
-
-        time : (dim_par, ) ndarray
-            Time index.
-
-        dt : float
-            Discretization step.
-
-        Returns
-        -------
-        : (dim_x, ) ndarray
-            State in the next time step.
-        """
-        xdot = func(x, q, time)
-        return x + dt * xdot
-
-    @staticmethod
-    def ode_rk4(func, x, q, time, dt):
-        """
-        ODE integration using 4th-order Runge-Kutta approximation.
-
-        Parameters
-        ----------
-        func : function
-            Function defining the system dynamics.
-
-        x : (dim_x, ) ndarray
-            Previous system state.
-
-        q : (dim_q, ) ndarray
-            System (process) noise.
-
-        time : (dim_par, ) ndarray
-            Time index.
-
-        dt : float
-            Discretization step.
-
-        Returns
-        -------
-        : (dim_x, ) ndarray
-            State in the next time step.
-        """
-        dt2 = 0.5 * dt
-        k1 = func(x, q, time)
-        k2 = func(x + dt2 * k1, q, time)
-        k3 = func(x + dt2 * k2, q, time)
-        k4 = func(x + dt * k3, q, time)
-        return x + (dt / 6) * (k1 + 2 * (k2 + k3) + k4)
-
-    def _get_ode_method(self, method):
-        """
-        Get an ODE integration method.
-
-        Parameters
-        ----------
-        method : str {'euler', 'rk4'}
-            ODE integration method.
-
-        Returns
-        -------
-        : function
-            Function handle to the desired ODE integration method.
-        """
-        method = method.lower()
-        if method == 'euler':
-            return self.ode_euler
-        elif method == 'rk4':
-            return self.ode_rk4
-        else:
-            raise ValueError("Unknown ODE integration method {}".format(method))
 
 
 class UNGMTransition(TransitionModel):
