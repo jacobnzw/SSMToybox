@@ -48,13 +48,12 @@ class TestPendulum(unittest.TestCase):
 class TestReentry(unittest.TestCase):
 
     def test_simulate_continuous(self):
-        m0 = np.array([6440, 100, -1.8093, -6.7967, 0.6932])
+        m0 = np.array([6500.4, 349.14, -1.8093, -6.7967, 0.6932])
         P0 = np.diag([1e-6, 1e-6, 1e-6, 1e-6, 1])
         x0 = GaussRV(5, m0, P0)
         q = GaussRV(3, cov=np.diag([2.4064e-5, 2.4064e-5, 1e-6]))
         dyn = ReentryVehicle2DTransition(x0, q, dt=0.05)
         x = dyn.simulate_continuous(200, dt=0.05)
-        # x = dyn.simulate_discrete(2000)
 
         plt.figure()
         plt.plot(x[0, ...], x[1, ...], color='r')

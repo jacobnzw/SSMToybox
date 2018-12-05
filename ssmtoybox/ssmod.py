@@ -233,15 +233,14 @@ class TransitionModel(metaclass=ABCMeta):
         # sample initial conditions and process noise
         x[:, 0, :] = self.init_rv.sample(mc_sims)  # (D, mc_sims)
         # Euler-Maruyama: noise must be sampled with variance V[q_k] = dt*Q
-        q = np.sqrt(dt) * self.noise_rv.sample((steps+1, mc_sims))
+        q = (np.sqrt(dt)/dt) * self.noise_rv.sample((steps+1, mc_sims))
 
         # continuous-time system simulation
         for imc in range(mc_sims):
             for k in range(1, steps+1):
-                # computes next state x(t + dt) by SDE integration
                 # TODO: what about non-additive noise?
-                # x[:, k, imc] = x[:, k-1, imc] + self.dyn_fcn(x[:, k-1, imc], self.zero_q, k-1)*dt + self.noise_gain.dot(q[:, k-1, imc])
-                x[:, k, imc] = x[:, k-1, imc] + dt * self.dyn_fcn(x[:, k-1, imc], (np.sqrt(dt)/dt)*q[:, k-1, imc], k-1)
+                # computes next state x(t + dt) by SDE integration
+                x[:, k, imc] = x[:, k-1, imc] + dt * self.dyn_fcn_cont(x[:, k-1, imc], q[:, k-1, imc], k-1)
         return x[:, 1:, :]
 
 
