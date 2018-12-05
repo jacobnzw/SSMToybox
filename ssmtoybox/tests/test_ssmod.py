@@ -64,3 +64,18 @@ class TestCTRS(unittest.TestCase):
         plt.figure()
         plt.plot(x[0, ...], x[1, ...], alpha=0.25, color='b')
         plt.show()
+
+
+class TestMeasurementModels(unittest.TestCase):
+
+    def test_radar(self):
+        r = GaussRV(2)
+        dim_state = 5
+        st_ind = np.array([0, 2])
+        obs = Radar2DMeasurement(r, dim_state, state_index=st_ind)
+        st, n = np.random.randn(5), np.random.randn(2)
+        jac = obs.meas_eval(st, n, dx=True)
+        # check proper dimensions
+        self.assertEqual(jac.shape, (2, 5))
+        # non-zero columns only at state_indexes
+        self.assertTrue(np.array_equal(np.nonzero(jac.sum(axis=0))[0], st_ind))
