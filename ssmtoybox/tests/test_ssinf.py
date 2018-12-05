@@ -3,7 +3,7 @@ from unittest import TestCase
 import numpy as np
 import numpy.linalg as la
 
-from ssmtoybox.ssinf import GPQMKalman, GaussianProcessKalman, BayesSardKalman, TPQStudent
+from ssmtoybox.ssinf import GPQMKalman, GaussianProcessKalman, BayesSardKalman, TPQStudent, TPQKalman
 from ssmtoybox.ssinf import UnscentedKalman, ExtendedKalman, GaussHermiteKalman
 from ssmtoybox.ssmod import UNGMTransition, UNGMNATransition, Pendulum2DTransition, CoordinatedTurnTransition, \
     ReentryVehicle2DTransition, ConstantTurnRateSpeed, ConstantVelocity
@@ -154,6 +154,28 @@ class GaussianInferenceTest(TestCase):
             kpar_obs = np.atleast_2d(np.ones(data['obs'].dim_in + 1))
             try:
                 alg = GaussianProcessKalman(data['dyn'], data['obs'], kpar_dyn, kpar_obs)
+                alg.forward_pass(data['y'][..., 0])
+                alg.backward_pass()
+                alg.reset()
+            except BaseException as e:
+                print('Failed: {}'.format(e))
+                continue
+            print('OK')
+
+    def test_student_process_kalman(self):
+        """
+        Test Student Process Quadrature KF on range of SSMs.
+        """
+        for ssm_name, data in self.ssm.items():
+            if ssm_name in ['rer', 'ctb']:
+                # TPQ kernel pars hard to find on higher-dimensional systems like reentry or CT
+                continue
+            print('Testing: {} ...'.format(ssm_name.upper()), end=' ')
+            # setup kernel parameters
+            kpar_dyn = np.atleast_2d(np.ones(data['dyn'].dim_in + 1))
+            kpar_obs = np.atleast_2d(np.ones(data['obs'].dim_in + 1))
+            try:
+                alg = TPQKalman(data['dyn'], data['obs'], kpar_dyn, kpar_obs)
                 alg.forward_pass(data['y'][..., 0])
                 alg.backward_pass()
                 alg.reset()
