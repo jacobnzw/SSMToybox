@@ -1,10 +1,11 @@
 import unittest
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 from ssmtoybox.ssinf import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GaussianProcessKalman, TPQKalman
 from ssmtoybox.ssmod import UNGMTransition, UNGMMeasurement, UNGMNATransition, UNGMNAMeasurement, \
-    Pendulum2DTransition, Pendulum2DMeasurement, ConstantTurnRateSpeed, Radar2DMeasurement
+    Pendulum2DTransition, Pendulum2DMeasurement, ConstantTurnRateSpeed, Radar2DMeasurement, ReentryVehicle2DTransition
 from ssmtoybox.utils import GaussRV
 
 
@@ -45,7 +46,19 @@ class TestPendulum(unittest.TestCase):
 
 
 class TestReentry(unittest.TestCase):
-    pass
+
+    def test_simulate_continuous(self):
+        m0 = np.array([6440, 100, -1.8093, -6.7967, 0.6932])
+        P0 = np.diag([1e-6, 1e-6, 1e-6, 1e-6, 1])
+        x0 = GaussRV(5, m0, P0)
+        q = GaussRV(3, cov=np.diag([2.4064e-5, 2.4064e-5, 1e-6]))
+        dyn = ReentryVehicle2DTransition(x0, q, dt=0.05)
+        x = dyn.simulate_continuous(200, dt=0.05)
+        # x = dyn.simulate_discrete(2000)
+
+        plt.figure()
+        plt.plot(x[0, ...], x[1, ...], color='r')
+        plt.show()
 
 
 class TestCTRS(unittest.TestCase):
@@ -60,7 +73,6 @@ class TestCTRS(unittest.TestCase):
         x = dyn.simulate_discrete(100, 10)
         y = obs.simulate_measurements(x)
 
-        import matplotlib.pyplot as plt
         plt.figure()
         plt.plot(x[0, ...], x[1, ...], alpha=0.25, color='b')
         plt.show()

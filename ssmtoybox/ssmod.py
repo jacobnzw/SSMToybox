@@ -202,6 +202,10 @@ class TransitionModel(metaclass=ABCMeta):
         """
         Computes continuous-time system state trajectory using the Euler-Maruyama SDE integration method.
 
+        .. math::
+
+            x_k+1 = x_k + f(x_k, k)*dt + q_k, q_k ~ N(0, dt*Q)
+
         Parameters
         ----------
         duration : int
@@ -220,7 +224,7 @@ class TransitionModel(metaclass=ABCMeta):
         """
 
         # ensure sensible values of dt
-        if dt < duration:
+        if dt > duration:
             ValueError('Discretization step dt should be smaller than duration.')
 
         # allocate space for system state and noise
@@ -229,14 +233,14 @@ class TransitionModel(metaclass=ABCMeta):
         # sample initial conditions and process noise
         x[:, 0, :] = self.init_rv.sample(mc_sims)  # (D, mc_sims)
         # Euler-Maruyama: noise must be sampled with variance V[q_k] = dt*Q
-        q = np.sqrt(dt) * self.noise_rv.sample((mc_sims, steps + 1))
+        q = np.sqrt(dt) * self.noise_rv.sample((steps+1, mc_sims))
 
         # continuous-time system simulation
         for imc in range(mc_sims):
             for k in range(1, steps+1):
                 # computes next state x(t + dt) by SDE integration
                 # TODO: what about non-additive noise?
-                x[:, k, imc] = x[:, k-1, imc] + self.dyn_fcn(x[:, k-1, imc], self.zero_q, k-1)*dt + q[:, k-1, imc]
+                x[:, k, imc] = x[:, k-1, imc] + self.dyn_fcn(x[:, k-1, imc], self.zero_q, k-1)*dt + self.noise_gain.dot(q[:, k-1, imc])
         return x[:, 1:, :]
 
 
@@ -511,12 +515,13 @@ class ReentryVehicle2DTransition(TransitionModel):
     noise_additive = True
 
     def __init__(self, init_rv, noise_rv, dt=0.1):
-        super(ReentryVehicle2DTransition, self).__init__(init_rv, noise_rv)
         self.dt = dt
         self.R0 = 6374  # Earth's radius
         self.H0 = 13.406
         self.Gm0 = 3.9860e5
         self.b0 = -0.59783  # ballistic coefficient of a typical vehicle
+        noise_gain = np.vstack((np.zeros((2, self.dim_noise)), np.eye(self.dim_noise)))
+        super(ReentryVehicle2DTransition, self).__init__(init_rv, noise_rv, noise_gain)
 
     def dyn_fcn(self, x, q, time):
         """
