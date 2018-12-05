@@ -240,7 +240,8 @@ class TransitionModel(metaclass=ABCMeta):
             for k in range(1, steps+1):
                 # computes next state x(t + dt) by SDE integration
                 # TODO: what about non-additive noise?
-                x[:, k, imc] = x[:, k-1, imc] + self.dyn_fcn(x[:, k-1, imc], self.zero_q, k-1)*dt + self.noise_gain.dot(q[:, k-1, imc])
+                # x[:, k, imc] = x[:, k-1, imc] + self.dyn_fcn(x[:, k-1, imc], self.zero_q, k-1)*dt + self.noise_gain.dot(q[:, k-1, imc])
+                x[:, k, imc] = x[:, k-1, imc] + dt * self.dyn_fcn(x[:, k-1, imc], (np.sqrt(dt)/dt)*q[:, k-1, imc], k-1)
         return x[:, 1:, :]
 
 
