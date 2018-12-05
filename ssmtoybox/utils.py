@@ -500,6 +500,70 @@ def vandermonde(mul_ind, x):
     return vdm
 
 
+def ode_euler(func, x, q, time, dt):
+    """
+    ODE integration using Euler approximation.
+
+    Parameters
+    ----------
+    func : function
+        Function defining the system dynamics.
+
+    x : (dim_x, ) ndarray
+        Previous system state.
+
+    q : (dim_q, ) ndarray
+        System (process) noise.
+
+    time : (dim_par, ) ndarray
+        Time index.
+
+    dt : float
+        Discretization step.
+
+    Returns
+    -------
+    : (dim_x, ) ndarray
+        State in the next time step.
+    """
+    xdot = func(x, q, time)
+    return x + dt * xdot
+
+
+def ode_runge_kutta_4(func, x, q, time, dt):
+    """
+    ODE integration using 4th-order Runge-Kutta approximation.
+
+    Parameters
+    ----------
+    func : function
+        Function defining the system dynamics.
+
+    x : (dim_x, ) ndarray
+        Previous system state.
+
+    q : (dim_q, ) ndarray
+        System (process) noise.
+
+    time : (dim_par, ) ndarray
+        Time index.
+
+    dt : float
+        Discretization step.
+
+    Returns
+    -------
+    : (dim_x, ) ndarray
+        State in the next time step.
+    """
+    dt2 = 0.5 * dt
+    k1 = func(x, q, time)
+    k2 = func(x + dt2 * k1, q, time)
+    k3 = func(x + dt2 * k2, q, time)
+    k4 = func(x + dt * k3, q, time)
+    return x + (dt / 6) * (k1 + 2 * (k2 + k3) + k4)
+
+
 class RandomVariable(metaclass=ABCMeta):
 
     @abstractmethod
