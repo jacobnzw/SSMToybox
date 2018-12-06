@@ -1,17 +1,23 @@
+import unittest
 from unittest import TestCase
 
 import numpy as np
 import numpy.linalg as la
 
 from ssmtoybox.bq.bqmtran import GaussianProcessTransform, GPQMO, BayesSardTransform
-from ssmtoybox.ssmod import PendulumGaussSSM, CoordinatedTurnBearingsOnlyTrackingGaussSSM, \
-    ReentryVehicleRadarTrackingGaussSSM, UNGMGaussSSM
+from ssmtoybox.ssmod import UNGMTransition, Pendulum2DTransition, CoordinatedTurnTransition, ReentryVehicle2DTransition
+from ssmtoybox.utils import GaussRV
 
 np.set_printoptions(precision=4)
 
 
 class GPQuadTest(TestCase):
-    models = [UNGMGaussSSM, PendulumGaussSSM]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.models = []
+        cls.models.append(UNGMTransition(GaussRV(1), GaussRV(1)))
+        cls.models.append(Pendulum2DTransition(GaussRV(2), GaussRV(2)))
 
     def test_weights_rbf(self):
         dim = 1
@@ -58,9 +64,9 @@ class GPQuadTest(TestCase):
         self.assertTrue(np.alltrue(np.array([ivar0, ivar1]) >= 0))
 
     def test_apply(self):
-        for ssm in self.models:
-            f = ssm().dyn_eval
-            dim = ssm.xD
+        for mod in self.models:
+            f = mod.dyn_eval
+            dim = mod.dim_in
             ker_par = np.hstack((np.ones((1, 1)), 3*np.ones((1, dim))))
             tf = GaussianProcessTransform(dim, dim, ker_par)
             mean, cov = np.zeros(dim, ), np.eye(dim)
@@ -90,7 +96,7 @@ class BSQTransformTest(TestCase):
                              [0, 0, 1, 0, 2]])
         par = np.array([[1.0, 1, 1]])
         mt = BayesSardTransform(2, 2, par, multi_ind=alpha_ut, point_str='ut')
-        mean_out, cov_out, cc = mt.apply(polar2cartesian, mean_in, cov_in, None)
+        mean_out, cov_out, cc = mt.apply(polar2cartesian, mean_in, cov_in, np.atleast_1d(0))
         self.assertTrue(mt.I_out.shape == (2, 2))
         try:
             la.cholesky(cov_out)
@@ -98,8 +104,14 @@ class BSQTransformTest(TestCase):
             self.fail("Weights not positive definite. Min eigval: {}".format(la.eigvalsh(cov_out).min()))
 
 
+@unittest.skip('Multi-output models are experimental and not a priority.')
 class GPQMOTest(TestCase):
-    models = [UNGMGaussSSM, PendulumGaussSSM]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.models = []
+        cls.models.append(UNGMTransition(GaussRV(1), GaussRV(1)))
+        cls.models.append(Pendulum2DTransition(GaussRV(2), GaussRV(2)))
 
     def test_weights_rbf(self):
         dim_in, dim_out = 1, 1
@@ -120,9 +132,9 @@ class GPQMOTest(TestCase):
         self.assertTrue(np.allclose(wc, wc.swapaxes(0, 1).swapaxes(2, 3)), "Covariance weight matrix not symmetric.")
 
     def test_apply(self):
-        ssm = PendulumGaussSSM()
-        f = ssm.dyn_eval
-        dim_in, dim_out = ssm.xD, ssm.xD
+        dyn = Pendulum2DTransition(GaussRV(2), GaussRV(2))
+        f = dyn.dyn_eval
+        dim_in, dim_out = dyn.dim_in, dyn.dim_state
         ker_par = np.hstack((np.ones((dim_out, 1)), 3*np.ones((dim_out, dim_in))))
         tf = GPQMO(dim_in, dim_out, ker_par)
         mean, cov = np.zeros(dim_in, ), np.eye(dim_in)
@@ -141,12 +153,15 @@ class GPQMOTest(TestCase):
 
     def test_single_vs_multi_output(self):
         # results of the GPQ and GPQMO should be same if parameters properly chosen, GPQ is a special case of GPQMO
-        ssm = ReentryVehicleRadarTrackingGaussSSM()
-        f = ssm.dyn_eval
-        dim_in, dim_out = ssm.xD, ssm.xD
+        m0 = np.array([6500.4, 349.14, -1.8093, -6.7967, 0.6932])
+        P0 = np.diag([1e-6, 1e-6, 1e-6, 1e-6, 1])
+        x0 = GaussRV(5, m0, P0)
+        dyn = ReentryVehicle2DTransition(x0, GaussRV(5))
+        f = dyn.dyn_eval
+        dim_in, dim_out = dyn.dim_in, dyn.dim_state
 
         # input mean and covariance
-        mean_in, cov_in = ssm.pars['x0_mean'], ssm.pars['x0_cov']
+        mean_in, cov_in = m0, P0
 
         # single-output GPQ
         ker_par_so = np.hstack((np.ones((1, 1)), 25 * np.ones((1, dim_in))))
@@ -158,8 +173,8 @@ class GPQMOTest(TestCase):
 
         # transformed moments
         # FIXME: transformed covariances different
-        mean_so, cov_so, ccov_so = tf_so.apply(f, mean_in, cov_in, ssm.par_fcn(0))
-        mean_mo, cov_mo, ccov_mo = tf_mo.apply(f, mean_in, cov_in, ssm.par_fcn(0))
+        mean_so, cov_so, ccov_so = tf_so.apply(f, mean_in, cov_in, np.atleast_1d(0))
+        mean_mo, cov_mo, ccov_mo = tf_mo.apply(f, mean_in, cov_in, np.atleast_1d(0))
 
         print('mean delta: {}'.format(np.abs(mean_so - mean_mo).max()))
         print('cov delta: {}'.format(np.abs(cov_so - cov_mo).max()))
@@ -173,11 +188,11 @@ class GPQMOTest(TestCase):
     def test_optimize_1D(self):
         # test on simple 1D example, plot the fit
         steps = 100
-        ssm = UNGMGaussSSM()
-        x, y = ssm.simulate(steps)
+        dyn = UNGMTransition(GaussRV(1), GaussRV(1))
+        x, y = dyn.simulate_discrete(steps)
 
-        f = ssm.meas_eval
-        dim_in, dim_out = ssm.xD, ssm.xD
+        f = dyn.dyn_eval
+        dim_in, dim_out = dyn.dim_in, dyn.dim_state
 
         par0 = 1 + np.random.rand(dim_out, dim_in + 1)
         tf = GPQMO(dim_in, dim_out, par0)
@@ -185,7 +200,7 @@ class GPQMOTest(TestCase):
         # use sampled system state trajectory to create training data
         fy = np.zeros((dim_out, steps))
         for k in range(steps):
-            fy[:, k] = f(x[:, k, 0], np.atleast_1d(k))
+            fy[:, k] = f(x[:, k, 0], k)
 
         b = [np.log((0.1, 1.0001))] + dim_in * [(None, None)]
         opt = {'xtol': 1e-2, 'maxiter': 100}
@@ -196,11 +211,17 @@ class GPQMOTest(TestCase):
 
     def test_optimize(self):
         steps = 350
-        ssm = CoordinatedTurnBearingsOnlyTrackingGaussSSM(dt=1.0)
-        x, y = ssm.simulate(steps)
+        m0 = np.array([1000, 300, 1000, 0, np.deg2rad(-3)])
+        P0 = np.diag([100, 10, 100, 10, 0.1])
+        x0 = GaussRV(5, m0, P0)
+        dt = 0.1
+        Q = np.array([[dt**3/3, dt**2/2], [dt**2/2, dt]])
+        q = GaussRV(5, cov=Q)
+        dyn = CoordinatedTurnTransition(x0, q, dt)
+        x, y = dyn.simulate_discrete(steps)
 
-        f = ssm.dyn_eval
-        dim_in, dim_out = ssm.xD, ssm.xD
+        f = dyn.dyn_eval
+        dim_in, dim_out = dyn.dim_in, dyn.dim_state
 
         # par0 = np.hstack((np.ones((dim_out, 1)), 5*np.ones((dim_out, dim_in+1))))
         par0 = 10*np.ones((dim_out, dim_in+1))
@@ -209,7 +230,7 @@ class GPQMOTest(TestCase):
         # use sampled system state trajectory to create training data
         fy = np.zeros((dim_out, steps))
         for k in range(steps):
-            fy[:, k] = f(x[:, k, 0], None)
+            fy[:, k] = f(x[:, k, 0], 0)
 
         opt = {'maxiter': 100}
         log_par, res_list = tf.model.optimize(np.log(par0), fy, x[..., 0], method='BFGS', options=opt)

@@ -5,6 +5,7 @@ from numpy import newaxis as na
 from numpy.linalg import cholesky
 
 from ssmtoybox.mtran import MomentTransform
+from .bqmod import GaussianProcessModel, StudentTProcessModel, GaussianProcessMO, StudentTProcessMO, BayesSardModel
 
 
 class BQTransform(MomentTransform, metaclass=ABCMeta):
@@ -51,8 +52,9 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
     # list of supported models for the integrand
     _supported_models_ = ['gp', 'gp-mo', 'tp', 'tp-mo', 'bs']
 
-    def __init__(self, dim_in, dim_out, kern_par, model, kern_str, point_str, point_par, **kwargs):
-        self.model = BQTransform._get_model(dim_in, dim_out, model, kern_str, point_str, kern_par, point_par, **kwargs)
+    def __init__(self, dim_in, dim_out, kern_par, model, kern_str, point_str, point_par, estimate_par, **kwargs):
+        self.model = BQTransform._get_model(dim_in, dim_out, model, kern_str, point_str, kern_par, point_par,
+                                            estimate_par, **kwargs)
         self.I_out = np.eye(dim_out)
 
     def apply(self, f, mean, cov, fcn_par, kern_par=None):
@@ -222,7 +224,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         # return np.einsum('en, dn, dj -> ej', fcn_evals, weights, chol_cov_in)
 
     @staticmethod
-    def _get_model(dim_in, dim_out, model, kern_str, point_str, kern_par, point_par, **kwargs):
+    def _get_model(dim_in, dim_out, model, kern_str, point_str, kern_par, point_par, estimate_par, **kwargs):
         """
         Initialize chosen model with supplied parameters.
 
@@ -258,26 +260,23 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
             Initialized model.
         """
 
-        # import must be after SigmaPointTransform
-        from .bqmod import GaussianProcessModel, StudentTProcessModel, GaussianProcessMO, StudentTProcessMO, BayesSardModel
-        model = model.lower()
-
-        # make sure kern_str is supported
-        if model not in BQTransform._supported_models_:
+        # make sure model is supported
+        if model.lower() not in BQTransform._supported_models_:
             print('Model {} not supported. Supported models are {}.'.format(model, BQTransform._supported_models_))
             return None
 
-        # initialize the chosen model
+        # initialize chosen model
         if model == 'gp':
-            return GaussianProcessModel(dim_in, kern_par, kern_str, point_str, point_par)
+            return GaussianProcessModel(dim_in, kern_par, kern_str, point_str, point_par, estimate_par)
         elif model == 'tp':
-            return StudentTProcessModel(dim_in, kern_par, kern_str, point_str, point_par, **kwargs)
+            return StudentTProcessModel(dim_in, kern_par, kern_str, point_str, point_par, estimate_par)
+        elif model == 'bs':
+            return BayesSardModel(dim_in, kern_par, point_str=point_str, point_par=point_par,
+                                  estimate_par=estimate_par, **kwargs)
         elif model == 'gp-mo':
             return GaussianProcessMO(dim_in, dim_out, kern_par, kern_str, point_str, point_par)
         elif model == 'tp-mo':
             return StudentTProcessMO(dim_in, dim_out, kern_par, kern_str, point_str, point_par, **kwargs)
-        elif model == 'bs':
-            return BayesSardModel(dim_in, kern_par, point_str=point_str, point_par=point_par, **kwargs)
 
     def __str__(self):
         return '{}\n{}'.format(self.__class__.__name__, self.model)
@@ -304,8 +303,9 @@ class GaussianProcessTransform(BQTransform):
     point_par : dict
         Sigma-point set parameters.
     """
-    def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None):
-        super(GaussianProcessTransform, self).__init__(dim_in, dim_out, kern_par, 'gp', kern_str, point_str, point_par)
+    def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None, estimate_par=False):
+        super(GaussianProcessTransform, self).__init__(dim_in, dim_out, kern_par, 'gp', kern_str, point_str, point_par,
+                                                       estimate_par)
         # BQ transform weights for the mean, covariance and cross-covariance
         self.wm, self.Wc, self.Wcc = self.weights(kern_par)
 
@@ -331,9 +331,9 @@ class BayesSardTransform(BQTransform):
     point_par : dict, optional
         Sigma-point set parameters.
     """
-    def __init__(self, dim_in, dim_out, kern_par, multi_ind=2, point_str='ut', point_par=None):
+    def __init__(self, dim_in, dim_out, kern_par, multi_ind=2, point_str='ut', point_par=None, estimate_par=False):
         super(BayesSardTransform, self).__init__(dim_in, dim_out, kern_par, 'bs', 'rbf', point_str, point_par,
-                                                 multi_ind=multi_ind)
+                                                 estimate_par, multi_ind=multi_ind)
         # BQ transform weights for the mean, covariance and cross-covariance
         self.wm, self.Wc, self.Wcc = self.weights(kern_par, multi_ind)
 
@@ -384,9 +384,10 @@ class StudentTProcessTransform(BQTransform):
     nu : float
         Degrees of freedom parameter of the t-process regression model.
     """
-    def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None, nu=3.0):
+    def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None, estimate_par=False,
+                 nu=3.0):
         super(StudentTProcessTransform, self).__init__(dim_in, dim_out, kern_par, 'tp', kern_str, point_str, point_par,
-                                                       nu=nu)
+                                                       estimate_par, nu=nu)
         # BQ transform weights for the mean, covariance and cross-covariance
         self.wm, self.Wc, self.Wcc = self.weights(kern_par)
 
@@ -415,7 +416,7 @@ class StudentTProcessTransform(BQTransform):
 
 
 class GPQMO(BQTransform):
-    def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None):
+    def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None, estimate_par=False):
         """
 
         Parameters
@@ -441,7 +442,7 @@ class GPQMO(BQTransform):
         when provided with the same parameters.
 
         """
-        super(GPQMO, self).__init__(dim_in, dim_out, kern_par, 'gp-mo', kern_str, point_str, point_par)
+        super(GPQMO, self).__init__(dim_in, dim_out, kern_par, 'gp-mo', kern_str, point_str, point_par, estimate_par)
 
         # output dimension (number of outputs)
         self.e = dim_out
@@ -516,9 +517,11 @@ class GPQMO(BQTransform):
 
 class TPQMO(BQTransform):
 
-    def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None, nu=3.0):
+    def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None, estimate_par=False,
+                 nu=3.0):
 
-        super(TPQMO, self).__init__(dim_in, dim_out, kern_par, 'tp-mo', kern_str, point_str, point_par, nu=nu)
+        super(TPQMO, self).__init__(dim_in, dim_out, kern_par, 'tp-mo', kern_str, point_str, point_par, estimate_par,
+                                    nu=nu)
 
         # output dimension (number of outputs)
         self.e = dim_out
