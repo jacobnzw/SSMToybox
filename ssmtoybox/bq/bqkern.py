@@ -24,6 +24,8 @@ class Kernel(object, metaclass=ABCMeta):
         Jitter for stabilizing inversion of kernel matrix.
     """
 
+    supports_parameter_estimation = False
+
     def __init__(self, dim, par, jitter):
         # ensure parameter is 2d array of type float
         self.par = np.atleast_2d(par).astype(float)
@@ -290,7 +292,7 @@ class Kernel(object, metaclass=ABCMeta):
         pass
 
 
-class RBF(Kernel):
+class RBF(Kernel):  # TODO rename to RBFGauss
     """
     Radial Basis Function kernel.
 
@@ -314,6 +316,8 @@ class RBF(Kernel):
     The kernel is also known as Squared Exponential (popular, but wrong), Exponentiated Quadratic (too mouthful)
     or Gaussian (conflicts with terminology for PDFs).
     """
+
+    supports_parameter_estimation = True
 
     def __init__(self, dim, par, jitter=1e-8):
         assert par.shape[1] == dim + 1
@@ -450,27 +454,91 @@ class RBF(Kernel):
         return par[0], np.diag(par[1:] ** -1)
 
 
-class RBFStudent(RBF):
+class RBFStudent(RBF):  # TODO might inherit from Kernel? unclear how to model Kernel-Density-Expectation relationship
     """
     RBF kernel with Student's expectations approximated by Monte Carlo.
     """
+    supports_parameter_estimation = False
 
-    def __init__(self, dim, par, jitter=1e-8, dof=4.0, num_mc=1000):
-
-        # samples from standard Student's density
-        mean = np.zeros((dim, ))
-        cov = np.eye(dim)
-        self.num_mc = num_mc
+    def __init__(self, dim, par, jitter=1e-8, dof=4.0, num_samples=2e6, num_batches=1000):
+        # parameters of standard Student's density
+        self.mean = np.zeros((dim, ))
+        self.scale_mat = np.eye(dim)
         self.dof = dof
-        self.x_samples = multivariate_t(mean, cov, dof, size=num_mc).T  # (D, MC)
+
+        # parameters for MC approximation of expectations
+        self.num_samples = int(num_samples)
+        self.num_batches = int(num_batches)
+        self.batch_size = int(num_samples // num_batches)
+
         super(RBFStudent, self).__init__(dim, par, jitter)
 
-    def exp_x_kx(self, par, x, scaling=False):
-        return (1/self.num_mc) * self.eval(par, self.x_samples, x, scaling=scaling).sum(axis=0)
+    def exp_batch_mc(self, f, par, x, scaling):
+        """
+        Computes expectation of supplied function using Monte Carlo.
 
-    def exp_x_xkx(self, par, x):
-        k = self.eval(par, self.x_samples, x, scaling=False)  # (MC, N)
-        return (1 / self.num_mc) * (self.x_samples[..., na] * k[na, ...]).sum(axis=1)
+        MC computed by batches, because without batches we would run out of memory for large sample sizes
+
+        Parameters
+        ----------
+        f : function
+        par : ndarray
+
+        x : (dim, N) ndarray
+            Sigma-points (data).
+
+        Returns
+        -------
+
+        """
+
+        # kernel parameters and input dimensionality
+        par = self.par
+        dim, num_pts = x.shape
+        # TODO find out output dimensions of the function
+        out_shape = f(par, x, x, scaling).shape
+
+        # inverse kernel matrix
+        mean, scale, dof = np.zeros((dim,)), np.eye(dim), kern.dof
+
+        # compute MC estimates by batches
+        num_samples_batch = num_samples // num_batch
+        q_batch = np.zeros((num_pts, num_batch,))
+        Q_batch = np.zeros((num_pts, num_pts, num_batch))
+        R_batch = np.zeros((dim, num_pts, num_batch))
+        for ib in range(num_batch):
+            # multivariate t samples
+            x_samples = multivariate_t(mean, scale, dof, num_samples_batch).T
+
+            # evaluate kernel
+            k_samples = kern.eval(self.par, x_samples, x, scaling=False)
+            kk_samples = k_samples[:, na, :] * k_samples[..., na]
+            xk_samples = x_samples[..., na] * k_samples[na, ...]
+
+            # intermediate sums
+            q_batch[..., ib] = k_samples.sum(axis=0)
+
+        # MC approximations == sum the sums divide by num_samples
+        q = q_batch.sum(axis=-1) / num_samples
+
+        return wm, wc, wcc, Q
+
+    def exp_x_kx(self, par, x, scaling=False):
+        dim, num_pts = x.shape
+        q_batch = np.zeros((num_pts, self.num_batches))
+        for b in range(self.num_batches):
+            x_samples = multivariate_t(self.mean, self.scale_mat, self.dof, self.batch_size).T
+            q_batch[..., b] = self.eval(par, x_samples, x, scaling).sum(axis=0)
+        return q_batch.sum(axis=-1) / self.num_samples
+
+    def exp_x_xkx(self, par, x, scaling=False):
+        dim, num_pts = x.shape
+        r_batch = np.zeros((dim, num_pts, self.num_batches))
+        for b in range(self.num_batches):
+            x_samples = multivariate_t(self.mean, self.scale_mat, self.dof, self.batch_size).T  # (dim, batch_size)
+            k_samples = self.eval(par, x_samples, x, scaling).sum(axis=0)  # (batch_size, num_pts)
+            r_batch[..., b] = (x_samples[..., na] * k_samples[na, ...]).sum(axis=1)
+        return r_batch.sum(axis=-1) / self.num_samples
 
     def exp_x_kxkx(self, par_0, par_1, x, scaling=False):
         """
@@ -496,17 +564,25 @@ class RBFStudent(RBF):
         : ndarray
             Correlation matrix of kernels computed for given pair of kernel parameters.
         """
-
-        k0 = self.eval(par_0, self.x_samples, x, scaling=scaling)  # (MC, N)
-        k1 = self.eval(par_1, self.x_samples, x, scaling=scaling)
-        return (1/self.num_mc) * (k0[:, na, :] * k1[..., na]).sum(axis=0)
+        dim, num_pts = x.shape
+        Q_batch = np.zeros((num_pts, num_pts, self.num_batches))
+        for b in range(self.num_batches):
+            x_samples = multivariate_t(self.mean, self.scale_mat, self.dof, self.batch_size).T  # (dim, batch_size)
+            k0 = self.eval(par_0, x_samples, x, scaling=scaling)  # (batch_size, num_pts)
+            k1 = self.eval(par_1, x_samples, x, scaling=scaling)
+            Q_batch[..., b] = (k0[:, na, :] * k1[..., na]).sum(axis=0)
+        return Q_batch.sum(axis=-1) / self.num_samples
+        # return (1/self.num_mc) * (k0[:, na, :] * k1[..., na]).sum(axis=0)
 
     def exp_x_kxx(self, par):
-        k = self.eval(par, self.x_samples, self.x_samples, diag=True, scaling=True)
-        return (1/self.num_mc) * k.sum()
+        return par[0, 0]**2
 
     def exp_xy_kxy(self, par):
-        return (1/self.num_mc) * self.eval(par, self.x_samples, self.x_samples).sum()
+        kxy_batch = np.zeros((self.num_batches, ))
+        for b in range(self.num_batches):
+            x_samples = multivariate_t(self.mean, self.scale_mat, self.dof, self.batch_size).T  # (dim, batch_size)
+            kxy_batch[..., b] = self.eval(par, x_samples, x_samples).sum()
+        return kxy_batch.sum(axis=-1) / self.num_samples
 
 
 class RQ(Kernel):

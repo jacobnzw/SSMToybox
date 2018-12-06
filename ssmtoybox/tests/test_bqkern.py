@@ -194,7 +194,7 @@ class RBFStudentKernelTest(TestCase):
     def test_expectations_dim(self):
         dim = 2
         par = np.array([[1.5, 3.0, 3.0]])
-        ker = RBFStudent(dim, par)
+        ker = RBFStudent(dim, par, num_samples=10000, num_batches=10)
 
         q = ker.exp_x_kx(par, self.points)
         self.assertTrue(q.shape == (self.num_pts, ))
