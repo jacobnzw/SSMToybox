@@ -36,6 +36,10 @@ class Model(object, metaclass=ABCMeta):
     point_par : dict
         Any parameters for constructing desired point-set.
 
+    estimate_par : bool
+        Set to `True` if you wanna re-compute kernel expectations based on changing parameters, like in
+        `MarginalInference`.
+
     Attributes
     ----------
     Model._supported_points_ : list
@@ -78,13 +82,13 @@ class Model(object, metaclass=ABCMeta):
     _supported_points_ = ['sr', 'ut', 'gh', 'fs']
     _supported_kernels_ = ['rbf', 'rq', 'rbf-student']
 
-    def __init__(self, dim, kern_par, kern_str, point_str, point_par=None):
+    def __init__(self, dim, kern_par, kern_str, point_str, point_par, estimate_par):
         # init kernel and sigma-points
         self.kernel = Model.get_kernel(dim, kern_str, kern_par)
         self.points = Model.get_points(dim, point_str, point_par)
 
-        # init variables for passing kernel expectations and kernel matrix inverse
-        self.q, self.Q, self.R, self.iK = None, None, None, None
+        # turn on/off re-computation of kernel expectations
+        self.estimate_par = estimate_par
 
         # save for printing
         self.str_pts = point_str
@@ -93,6 +97,9 @@ class Model(object, metaclass=ABCMeta):
         # may no longer be necessary now that jitter is in kernel
         self.dim_in, self.num_pts = self.points.shape
         self.eye_d, self.eye_n = np.eye(self.dim_in), np.eye(self.num_pts)
+
+        # init variables for passing kernel expectations and kernel matrix inverse
+        self.q, self.Q, self.R, self.iK = None, None, None, None
 
         # expected model variance and integral model variance
         self.model_var = None
@@ -415,12 +422,13 @@ class GaussianProcessModel(Model):
     Gaussian process regression model of the integrand in the Bayesian quadrature.
     """
 
-    def __init__(self, dim, kern_par, kern_str='rbf', point_str='ut', point_par=None):
+    def __init__(self, dim, kern_par, kern_str, point_str, point_par=None, estimate_par=False):
         """
         Gaussian process regression model.
 
         Parameters
         ----------
+        estimate_par
         dim : int
             Number of input dimensions.
 
@@ -437,7 +445,7 @@ class GaussianProcessModel(Model):
             Parameters of the sigma-point set.
         """
 
-        super(GaussianProcessModel, self).__init__(dim, kern_par, kern_str, point_str, point_par)
+        super(GaussianProcessModel, self).__init__(dim, kern_par, kern_str, point_str, point_par, estimate_par)
 
     def predict(self, test_data, fcn_obs, x_obs=None, par=None):
         """
@@ -497,6 +505,8 @@ class GaussianProcessModel(Model):
         w_c = iK.dot(Q).dot(iK)
         w_cc = R.dot(iK)
 
+        # save the kernel expectations for later
+        self.q, self.Q, self.iK = q, Q, iK
         # expected model variance
         self.model_var = self.kernel.exp_x_kxx(par) * (1 - np.trace(Q.dot(iK)))
         # integral variance
@@ -604,8 +614,8 @@ class BayesSardModel(Model):
         Any parameters for constructing desired point-set.
     """
 
-    def __init__(self, dim, kern_par, multi_ind=2, point_str='ut', point_par=None):
-        super(BayesSardModel, self).__init__(dim, kern_par, 'rbf', point_str, point_par)
+    def __init__(self, dim, kern_par, multi_ind=2, point_str='ut', point_par=None, estimate_par=False):
+        super(BayesSardModel, self).__init__(dim, kern_par, 'rbf', point_str, point_par, estimate_par)
 
         if type(multi_ind) is int:
             # multi-index: monomials of total degree <= multi_ind
@@ -1048,12 +1058,13 @@ class StudentTProcessModel(GaussianProcessModel):
     Student t process regression model of the integrand in the Bayesian quadrature.
     """
 
-    def __init__(self, dim, kern_par, kern_str='rbf', point_str='ut', point_par=None, nu=3.0):
+    def __init__(self, dim, kern_par, kern_str, point_str, point_par=None, estimate_par=False, nu=4.0):
         """
         Student's t-process regression model.
 
         Parameters
         ----------
+        estimate_par
         dim : int
             Number of input dimensions.
 
@@ -1069,11 +1080,9 @@ class StudentTProcessModel(GaussianProcessModel):
         point_par : dict
             Parameters of the sigma-point set.
 
-        nu : float
-            Degrees of freedom.
         """
 
-        super(StudentTProcessModel, self).__init__(dim, kern_par, kern_str, point_str, point_par)
+        super(StudentTProcessModel, self).__init__(dim, kern_par, kern_str, point_str, point_par, estimate_par)
         nu = 3.0 if nu < 2 else nu  # nu > 2
         self.nu = nu
 
@@ -1137,10 +1146,16 @@ class StudentTProcessModel(GaussianProcessModel):
             Expected model variance.
         """
 
-        gp_emv = super(StudentTProcessModel, self).exp_model_variance(par)
         fcn_obs = np.squeeze(args[0])
-        iK = self.kernel.exp_x_kxkx(par, par, self.points)
-        scale = (self.nu - 2 + fcn_obs.dot(iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
+        if self.estimate_par:
+            # re-compute EMV if kernel parameters are being estimated
+            iK = self.kernel.exp_x_kxkx(par, par, self.points)
+            scale = (self.nu - 2 + fcn_obs.dot(iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
+            gp_emv = super(StudentTProcessModel, self).exp_model_variance(par)
+        else:
+            # otherwise use pre-computed values (based on unit sigma-points and kernel parameters given at init)
+            scale = (self.nu - 2 + fcn_obs.dot(self.iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
+            gp_emv = self.model_var
         return scale * gp_emv
 
     def integral_variance(self, par, *args):
@@ -1161,12 +1176,16 @@ class StudentTProcessModel(GaussianProcessModel):
 
         """
 
-        par = self.kernel.get_parameters(par)
-        iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
         fcn_obs = np.squeeze(args[0])
-        gp_emv = super(StudentTProcessModel, self).integral_var(par)
-        scale = (self.nu - 2 + fcn_obs.dot(iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
-        return scale * gp_emv
+        par = self.kernel.get_parameters(par)
+        if self.estimate_par:
+            iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
+            scale = (self.nu - 2 + fcn_obs.dot(iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
+            gp_ivar = super(StudentTProcessModel, self).integral_var(par)
+        else:
+            scale = (self.nu - 2 + fcn_obs.dot(self.iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
+            gp_ivar = self.integral_var
+        return scale * gp_ivar
 
     def neg_log_marginal_likelihood(self, log_par, fcn_obs, x_obs, jitter):
         """
@@ -1227,8 +1246,8 @@ class StudentTProcessModel(GaussianProcessModel):
 
 class MultiOutputModel(Model):
 
-    def __init__(self, dim_in, dim_out, kern_par, kern_str, point_str, point_par=None):
-        super(MultiOutputModel, self).__init__(dim_in, kern_par, kern_str, point_str, point_par)
+    def __init__(self, dim_in, dim_out, kern_par, kern_str, point_str, point_par=None, estimate_par=False):
+        super(MultiOutputModel, self).__init__(dim_in, kern_par, kern_str, point_str, point_par, estimate_par)
         self.dim_out = dim_out
 
     def bq_weights(self, par):
