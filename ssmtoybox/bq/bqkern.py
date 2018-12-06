@@ -473,56 +473,6 @@ class RBFStudent(RBF):  # TODO might inherit from Kernel? unclear how to model K
 
         super(RBFStudent, self).__init__(dim, par, jitter)
 
-    def exp_batch_mc(self, f, par, x, scaling):
-        """
-        Computes expectation of supplied function using Monte Carlo.
-
-        MC computed by batches, because without batches we would run out of memory for large sample sizes
-
-        Parameters
-        ----------
-        f : function
-        par : ndarray
-
-        x : (dim, N) ndarray
-            Sigma-points (data).
-
-        Returns
-        -------
-
-        """
-
-        # kernel parameters and input dimensionality
-        par = self.par
-        dim, num_pts = x.shape
-        # TODO find out output dimensions of the function
-        out_shape = f(par, x, x, scaling).shape
-
-        # inverse kernel matrix
-        mean, scale, dof = np.zeros((dim,)), np.eye(dim), kern.dof
-
-        # compute MC estimates by batches
-        num_samples_batch = num_samples // num_batch
-        q_batch = np.zeros((num_pts, num_batch,))
-        Q_batch = np.zeros((num_pts, num_pts, num_batch))
-        R_batch = np.zeros((dim, num_pts, num_batch))
-        for ib in range(num_batch):
-            # multivariate t samples
-            x_samples = multivariate_t(mean, scale, dof, num_samples_batch).T
-
-            # evaluate kernel
-            k_samples = kern.eval(self.par, x_samples, x, scaling=False)
-            kk_samples = k_samples[:, na, :] * k_samples[..., na]
-            xk_samples = x_samples[..., na] * k_samples[na, ...]
-
-            # intermediate sums
-            q_batch[..., ib] = k_samples.sum(axis=0)
-
-        # MC approximations == sum the sums divide by num_samples
-        q = q_batch.sum(axis=-1) / num_samples
-
-        return wm, wc, wcc, Q
-
     def exp_x_kx(self, par, x, scaling=False):
         dim, num_pts = x.shape
         q_batch = np.zeros((num_pts, self.num_batches))
@@ -572,7 +522,6 @@ class RBFStudent(RBF):  # TODO might inherit from Kernel? unclear how to model K
             k1 = self.eval(par_1, x_samples, x, scaling=scaling)
             Q_batch[..., b] = (k0[:, na, :] * k1[..., na]).sum(axis=0)
         return Q_batch.sum(axis=-1) / self.num_samples
-        # return (1/self.num_mc) * (k0[:, na, :] * k1[..., na]).sum(axis=0)
 
     def exp_x_kxx(self, par):
         return par[0, 0]**2
