@@ -302,15 +302,16 @@ class StudentInferenceTest(TestCase):
         obs = self.ssm['cv']['obs']
         kpar_dyn = np.array([[1.0, 100, 100, 100, 100]])
         kpar_obs = np.array([[0.05, 10, 100, 10, 100]])
+        # FIXME: RBFStudent.exp_xy_kxy runs slow!
         filt = TPQStudent(dyn, obs, kpar_dyn, kpar_obs, point_par={'kappa': 0.0})
 
         # the weights of the TPQSF with RBF kernel need large number of MC samples (2M) to determine confidently
-        np.random.seed(4)
-        wm, wc, wcc, Q = self.rbf_student_mc_weights(filt.tf_dyn.model.points, filt.tf_dyn.model.kernel, int(2e6), 1000)
-        filt.tf_dyn.wm, filt.tf_dyn.Wc, filt.tf_dyn.Wcc = wm, wc, wcc
-        np.random.seed(4)
-        wm, wc, wcc, Q = self.rbf_student_mc_weights(filt.tf_meas.model.points, filt.tf_meas.model.kernel, int(2e6), 1000)
-        filt.tf_meas.wm, filt.tf_meas.Wc, filt.tf_meas.Wcc = wm, wc, wcc
+        # np.random.seed(4)
+        # wm, wc, wcc, Q = self.rbf_student_mc_weights(filt.tf_dyn.model.points, filt.tf_dyn.model.kernel, int(2e6), 1000)
+        # filt.tf_dyn.wm, filt.tf_dyn.Wc, filt.tf_dyn.Wcc = wm, wc, wcc
+        # np.random.seed(4)
+        # wm, wc, wcc, Q = self.rbf_student_mc_weights(filt.tf_meas.model.points, filt.tf_meas.model.kernel, int(2e6), 1000)
+        # filt.tf_meas.wm, filt.tf_meas.Wc, filt.tf_meas.Wcc = wm, wc, wcc
 
         filt.forward_pass(self.ssm['cv']['y'][..., 0])
 
