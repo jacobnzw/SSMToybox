@@ -527,9 +527,11 @@ class RBFStudent(RBF):  # TODO might inherit from Kernel? unclear how to model K
         return par[0, 0]**2
 
     def exp_xy_kxy(self, par):
-        kxy_batch = np.zeros((self.num_batches, ))
-        for b in range(self.num_batches):
-            x_samples = multivariate_t(self.mean, self.scale_mat, self.dof, self.batch_size).T  # (dim, batch_size)
+        num_batches = 10000  # best num_batches for 2e6 samples for this function
+        batch_size = int(2e6 // num_batches)
+        kxy_batch = np.zeros((num_batches, ))
+        for b in range(num_batches):
+            x_samples = multivariate_t(self.mean, self.scale_mat, self.dof, batch_size).T  # (dim, batch_size)
             kxy_batch[..., b] = self.eval(par, x_samples, x_samples).sum()
         return kxy_batch.sum(axis=-1) / self.num_samples
 

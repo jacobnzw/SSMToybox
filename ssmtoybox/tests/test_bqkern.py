@@ -211,3 +211,27 @@ class RBFStudentKernelTest(TestCase):
 
         kbarbar = ker.exp_xy_kxy(par)
         self.assertTrue(kbarbar.shape == ())
+
+    def test_expectation_xy_kxy(self):
+        dim = 2
+        par = np.array([[1.5, 3.0, 3.0]])
+        ker = RBFStudent(dim, par, num_samples=2e6, num_batches=10000)
+
+        import time
+        t0 = time.time()
+        ker.exp_xy_kxy(par)
+        elapsed = time.time() - t0
+        print('{:.6f} [sec] elapsed'.format(elapsed))
+        # import cProfile
+        # cProfile.runctx('ker.exp_xy_kxy(par)', None, {'ker': ker, 'par': par, 'dim': dim})
+
+    def test_expectation_x_kxkx(self):
+        dim = 2
+        par = np.array([[1.5, 3.0, 3.0]])
+        ker = RBFStudent(dim, par, num_samples=2e6, num_batches=1000)
+
+        import time
+        t0 = time.time()
+        ker.exp_x_kxkx(par, par, self.points)
+        elapsed = time.time() - t0
+        print('{:.6f} [sec] elapsed'.format(elapsed))
