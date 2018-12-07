@@ -10,6 +10,7 @@ from ssmtoybox.ssmod import UNGMTransition, UNGMNATransition, Pendulum2DTransiti
 from ssmtoybox.ssmod import UNGMMeasurement, UNGMNAMeasurement, Pendulum2DMeasurement, BearingMeasurement, \
     Radar2DMeasurement
 from ssmtoybox.utils import GaussRV, StudentRV
+np.set_printoptions(precision=4)
 
 
 class GaussianInferenceTest(TestCase):
@@ -224,7 +225,7 @@ class StudentInferenceTest(TestCase):
         cls.ssm.update({'ungm': {'dyn': dyn, 'obs': obs, 'x': x, 'y': y}})
 
         # setup CV with Student RVs
-        m_0 = np.array([10000, 300, 1000, -40]).astype(np.float)
+        m_0 = np.array([10175, 295, 980, -35]).astype(np.float)
         P_0 = np.diag([10000, 100, 10000, 100]).astype(np.float)
         nu_0 = 1000.0
         x0 = StudentRV(4, m_0, P_0, nu_0)
@@ -234,7 +235,7 @@ class StudentInferenceTest(TestCase):
         R = np.diag([50, 0.4e-6]).astype(np.float)
         nu_r = 4.0
         r = StudentRV(2, scale=R, dof=nu_r)
-        dyn = ConstantVelocity(x0, q)
+        dyn = ConstantVelocity(x0, q, dt=0.5)
         obs = Radar2DMeasurement(r, 4)
         x = dyn.simulate_discrete(100)
         y = obs.simulate_measurements(x)
@@ -300,9 +301,9 @@ class StudentInferenceTest(TestCase):
 
         dyn = self.ssm['cv']['dyn']
         obs = self.ssm['cv']['obs']
-        kpar_dyn = np.array([[1.0, 100, 100, 100, 100]])
-        kpar_obs = np.array([[0.05, 10, 100, 10, 100]])
-        # FIXME: RBFStudent.exp_xy_kxy runs slow!
+        z = self.ssm['cv']['y']
+        kpar_dyn = np.array([[0.05, 100, 100, 100, 100]])
+        kpar_obs = np.array([[0.005, 10, 100, 10, 100]])
         filt = TPQStudent(dyn, obs, kpar_dyn, kpar_obs, point_par={'kappa': 0.0})
 
         # the weights of the TPQSF with RBF kernel need large number of MC samples (2M) to determine confidently
@@ -313,7 +314,12 @@ class StudentInferenceTest(TestCase):
         # wm, wc, wcc, Q = self.rbf_student_mc_weights(filt.tf_meas.model.points, filt.tf_meas.model.kernel, int(2e6), 1000)
         # filt.tf_meas.wm, filt.tf_meas.Wc, filt.tf_meas.Wcc = wm, wc, wcc
 
-        filt.forward_pass(self.ssm['cv']['y'][..., 0])
+        # load data from TPQ_fusion branch for comparison
+        from scipy.io import loadmat
+        mat_dict = loadmat('cv_radar_simdata_100k_100mc.mat')
+        z = mat_dict['z']
+        print('Filtering ...')
+        filt.forward_pass(z[..., 0])
 
     def test_fully_symmetric_student(self):
         """
