@@ -1191,8 +1191,8 @@ class TPQStudent(StudentInference):
         # TODO: why is q_dof parameter for unit-points of the dynamics?
         # TODO: finish fixing DOFs, DOF for TPQ and DOF for the filtered state.
 
-        t_dyn = StudentTProcessTransform(dyn.dim_in, 1, kern_par_dyn, 'rbf-student', 'fs', point_par_dyn, dof_tp)
-        t_obs = StudentTProcessTransform(obs.dim_in, 1, kern_par_obs, 'rbf-student', 'fs', point_par_obs, dof_tp)
+        t_dyn = StudentTProcessTransform(dyn.dim_in, 1, kern_par_dyn, 'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
+        t_obs = StudentTProcessTransform(obs.dim_in, 1, kern_par_obs, 'rbf-student', 'fs', point_par_obs, nu=dof_tp)
         super(TPQStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
 
 
