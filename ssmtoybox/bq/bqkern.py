@@ -478,7 +478,7 @@ class RBFStudent(RBF):  # TODO might inherit from Kernel? unclear how to model K
         q_batch = np.zeros((num_pts, self.num_batches))
         for b in range(self.num_batches):
             x_samples = multivariate_t(self.mean, self.scale_mat, self.dof, self.batch_size).T
-            q_batch[..., b] = self.eval(par, x_samples, x, scaling).sum(axis=0)
+            q_batch[..., b] = self.eval(par, x_samples, x, scaling=scaling).sum(axis=0)
         return q_batch.sum(axis=-1) / self.num_samples
 
     def exp_x_xkx(self, par, x, scaling=False):
@@ -486,7 +486,7 @@ class RBFStudent(RBF):  # TODO might inherit from Kernel? unclear how to model K
         r_batch = np.zeros((dim, num_pts, self.num_batches))
         for b in range(self.num_batches):
             x_samples = multivariate_t(self.mean, self.scale_mat, self.dof, self.batch_size).T  # (dim, batch_size)
-            k_samples = self.eval(par, x_samples, x, scaling).sum(axis=0)  # (batch_size, num_pts)
+            k_samples = self.eval(par, x_samples, x, scaling=scaling).sum(axis=0)  # (batch_size, num_pts)
             r_batch[..., b] = (x_samples[..., na] * k_samples[na, ...]).sum(axis=1)
         return r_batch.sum(axis=-1) / self.num_samples
 
