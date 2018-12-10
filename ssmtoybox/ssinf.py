@@ -1184,8 +1184,8 @@ class TPQStudent(StudentInference):
         # add DOF of the noises to the sigma-point parameters
         if point_par is None:
             point_par = dict()
-        point_par_dyn = point_par  # FIXME: point_par.copy(), for now keeping as is for compatibility with older version
-        point_par_obs = point_par
+        point_par_dyn = point_par.copy()
+        point_par_obs = point_par.copy()
         point_par_dyn.update({'dof': q_dof})
         point_par_obs.update({'dof': r_dof})
         # TODO: why is q_dof parameter for unit-points of the dynamics?
