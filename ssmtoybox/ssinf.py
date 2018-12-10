@@ -840,17 +840,17 @@ class TruncatedUnscentedKalman(GaussianInference):
 
     Parameters
     ----------
-    sys : GaussianStateSpaceModel
-        State-space model to perform inference on.
+    dyn : TransitionModel
+        Transition model defining the system dynamics with Gaussian noise and initial conditions.
+
+    obs : MeasurementModel
+        Measurement model with Gaussian noise.
     """
 
-    def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas):
-        assert isinstance(mod_dyn, StateSpaceModel)
-        nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
-        nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
-        tf = UnscentedTransform(nq, kappa=kappa, alpha=alpha, beta=beta)
-        th = TruncatedUnscentedTransform(nr, mod_dyn.rD, kappa=kappa, alpha=alpha, beta=beta)
-        super(TruncatedUnscentedKalman, self).__init__(mod_dyn, mod_meas, tf, th)
+    def __init__(self, dyn, obs, kappa=None, alpha=1.0, beta=2.0):
+        tf = UnscentedTransform(dyn.dim_in, kappa, alpha, beta)
+        th = TruncatedUnscentedTransform(obs.dim_state, obs.dim_in, kappa, alpha, beta)
+        super(TruncatedUnscentedKalman, self).__init__(dyn, obs, tf, th)
 
 
 class TruncatedCubatureKalman(GaussianInference):
@@ -859,17 +859,17 @@ class TruncatedCubatureKalman(GaussianInference):
 
     Parameters
     ----------
-    sys : GaussianStateSpaceModel
-        State-space model to perform inference on.
+    dyn : TransitionModel
+        Transition model defining the system dynamics with Gaussian noise and initial conditions.
+
+    obs : MeasurementModel
+        Measurement model with Gaussian noise.
     """
 
-    def __init__(self, mod_dyn, mod_meas):
-        assert isinstance(mod_dyn, StateSpaceModel)
-        nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
-        nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
-        tf = SphericalRadialTransform(nq)
-        th = TruncatedSphericalRadialTransform(nr, mod_dyn.rD)
-        super(TruncatedCubatureKalman, self).__init__(mod_dyn, mod_meas, tf, th)
+    def __init__(self, dyn, obs):
+        tf = SphericalRadialTransform(dyn.dim_in)
+        th = TruncatedSphericalRadialTransform(obs.dim_state, obs.dim_in)
+        super(TruncatedCubatureKalman, self).__init__(dyn, obs, tf, th)
 
 
 class TruncatedGaussHermiteKalman(GaussianInference):
@@ -878,20 +878,20 @@ class TruncatedGaussHermiteKalman(GaussianInference):
 
     Parameters
     ----------
-    sys : GaussianStateSpaceModel
-        State-space model to perform inference on.
+    dyn : TransitionModel
+        Transition model defining the system dynamics with Gaussian noise and initial conditions.
 
-    deg : int, optional
+    obs : MeasurementModel
+        Measurement model with Gaussian noise.
+
+    degree : int, optional
         Degree of the Gauss-Hermite integration rule. Determines the number of sigma-points.
     """
 
-    def __init__(self, mod_dyn, mod_meas, tf_dyn):
-        assert isinstance(mod_dyn, StateSpaceModel)
-        nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
-        nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
-        tf = GaussHermiteTransform(nq, degree=deg)
-        th = TruncatedGaussHermiteTransform(nr, mod_dyn.rD, degree=deg)
-        super(TruncatedGaussHermiteKalman, self).__init__(mod_dyn, mod_meas, tf, th)
+    def __init__(self, dyn, obs, degree):
+        tf = GaussHermiteTransform(dyn.dim_in, degree)
+        th = TruncatedGaussHermiteTransform(obs.dim_state, dyn.dim_in, degree)
+        super(TruncatedGaussHermiteKalman, self).__init__(dyn, obs, tf, th)
 
 
 """
