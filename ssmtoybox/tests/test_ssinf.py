@@ -3,8 +3,8 @@ from unittest import TestCase
 import numpy as np
 import numpy.linalg as la
 
-from ssmtoybox.ssinf import GPQMKalman, GaussianProcessKalman, BayesSardKalman, TPQStudent, TPQKalman, \
-    FullySymmetricStudent
+from ssmtoybox.ssinf import MarginalizedGaussianProcessKalman, GaussianProcessKalman, BayesSardKalman, \
+    StudentProcessStudent, StudentProcessKalman, FullySymmetricStudent
 from ssmtoybox.ssinf import UnscentedKalman, ExtendedKalman, GaussHermiteKalman
 from ssmtoybox.ssmod import UNGMTransition, UNGMNATransition, Pendulum2DTransition, CoordinatedTurnTransition, \
     ReentryVehicle2DTransition, ConstantTurnRateSpeed, ConstantVelocity
@@ -177,7 +177,7 @@ class GaussianInferenceTest(TestCase):
             kpar_dyn = np.atleast_2d(np.ones(data['dyn'].dim_in + 1))
             kpar_obs = np.atleast_2d(np.ones(data['obs'].dim_in + 1))
             try:
-                alg = TPQKalman(data['dyn'], data['obs'], kpar_dyn, kpar_obs)
+                alg = StudentProcessKalman(data['dyn'], data['obs'], kpar_dyn, kpar_obs)
                 alg.forward_pass(data['y'][..., 0])
                 alg.backward_pass()
                 alg.reset()
@@ -251,7 +251,7 @@ class StudentInferenceTest(TestCase):
             dim = data['x'].shape[0]
             kerpar = np.atleast_2d(np.ones(dim + 1))
             np.random.seed(1)  # for reproducibility reasons
-            filt = TPQStudent(data['dyn'], data['obs'], kerpar, kerpar)
+            filt = StudentProcessStudent(data['dyn'], data['obs'], kerpar, kerpar)
             filt.forward_pass(data['y'][..., 0])
 
     def test_fully_symmetric_student(self):
@@ -267,18 +267,18 @@ class StudentInferenceTest(TestCase):
 class GPQMarginalizedTest(TestCase):
     def test_init(self):
         ssm = UNGMGaussSSM()
-        alg = GPQMKalman(ssm, mod_meas, 'rbf', 'sr')
+        alg = MarginalizedGaussianProcessKalman(ssm, mod_meas, 'rbf', 'sr')
 
     def test_time_update(self):
         ssm = UNGMGaussSSM()
-        alg = GPQMKalman(ssm, mod_meas, 'rbf', 'sr')
+        alg = MarginalizedGaussianProcessKalman(ssm, mod_meas, 'rbf', 'sr')
         alg._time_update(1)
         par_dyn, par_obs = np.array([1, 1]), np.array([1, 1])
         alg._time_update(1, par_dyn, par_obs)
 
     def test_laplace_approx(self):
         ssm = UNGMGaussSSM()
-        alg = GPQMKalman(ssm, mod_meas, 'rbf', 'sr')
+        alg = MarginalizedGaussianProcessKalman(ssm, mod_meas, 'rbf', 'sr')
         # Random measurement
         y = np.sqrt(10)*np.random.randn(1)
         alg._param_posterior_moments(y, 10)
@@ -287,17 +287,17 @@ class GPQMarginalizedTest(TestCase):
     def test_measurement_update(self):
         ssm = UNGMGaussSSM()
         ssm_state, ssm_observations = ssm.simulate(5)
-        alg = GPQMKalman(ssm, mod_meas, 'rbf', 'sr')
+        alg = MarginalizedGaussianProcessKalman(ssm, mod_meas, 'rbf', 'sr')
         alg._measurement_update(ssm_observations[:, 0, 0], 1)
 
     def test_filtering_ungm(self):
         ssm = UNGMGaussSSM()
         ssm_state, ssm_observations = ssm.simulate(100)
-        alg = GPQMKalman(ssm, mod_meas, 'rbf', 'sr')
+        alg = MarginalizedGaussianProcessKalman(ssm, mod_meas, 'rbf', 'sr')
         alg.forward_pass(ssm_observations[..., 0])
 
     def test_filtering_pendulum(self):
         ssm = PendulumGaussSSM()
         ssm_state, ssm_observations = ssm.simulate(100)
-        alg = GPQMKalman(ssm, mod_meas, 'rbf', 'sr')
+        alg = MarginalizedGaussianProcessKalman(ssm, mod_meas, 'rbf', 'sr')
         alg.forward_pass(ssm_observations[..., 0])

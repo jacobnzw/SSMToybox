@@ -345,31 +345,6 @@ class ExtendedKalman(GaussianInference):
         super(ExtendedKalman, self).__init__(dyn, obs, tf, th)
 
 
-class ExtendedKalmanGPQD(GaussianInference):
-    """
-    Extended Kalman filter and smoother with a moment transform based on single-point Gaussian process quadrature with
-    derivative observations and RBF kernel.
-
-    Parameters
-    ----------
-    sys : GaussianStateSpaceModel
-        State-space model to perform inference on. Needs to have Jacobians implemented.
-
-    alpha : float, optional
-        Scaling parameter of the RBF kernel.
-
-    el : float, optional
-        Input scaling parameter (a.k.a. horizontal length-scale) of the RBF kernel.
-    """
-    def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas):
-        assert isinstance(mod_dyn, StateSpaceModel)
-        nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
-        nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
-        tf = TaylorGPQDTransform(nq, alpha, el)
-        th = TaylorGPQDTransform(nr, alpha, el)
-        super(ExtendedKalmanGPQD, self).__init__(mod_dyn, mod_meas, tf, th)
-
-
 class CubatureKalman(GaussianInference):
     """
     Cubature Kalman filter and smoother.
@@ -386,25 +361,6 @@ class CubatureKalman(GaussianInference):
         super(CubatureKalman, self).__init__(dyn, obs, tf, th)
 
 
-class CubatureTruncKalman(GaussianInference):
-    """
-    Truncated cubature Kalman filter and smoother, aware of the effective dimension of the observation model.
-
-    Parameters
-    ----------
-    sys : GaussianStateSpaceModel
-        State-space model to perform inference on.
-    """
-
-    def __init__(self, mod_dyn, mod_meas):
-        assert isinstance(mod_dyn, StateSpaceModel)
-        nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
-        nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
-        tf = SphericalRadialTransform(nq)
-        th = SphericalRadialTruncatedTransform(nr, mod_dyn.rD)
-        super(CubatureTruncKalman, self).__init__(mod_dyn, mod_meas, tf, th)
-
-
 class UnscentedKalman(GaussianInference):
     """
     Unscented Kalman filter and smoother.
@@ -419,25 +375,6 @@ class UnscentedKalman(GaussianInference):
         tf = UnscentedTransform(dyn.dim_in, kappa=kappa, alpha=alpha, beta=beta)
         th = UnscentedTransform(obs.dim_in, kappa=kappa, alpha=alpha, beta=beta)
         super(UnscentedKalman, self).__init__(dyn, obs, tf, th)
-
-
-class UnscentedTruncKalman(GaussianInference):
-    """
-    Truncated cubature Kalman filter and smoother, aware of the effective dimension of the observation model.
-
-    Parameters
-    ----------
-    sys : GaussianStateSpaceModel
-        State-space model to perform inference on.
-    """
-
-    def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas):
-        assert isinstance(mod_dyn, StateSpaceModel)
-        nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
-        nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
-        tf = UnscentedTransform(nq, kappa=kappa, alpha=alpha, beta=beta)
-        th = UnscentedTruncatedTransform(nr, mod_dyn.rD, kappa=kappa, alpha=alpha, beta=beta)
-        super(UnscentedTruncKalman, self).__init__(mod_dyn, mod_meas, tf, th)
 
 
 class GaussHermiteKalman(GaussianInference):
@@ -457,28 +394,6 @@ class GaussHermiteKalman(GaussianInference):
         tf = GaussHermiteTransform(dyn.dim_in, degree=deg)
         th = GaussHermiteTransform(obs.dim_in, degree=deg)
         super(GaussHermiteKalman, self).__init__(dyn, obs, tf, th)
-
-
-class GaussHermiteTruncKalman(GaussianInference):
-    """
-    Truncated Gauss-Hermite Kalman filter and smoother, aware of the effective dimensionality of the observation model.
-
-    Parameters
-    ----------
-    sys : GaussianStateSpaceModel
-        State-space model to perform inference on.
-
-    deg : int, optional
-        Degree of the Gauss-Hermite integration rule. Determines the number of sigma-points.
-    """
-
-    def __init__(self, mod_dyn, mod_meas, tf_dyn):
-        assert isinstance(mod_dyn, StateSpaceModel)
-        nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
-        nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
-        tf = GaussHermiteTransform(nq, degree=deg)
-        th = GaussHermiteTruncatedTransform(nr, mod_dyn.rD, degree=deg)
-        super(GaussHermiteTruncKalman, self).__init__(mod_dyn, mod_meas, tf, th)
 
 
 class GaussianProcessKalman(GaussianInference):
@@ -576,7 +491,7 @@ class BayesSardKalman(GaussianInference):
         super(BayesSardKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
 
-class TPQKalman(GaussianInference):
+class StudentProcessKalman(GaussianInference):
     """
     Student's t-process quadrature Kalman filter (TPQKF) and smoother (see [1]_).
 
@@ -628,10 +543,365 @@ class TPQKalman(GaussianInference):
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None, nu=3.0):
         t_dyn = StudentTProcessTransform(dyn.dim_in, 1, kern_par_dyn, kernel, points, point_hyp)
         t_obs = StudentTProcessTransform(obs.dim_in, 1, kern_par_obs, kernel, points, point_hyp)
-        super(TPQKalman, self).__init__(dyn, obs, t_dyn, t_obs)
+        super(StudentProcessKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
 
-class GPQMOKalman(GaussianInference):
+class StudentInference(StateSpaceInference):
+    """
+    Base class for state-space inference algorithms, which assume that the state and measurement variables are jointly
+    Student's t-distributed.
+
+    Parameters
+    ----------
+    dof : float
+        Degree of freedom parameter of the filtered density.
+
+    fixed_dof : bool
+        If `True`, DOF will be fixed for all time steps, which preserves the heavy-tailed behaviour of the filter.
+        If `False`, DOF will be increasing after each measurement update, which means the heavy-tailed behaviour is
+        not preserved and therefore converges to a Gaussian filter.
+
+    Notes
+    -----
+    Even though Student's t distribution is not parametrized by the covariance matrix like the Gaussian,
+    the filter still produces mean and covariance of the state.
+
+    """
+
+    def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas, dof=4.0, fixed_dof=True):
+        # make sure initial state and noises are Student RVs
+        if not isinstance(mod_dyn.init_rv, StudentRV):
+            ValueError("Initial state is not Student RV.")
+        if not isinstance(mod_dyn.noise_rv, StudentRV):
+            ValueError("Process noise is not Student RV.")
+        if not isinstance(mod_meas.noise_rv, StudentRV):
+            ValueError("Measurement noise is not Student RV.")
+        if dof <= 2.0:
+            dof = 4.0
+            warnings.warn("You supplied invalid DoF (must be > 2). Setting to dof=4.")
+
+        # extract SSM parameters  # TODO get_stats() returns scale mat., convert it to cov. mat.
+        self.x0_mean, self.x0_cov, self.x0_dof = mod_dyn.init_rv.get_stats()
+        # self.x0_cov = (self.x0_dof/(self.x0_dof-2)) * self.x0_cov
+        # initial filtered statistics are the initial state statistics
+        self.x_mean_fi, self.x_cov_fi, self.dof_fi = self.x0_mean, self.x0_cov, self.x0_dof
+
+        # state noise statistics
+        self.q_mean, self.q_cov, self.q_dof = mod_dyn.noise_rv.get_stats()
+        self.q_gain = mod_dyn.noise_gain
+
+        # measurement noise statistics
+        self.r_mean, self.r_cov, self.r_dof = mod_meas.noise_rv.get_stats()
+
+        # scale matrix variables
+        scale = (dof - 2)/dof
+        self.x_smat_fi = scale * self.x_cov_fi  # turn initial covariance into initial scale matrix
+        self.q_smat = scale * self.q_cov
+        self.r_smat = scale * self.r_cov
+        self.x_smat_pr, self.y_smat_pr, self.xy_smat = None, None, None
+
+        self.dof = dof
+        self.fixed_dof = fixed_dof
+
+        super(StudentInference, self).__init__(mod_dyn, mod_meas, tf_dyn, tf_meas)
+
+    def reset(self):
+        """Reset internal variables and flags."""
+        self.x_mean_fi, self.x_cov_fi, self.dof_fi = self.x0_mean, self.x0_cov, self.x0_dof
+        scale = (self.dof - 2) / self.dof
+        self.x_smat_fi = scale * self.x_cov_fi
+        self.x_smat_pr, self.y_smat_pr, self.xy_smat = None, None, None
+        super(StudentInference, self).reset()
+
+    def _time_update(self, time, theta_dyn=None, theta_obs=None):
+        """
+        Time update for Studentian filters and smoothers, computing predictive moments of state and measurement.
+
+        Parameters
+        ----------
+        time : int
+            Time step. Important for t-variant systems.
+
+        theta_dyn : ndarray
+            Parameters of the moment transform computing the predictive state moments.
+
+        theta_obs : ndarray
+            Parameters of the moment transform computing the predictive measurement moments.
+        """
+
+        if self.fixed_dof:  # fixed-DOF version
+
+            # pick the smallest DOF
+            dof_pr = np.min((self.dof_fi, self.q_dof, self.r_dof))
+
+            # rescale filtered scale matrix?
+            scale = (dof_pr - 2) / dof_pr
+            # self.x_smat_fi = self.x_smat_fi * scale * self.dof_fi / (self.dof_fi - 2)
+
+        else:  # increasing DOF version
+            scale = (self.dof - 2) / self.dof
+
+        # in non-additive case, augment mean and covariance
+        mean = self.x_mean_fi if self.mod_dyn.noise_additive else np.hstack((self.x_mean_fi, self.q_mean))
+        smat = self.x_smat_fi if self.mod_dyn.noise_additive else block_diag(self.x_smat_fi, self.q_smat)
+        assert mean.ndim == 1 and smat.ndim == 2
+
+        # predicted state statistics
+        # TODO: make the moment transforms take covariance matrix (instead of scale)
+        self.x_mean_pr, self.x_cov_pr, self.xx_cov = self.tf_dyn.apply(self.mod_dyn.dyn_eval, mean, smat,
+                                                                       np.atleast_1d(time), theta_dyn)
+        # predicted covariance -> predicted scale matrix
+        self.x_smat_pr = scale * self.x_cov_pr
+
+        if self.mod_dyn.noise_additive:
+            self.x_cov_pr += self.q_gain.dot(self.q_cov).dot(self.q_gain.T)
+            self.x_smat_pr += self.q_gain.dot(self.q_smat).dot(self.q_gain.T)
+
+        # in non-additive case, augment mean and covariance
+        mean = self.x_mean_pr if self.mod_meas.noise_additive else np.hstack((self.x_mean_pr, self.r_mean))
+        smat = self.x_smat_pr if self.mod_meas.noise_additive else block_diag(self.x_smat_pr, self.r_smat)
+        assert mean.ndim == 1 and smat.ndim == 2
+
+        # predicted measurement statistics
+        self.y_mean_pr, self.y_cov_pr, self.xy_cov = self.tf_meas.apply(self.mod_meas.meas_eval, mean, smat,
+                                                                        np.atleast_1d(time), theta_obs)
+        # turn covariance to scale matrix
+        self.y_smat_pr = scale * self.y_cov_pr
+        self.xy_smat = scale * self.xy_cov
+
+        # in additive case, noise covariances need to be added
+        if self.mod_meas.noise_additive:
+            self.y_cov_pr += self.r_cov
+            self.y_smat_pr += self.r_smat
+
+        # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)
+        self.xy_cov = self.xy_cov[:, :self.mod_dyn.dim_in]
+        self.xx_cov = self.xx_cov[:, :self.mod_dyn.dim_in]
+        self.xy_smat = self.xy_smat[:, :self.mod_dyn.dim_in]
+
+    def _measurement_update(self, y, time=None):
+        """
+        Measurement update for Studentian filters, which takes predictive state and measurement moments and produces
+        filtered state mean and covariance.
+
+        Parameters
+        ----------
+        y : (dim, ) ndarray
+            Measurement vector.
+
+        time : int
+            Time step. Important for t-variant systems.
+
+        Notes
+        -----
+        Implements general Studentian filter measurement update.
+        """
+
+        # scale the covariance matrices
+        # scale = (self.dof - 2) / self.dof
+        # self.y_cov_pr *= scale
+        # self.xy_cov *= scale
+
+        # Kalman update
+        gain = cho_solve(cho_factor(self.y_smat_pr), self.xy_smat).T
+        self.x_mean_fi = self.x_mean_pr + gain.dot(y - self.y_mean_pr)
+        # FIXME: this isn't covariance (shouldn't be saved in x_cov_fi)
+        self.x_cov_fi = self.x_smat_pr - gain.dot(self.y_smat_pr).dot(gain.T)
+
+        # filtered covariance to filtered scale matrix
+        # delta = cho_solve(cho_factor(self.y_smat_pr), y - self.y_mean_pr)
+        delta = la.solve(la.cholesky(self.y_smat_pr), y - self.y_mean_pr)
+        scale = (self.dof + delta.T.dot(delta)) / (self.dof + self.mod_meas.dim_out)
+        self.x_smat_fi = scale * self.x_cov_fi
+
+        # update degrees of freedom
+        self.dof_fi += self.mod_meas.dim_out
+
+    def _smoothing_update(self):
+        # Student smoother has not been developed yet.
+        pass
+
+
+class FullySymmetricStudent(StudentInference):
+    """
+    Student filter using the fully-symmetric moment transforms from [1]_.
+
+    dyn : TransitionModel
+        Transition model defining system dynamics with Student distributed noises and initial conditions.
+
+    obs : MeasurementModel
+        Measurement model with Student distributed noise.
+
+    degree : int, optional
+        Degree of the fully-symmetric quadrature rule. Degrees 3 and 5 implemented.
+
+    kappa : float, optional
+        Scaling parameter of the sigma-points of the quadrature rule.
+
+    dof : float, optional
+        Degrees of freedom of that the Student filter will maintain (on each measurement update) if `fixed_dof=True`.
+
+    fixed_dof : bool, optional
+        If `True` the filter will maintain degrees of freedom on a fixed value given by `dof`. This option preserves
+        the heavy-tailed behavior. If `False`, the degrees of freedom of the filtered posterior will increase with each
+        measurement update and hence the asymptotic behavior of the Student filter will be identical to that of the
+        Kalman filter (the heavy-tailed behaviour is lost).
+
+    References
+    ----------
+    .. [1] Tronarp, F. and Hostettler, R. and Särkkä, S. Sigma-point Filtering for Nonlinear Systems with Non-additive
+           Heavy-tailed Noise, 19th International Conference on Information Fusion, 2016, 1859-1866
+    """
+
+    def __init__(self, dyn, obs, degree=3, kappa=None, dof=4.0, fixed_dof=True):
+        dyn_dof = np.min((dyn.init_rv.dof, dyn.noise_rv.dof))
+        obs_dof = np.min((dyn_dof, obs.noise_rv.dof))
+        t_dyn = FullySymmetricStudentTransform(dyn.dim_in, degree, kappa, dyn_dof)
+        t_obs = FullySymmetricStudentTransform(obs.dim_in, degree, kappa, obs_dof)
+        super(FullySymmetricStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
+
+
+class StudentProcessStudent(StudentInference):
+    """
+    Student's t-process quadrature Student filter (TPQSF, see [1]_) with fully-symmetric sigma-points (see [3]_).
+
+    Parameters
+    ----------
+    dyn : TransitionModel
+        Transition model defining system dynamics with Student distributed noises and initial conditions.
+
+    obs : MeasurementModel
+        Measurement model with Student distributed noise.
+
+    kern_par_dyn : ndarray
+        Kernel parameters for TPQ transformation of the state moments.
+
+    kern_par_obs : ndarray
+        Kernel parameters for TPQ transformation of the measurement moments.
+
+    point_par : dict, optional
+        Hyper-parameters of the sigma-point set.
+
+    dof : float, optional
+        Desired degrees of freedom during the filtering process.
+
+    dof_tp : float, optional
+        Degrees of freedom of the Student's t-regression model. TODO: could be merged with `fixed_dof`.
+
+    fixed_dof : bool, optional
+        Fix degrees of freedom during filtering. If `True`, preserves the heavy-tailed behavior of the Student
+        filter with increasing time steps. If `False`, the Student filter measurement update rule effectively becomes
+        identical to the Kalman filter with increasing number of processed measurements.
+
+    References
+    ----------
+    .. [1] Prüher, J.; Tronarp, F.; Karvonen, T.; Särkkä, S. and Straka, O. Student-t Process Quadratures for
+           Filtering of Non-linear Systems with Heavy-tailed Noise, 20th International Conference on Information
+           Fusion, 2017 , 1-8
+
+    .. [2] Tronarp, F. and Hostettler, R. and Särkkä, S. Sigma-point Filtering for Nonlinear Systems with Non-additive
+           Heavy-tailed Noise, 19th International Conference on Information Fusion, 2016, 1859-1866
+
+    .. [3] J. McNamee and F. Stenger, Construction of fully symmetric numerical integration formulas,
+           Numerische Mathematik, vol. 10, pp. 327–344, 1967
+    """
+
+    def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, point_par=None, dof=4.0, fixed_dof=True, dof_tp=4.0):
+        # degrees of freedom for SSM noises
+        assert isinstance(dyn.init_rv, StudentRV) and isinstance(dyn.noise_rv, StudentRV)
+        q_dof, r_dof = dyn.noise_rv.dof, obs.noise_rv.dof
+
+        # add DOF of the noises to the sigma-point parameters
+        if point_par is None:
+            point_par = dict()
+        point_par_dyn = point_par.copy()
+        point_par_obs = point_par.copy()
+        point_par_dyn.update({'dof': q_dof})
+        point_par_obs.update({'dof': r_dof})
+        # TODO: why is q_dof parameter for unit-points of the dynamics?
+        # TODO: finish fixing DOFs, DOF for TPQ and DOF for the filtered state.
+
+        t_dyn = StudentTProcessTransform(dyn.dim_in, 1, kern_par_dyn, 'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
+        t_obs = StudentTProcessTransform(obs.dim_in, 1, kern_par_obs, 'rbf-student', 'fs', point_par_obs, nu=dof_tp)
+        super(StudentProcessStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
+
+
+"""
+Warning: EXPERIMENTAL!
+
+Inference algorithms using 'truncated' transforms that account for the fact that the measurement models do not have to 
+use the whole state to compute measurements.
+"""
+
+
+class TruncatedUnscentedKalman(GaussianInference):
+    """
+    Truncated cubature Kalman filter and smoother, aware of the effective dimension of the observation model.
+
+    Parameters
+    ----------
+    sys : GaussianStateSpaceModel
+        State-space model to perform inference on.
+    """
+
+    def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas):
+        assert isinstance(mod_dyn, StateSpaceModel)
+        nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
+        nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
+        tf = UnscentedTransform(nq, kappa=kappa, alpha=alpha, beta=beta)
+        th = UnscentedTruncatedTransform(nr, mod_dyn.rD, kappa=kappa, alpha=alpha, beta=beta)
+        super(TruncatedUnscentedKalman, self).__init__(mod_dyn, mod_meas, tf, th)
+
+
+class TruncatedCubatureKalman(GaussianInference):
+    """
+    Truncated cubature Kalman filter and smoother, aware of the effective dimension of the observation model.
+
+    Parameters
+    ----------
+    sys : GaussianStateSpaceModel
+        State-space model to perform inference on.
+    """
+
+    def __init__(self, mod_dyn, mod_meas):
+        assert isinstance(mod_dyn, StateSpaceModel)
+        nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
+        nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
+        tf = SphericalRadialTransform(nq)
+        th = SphericalRadialTruncatedTransform(nr, mod_dyn.rD)
+        super(TruncatedCubatureKalman, self).__init__(mod_dyn, mod_meas, tf, th)
+
+
+class TruncatedGaussHermiteKalman(GaussianInference):
+    """
+    Truncated Gauss-Hermite Kalman filter and smoother, aware of the effective dimensionality of the observation model.
+
+    Parameters
+    ----------
+    sys : GaussianStateSpaceModel
+        State-space model to perform inference on.
+
+    deg : int, optional
+        Degree of the Gauss-Hermite integration rule. Determines the number of sigma-points.
+    """
+
+    def __init__(self, mod_dyn, mod_meas, tf_dyn):
+        assert isinstance(mod_dyn, StateSpaceModel)
+        nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
+        nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
+        tf = GaussHermiteTransform(nq, degree=deg)
+        th = GaussHermiteTruncatedTransform(nr, mod_dyn.rD, degree=deg)
+        super(TruncatedGaussHermiteKalman, self).__init__(mod_dyn, mod_meas, tf, th)
+
+
+"""
+Warning: EXPERIMENTAL!
+
+Inference algorithms based on Bayesian quadrature with multi-output GP/TP models.
+"""
+
+
+class MultiOutputGaussianProcessKalman(GaussianInference):
     """
     Gaussian process quadrature Kalman filter and smoother with multi-output Gaussian process model.
 
@@ -687,7 +957,82 @@ class GPQMOKalman(GaussianInference):
         nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
         t_dyn = GPQMO(nq, mod_dyn.xD, ker_par_dyn, kernel, points, point_par)
         t_obs = GPQMO(nr, mod_dyn.zD, ker_par_obs, kernel, points, point_par)
-        super(GPQMOKalman, self).__init__(mod_dyn, mod_meas, t_dyn, t_obs)
+        super(MultiOutputGaussianProcessKalman, self).__init__(mod_dyn, mod_meas, t_dyn, t_obs)
+
+
+class MultiOutputStudentProcessStudent(StudentInference):
+    """
+    Student's t-process quadrature Student filter (TPQSF, see [1]_) with fully-symmetric sigma-points (see [3]_) and
+    multi-output Student's t-process regression model.
+
+    Parameters
+    ----------
+    ssm : StudentStateSpaceModel
+        Studentian state-space model to perform inference on.
+
+    ker_par_dyn : ndarray
+        Kernel parameters for TPQ transformation of the state moments.
+
+    ker_par_obs : ndarray
+        Kernel parameters for TPQ transformation of the measurement moments.
+
+    point_par : dict, optional
+        Hyper-parameters of the sigma-point set.
+
+    dof : float, optional
+        Desired degrees of freedom during the filtering process.
+
+    dof_tp : float, optional
+        Degrees of freedom of the Student's t-regression model. TODO: could be merged with `fixed_dof`.
+
+    fixed_dof : bool, optional
+        Fix degrees of freedom during filtering. If `True`, preserves the heavy-tailed behavior of the Student
+        filter with increasing time steps. If `False`, the Student filter measurement update rule effectively becomes
+        identical to the Kalman filter with increasing number of processed measurements.
+
+    Notes
+    -----
+    Just experimental, it doesn't work! Frequently fails with loss of positive definiteness.
+
+    References
+    ----------
+    .. [1] Prüher, J.; Tronarp, F.; Karvonen, T.; Särkkä, S. and Straka, O. Student-t Process Quadratures for
+           Filtering of Non-linear Systems with Heavy-tailed Noise, 20th International Conference on Information
+           Fusion, 2017 , 1-8
+
+    .. [2] Tronarp, F. and Hostettler, R. and Särkkä, S. Sigma-point Filtering for Nonlinear Systems with Non-additive
+           Heavy-tailed Noise, 19th International Conference on Information Fusion, 2016, 1859-1866
+
+    .. [3] J. McNamee and F. Stenger, Construction of fully symmetric numerical integration formulas,
+           Numerische Mathematik, vol. 10, pp. 327–344, 1967
+    """
+
+    def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas):
+        assert isinstance(mod_dyn, StateSpaceModel)
+        nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
+        nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
+
+        # degrees of freedom for SSM noises
+        q_dof, r_dof = mod_dyn.get_pars('q_dof', 'r_dof')
+
+        # add DOF of the noises to the sigma-point parameters
+        if point_par is None:
+            point_par = dict()
+        point_par_dyn = point_par
+        point_par_obs = point_par
+        point_par_dyn.update({'dof': q_dof})
+        point_par_obs.update({'dof': r_dof})
+
+        t_dyn = TPQMO(nq, mod_dyn.xD, ker_par_dyn, 'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
+        t_obs = TPQMO(nr, mod_dyn.zD, ker_par_obs, 'rbf-student', 'fs', point_par_obs, nu=dof_tp)
+        super(MultiOutputStudentProcessStudent, self).__init__(mod_dyn, mod_meas, t_dyn, t_obs)
+
+
+"""
+Warning: EXPERIMENTAL!
+
+Inference algorithms that marginalize moment transform parameters.
+"""
 
 
 class MarginalInference(GaussianInference):
@@ -941,7 +1286,7 @@ class MarginalInference(GaussianInference):
         self.param_mean, self.param_cov = opt_res.x, opt_res.hess_inv + self.param_jitter
 
 
-class GPQMKalman(MarginalInference):
+class MarginalizedGaussianProcessKalman(MarginalInference):
     """
     Gaussian process quadrature Kalman filter and smoother with marginalized GPQ moment transform kernel parameters.
 
@@ -955,352 +1300,36 @@ class GPQMKalman(MarginalInference):
         nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
         t_dyn = GaussianProcessTransform(nq, 1, kernel, points, point_par=point_hyp)
         t_obs = GaussianProcessTransform(nr, 1, kernel, points, point_par=point_hyp)
-        super(GPQMKalman, self).__init__(mod_dyn, mod_meas, t_dyn, t_obs)
+        super(MarginalizedGaussianProcessKalman, self).__init__(mod_dyn, mod_meas, t_dyn, t_obs)
 
 
-class StudentInference(StateSpaceInference):
+"""
+Warning: EXPERIMENTAL!
+
+Extended Kalman filter via Gaussian process quadrature with derivative evaluations.
+"""
+
+
+class ExtendedKalmanGPQD(GaussianInference):
     """
-    Base class for state-space inference algorithms, which assume that the state and measurement variables are jointly
-    Student's t-distributed.
+    Extended Kalman filter and smoother with a moment transform based on single-point Gaussian process quadrature with
+    derivative observations and RBF kernel.
 
     Parameters
     ----------
-    dof : float
-        Degree of freedom parameter of the filtered density.
+    sys : GaussianStateSpaceModel
+        State-space model to perform inference on. Needs to have Jacobians implemented.
 
-    fixed_dof : bool
-        If `True`, DOF will be fixed for all time steps, which preserves the heavy-tailed behaviour of the filter.
-        If `False`, DOF will be increasing after each measurement update, which means the heavy-tailed behaviour is
-        not preserved and therefore converges to a Gaussian filter.
+    alpha : float, optional
+        Scaling parameter of the RBF kernel.
 
-    Notes
-    -----
-    Even though Student's t distribution is not parametrized by the covariance matrix like the Gaussian,
-    the filter still produces mean and covariance of the state.
-
+    el : float, optional
+        Input scaling parameter (a.k.a. horizontal length-scale) of the RBF kernel.
     """
-
-    def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas, dof=4.0, fixed_dof=True):
-        # make sure initial state and noises are Student RVs
-        if not isinstance(mod_dyn.init_rv, StudentRV):
-            ValueError("Initial state is not Student RV.")
-        if not isinstance(mod_dyn.noise_rv, StudentRV):
-            ValueError("Process noise is not Student RV.")
-        if not isinstance(mod_meas.noise_rv, StudentRV):
-            ValueError("Measurement noise is not Student RV.")
-        if dof <= 2.0:
-            dof = 4.0
-            warnings.warn("You supplied invalid DoF (must be > 2). Setting to dof=4.")
-
-        # extract SSM parameters  # TODO get_stats() returns scale mat., convert it to cov. mat.
-        self.x0_mean, self.x0_cov, self.x0_dof = mod_dyn.init_rv.get_stats()
-        # self.x0_cov = (self.x0_dof/(self.x0_dof-2)) * self.x0_cov
-        # initial filtered statistics are the initial state statistics
-        self.x_mean_fi, self.x_cov_fi, self.dof_fi = self.x0_mean, self.x0_cov, self.x0_dof
-
-        # state noise statistics
-        self.q_mean, self.q_cov, self.q_dof = mod_dyn.noise_rv.get_stats()
-        self.q_gain = mod_dyn.noise_gain
-
-        # measurement noise statistics
-        self.r_mean, self.r_cov, self.r_dof = mod_meas.noise_rv.get_stats()
-
-        # scale matrix variables
-        scale = (dof - 2)/dof
-        self.x_smat_fi = scale * self.x_cov_fi  # turn initial covariance into initial scale matrix
-        self.q_smat = scale * self.q_cov
-        self.r_smat = scale * self.r_cov
-        self.x_smat_pr, self.y_smat_pr, self.xy_smat = None, None, None
-
-        self.dof = dof
-        self.fixed_dof = fixed_dof
-
-        super(StudentInference, self).__init__(mod_dyn, mod_meas, tf_dyn, tf_meas)
-
-    def reset(self):
-        """Reset internal variables and flags."""
-        self.x_mean_fi, self.x_cov_fi, self.dof_fi = self.x0_mean, self.x0_cov, self.x0_dof
-        scale = (self.dof - 2) / self.dof
-        self.x_smat_fi = scale * self.x_cov_fi
-        self.x_smat_pr, self.y_smat_pr, self.xy_smat = None, None, None
-        super(StudentInference, self).reset()
-
-    def _time_update(self, time, theta_dyn=None, theta_obs=None):
-        """
-        Time update for Studentian filters and smoothers, computing predictive moments of state and measurement.
-
-        Parameters
-        ----------
-        time : int
-            Time step. Important for t-variant systems.
-
-        theta_dyn : ndarray
-            Parameters of the moment transform computing the predictive state moments.
-
-        theta_obs : ndarray
-            Parameters of the moment transform computing the predictive measurement moments.
-        """
-
-        if self.fixed_dof:  # fixed-DOF version
-
-            # pick the smallest DOF
-            dof_pr = np.min((self.dof_fi, self.q_dof, self.r_dof))
-
-            # rescale filtered scale matrix?
-            scale = (dof_pr - 2) / dof_pr
-            # self.x_smat_fi = self.x_smat_fi * scale * self.dof_fi / (self.dof_fi - 2)
-
-        else:  # increasing DOF version
-            scale = (self.dof - 2) / self.dof
-
-        # in non-additive case, augment mean and covariance
-        mean = self.x_mean_fi if self.mod_dyn.noise_additive else np.hstack((self.x_mean_fi, self.q_mean))
-        smat = self.x_smat_fi if self.mod_dyn.noise_additive else block_diag(self.x_smat_fi, self.q_smat)
-        assert mean.ndim == 1 and smat.ndim == 2
-
-        # predicted state statistics
-        # TODO: make the moment transforms take covariance matrix (instead of scale)
-        self.x_mean_pr, self.x_cov_pr, self.xx_cov = self.tf_dyn.apply(self.mod_dyn.dyn_eval, mean, smat,
-                                                                       np.atleast_1d(time), theta_dyn)
-        # predicted covariance -> predicted scale matrix
-        self.x_smat_pr = scale * self.x_cov_pr
-
-        if self.mod_dyn.noise_additive:
-            self.x_cov_pr += self.q_gain.dot(self.q_cov).dot(self.q_gain.T)
-            self.x_smat_pr += self.q_gain.dot(self.q_smat).dot(self.q_gain.T)
-
-        # in non-additive case, augment mean and covariance
-        mean = self.x_mean_pr if self.mod_meas.noise_additive else np.hstack((self.x_mean_pr, self.r_mean))
-        smat = self.x_smat_pr if self.mod_meas.noise_additive else block_diag(self.x_smat_pr, self.r_smat)
-        assert mean.ndim == 1 and smat.ndim == 2
-
-        # predicted measurement statistics
-        self.y_mean_pr, self.y_cov_pr, self.xy_cov = self.tf_meas.apply(self.mod_meas.meas_eval, mean, smat,
-                                                                        np.atleast_1d(time), theta_obs)
-        # turn covariance to scale matrix
-        self.y_smat_pr = scale * self.y_cov_pr
-        self.xy_smat = scale * self.xy_cov
-
-        # in additive case, noise covariances need to be added
-        if self.mod_meas.noise_additive:
-            self.y_cov_pr += self.r_cov
-            self.y_smat_pr += self.r_smat
-
-        # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)
-        self.xy_cov = self.xy_cov[:, :self.mod_dyn.dim_in]
-        self.xx_cov = self.xx_cov[:, :self.mod_dyn.dim_in]
-        self.xy_smat = self.xy_smat[:, :self.mod_dyn.dim_in]
-
-    def _measurement_update(self, y, time=None):
-        """
-        Measurement update for Studentian filters, which takes predictive state and measurement moments and produces
-        filtered state mean and covariance.
-
-        Parameters
-        ----------
-        y : (dim, ) ndarray
-            Measurement vector.
-
-        time : int
-            Time step. Important for t-variant systems.
-
-        Notes
-        -----
-        Implements general Studentian filter measurement update.
-        """
-
-        # scale the covariance matrices
-        # scale = (self.dof - 2) / self.dof
-        # self.y_cov_pr *= scale
-        # self.xy_cov *= scale
-
-        # Kalman update
-        gain = cho_solve(cho_factor(self.y_smat_pr), self.xy_smat).T
-        self.x_mean_fi = self.x_mean_pr + gain.dot(y - self.y_mean_pr)
-        # FIXME: this isn't covariance (shouldn't be saved in x_cov_fi)
-        self.x_cov_fi = self.x_smat_pr - gain.dot(self.y_smat_pr).dot(gain.T)
-
-        # filtered covariance to filtered scale matrix
-        # delta = cho_solve(cho_factor(self.y_smat_pr), y - self.y_mean_pr)
-        delta = la.solve(la.cholesky(self.y_smat_pr), y - self.y_mean_pr)
-        scale = (self.dof + delta.T.dot(delta)) / (self.dof + self.mod_meas.dim_out)
-        self.x_smat_fi = scale * self.x_cov_fi
-
-        # update degrees of freedom
-        self.dof_fi += self.mod_meas.dim_out
-
-    def _smoothing_update(self):
-        # Student smoother has not been developed yet.
-        pass
-
-
-class FullySymmetricStudent(StudentInference):
-    """
-    Student filter using the fully-symmetric moment transforms from [1]_.
-
-    dyn : TransitionModel
-        Transition model defining system dynamics with Student distributed noises and initial conditions.
-
-    obs : MeasurementModel
-        Measurement model with Student distributed noise.
-
-    degree : int, optional
-        Degree of the fully-symmetric quadrature rule. Degrees 3 and 5 implemented.
-
-    kappa : float, optional
-        Scaling parameter of the sigma-points of the quadrature rule.
-
-    dof : float, optional
-        Degrees of freedom of that the Student filter will maintain (on each measurement update) if `fixed_dof=True`.
-
-    fixed_dof : bool, optional
-        If `True` the filter will maintain degrees of freedom on a fixed value given by `dof`. This option preserves
-        the heavy-tailed behavior. If `False`, the degrees of freedom of the filtered posterior will increase with each
-        measurement update and hence the asymptotic behavior of the Student filter will be identical to that of the
-        Kalman filter (the heavy-tailed behaviour is lost).
-
-    References
-    ----------
-    .. [1] Tronarp, F. and Hostettler, R. and Särkkä, S. Sigma-point Filtering for Nonlinear Systems with Non-additive
-           Heavy-tailed Noise, 19th International Conference on Information Fusion, 2016, 1859-1866
-    """
-
-    def __init__(self, dyn, obs, degree=3, kappa=None, dof=4.0, fixed_dof=True):
-        dyn_dof = np.min((dyn.init_rv.dof, dyn.noise_rv.dof))
-        obs_dof = np.min((dyn_dof, obs.noise_rv.dof))
-        t_dyn = FullySymmetricStudentTransform(dyn.dim_in, degree, kappa, dyn_dof)
-        t_obs = FullySymmetricStudentTransform(obs.dim_in, degree, kappa, obs_dof)
-        super(FullySymmetricStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
-
-
-class TPQStudent(StudentInference):
-    """
-    Student's t-process quadrature Student filter (TPQSF, see [1]_) with fully-symmetric sigma-points (see [3]_).
-
-    Parameters
-    ----------
-    dyn : TransitionModel
-        Transition model defining system dynamics with Student distributed noises and initial conditions.
-
-    obs : MeasurementModel
-        Measurement model with Student distributed noise.
-
-    kern_par_dyn : ndarray
-        Kernel parameters for TPQ transformation of the state moments.
-
-    kern_par_obs : ndarray
-        Kernel parameters for TPQ transformation of the measurement moments.
-
-    point_par : dict, optional
-        Hyper-parameters of the sigma-point set.
-
-    dof : float, optional
-        Desired degrees of freedom during the filtering process.
-
-    dof_tp : float, optional
-        Degrees of freedom of the Student's t-regression model. TODO: could be merged with `fixed_dof`.
-
-    fixed_dof : bool, optional
-        Fix degrees of freedom during filtering. If `True`, preserves the heavy-tailed behavior of the Student
-        filter with increasing time steps. If `False`, the Student filter measurement update rule effectively becomes
-        identical to the Kalman filter with increasing number of processed measurements.
-
-    References
-    ----------
-    .. [1] Prüher, J.; Tronarp, F.; Karvonen, T.; Särkkä, S. and Straka, O. Student-t Process Quadratures for
-           Filtering of Non-linear Systems with Heavy-tailed Noise, 20th International Conference on Information
-           Fusion, 2017 , 1-8
-
-    .. [2] Tronarp, F. and Hostettler, R. and Särkkä, S. Sigma-point Filtering for Nonlinear Systems with Non-additive
-           Heavy-tailed Noise, 19th International Conference on Information Fusion, 2016, 1859-1866
-
-    .. [3] J. McNamee and F. Stenger, Construction of fully symmetric numerical integration formulas,
-           Numerische Mathematik, vol. 10, pp. 327–344, 1967
-    """
-
-    def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, point_par=None, dof=4.0, fixed_dof=True, dof_tp=4.0):
-        # degrees of freedom for SSM noises
-        assert isinstance(dyn.init_rv, StudentRV) and isinstance(dyn.noise_rv, StudentRV)
-        q_dof, r_dof = dyn.noise_rv.dof, obs.noise_rv.dof
-
-        # add DOF of the noises to the sigma-point parameters
-        if point_par is None:
-            point_par = dict()
-        point_par_dyn = point_par.copy()
-        point_par_obs = point_par.copy()
-        point_par_dyn.update({'dof': q_dof})
-        point_par_obs.update({'dof': r_dof})
-        # TODO: why is q_dof parameter for unit-points of the dynamics?
-        # TODO: finish fixing DOFs, DOF for TPQ and DOF for the filtered state.
-
-        t_dyn = StudentTProcessTransform(dyn.dim_in, 1, kern_par_dyn, 'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
-        t_obs = StudentTProcessTransform(obs.dim_in, 1, kern_par_obs, 'rbf-student', 'fs', point_par_obs, nu=dof_tp)
-        super(TPQStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
-
-
-class TPQMOStudent(StudentInference):
-    """
-    Student's t-process quadrature Student filter (TPQSF, see [1]_) with fully-symmetric sigma-points (see [3]_) and
-    multi-output Student's t-process regression model.
-
-    Parameters
-    ----------
-    ssm : StudentStateSpaceModel
-        Studentian state-space model to perform inference on.
-
-    ker_par_dyn : ndarray
-        Kernel parameters for TPQ transformation of the state moments.
-
-    ker_par_obs : ndarray
-        Kernel parameters for TPQ transformation of the measurement moments.
-
-    point_par : dict, optional
-        Hyper-parameters of the sigma-point set.
-
-    dof : float, optional
-        Desired degrees of freedom during the filtering process.
-
-    dof_tp : float, optional
-        Degrees of freedom of the Student's t-regression model. TODO: could be merged with `fixed_dof`.
-
-    fixed_dof : bool, optional
-        Fix degrees of freedom during filtering. If `True`, preserves the heavy-tailed behavior of the Student
-        filter with increasing time steps. If `False`, the Student filter measurement update rule effectively becomes
-        identical to the Kalman filter with increasing number of processed measurements.
-
-    Notes
-    -----
-    Just experimental, it doesn't work! Frequently fails with loss of positive definiteness.
-
-    References
-    ----------
-    .. [1] Prüher, J.; Tronarp, F.; Karvonen, T.; Särkkä, S. and Straka, O. Student-t Process Quadratures for
-           Filtering of Non-linear Systems with Heavy-tailed Noise, 20th International Conference on Information
-           Fusion, 2017 , 1-8
-
-    .. [2] Tronarp, F. and Hostettler, R. and Särkkä, S. Sigma-point Filtering for Nonlinear Systems with Non-additive
-           Heavy-tailed Noise, 19th International Conference on Information Fusion, 2016, 1859-1866
-
-    .. [3] J. McNamee and F. Stenger, Construction of fully symmetric numerical integration formulas,
-           Numerische Mathematik, vol. 10, pp. 327–344, 1967
-    """
-
     def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas):
         assert isinstance(mod_dyn, StateSpaceModel)
         nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
         nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
-
-        # degrees of freedom for SSM noises
-        q_dof, r_dof = mod_dyn.get_pars('q_dof', 'r_dof')
-
-        # add DOF of the noises to the sigma-point parameters
-        if point_par is None:
-            point_par = dict()
-        point_par_dyn = point_par
-        point_par_obs = point_par
-        point_par_dyn.update({'dof': q_dof})
-        point_par_obs.update({'dof': r_dof})
-
-        t_dyn = TPQMO(nq, mod_dyn.xD, ker_par_dyn, 'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
-        t_obs = TPQMO(nr, mod_dyn.zD, ker_par_obs, 'rbf-student', 'fs', point_par_obs, nu=dof_tp)
-        super(TPQMOStudent, self).__init__(mod_dyn, mod_meas, t_dyn, t_obs)
+        tf = TaylorGPQDTransform(nq, alpha, el)
+        th = TaylorGPQDTransform(nr, alpha, el)
+        super(ExtendedKalmanGPQD, self).__init__(mod_dyn, mod_meas, tf, th)
