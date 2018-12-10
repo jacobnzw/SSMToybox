@@ -258,8 +258,8 @@ class StudentInferenceTest(TestCase):
         """
         Test fully-symmetric SF.
         """
+
         for ssm_name, data in self.ssm.items():
-            dim = data['x'].shape[0]
             filt = FullySymmetricStudent(data['dyn'], data['obs'])
             filt.forward_pass(data['y'][..., 0])
 
