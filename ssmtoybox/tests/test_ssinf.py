@@ -241,85 +241,17 @@ class StudentInferenceTest(TestCase):
         y = obs.simulate_measurements(x)
         cls.ssm.update({'cv': {'dyn': dyn, 'obs': obs, 'x': x, 'y': y}})
 
-    @staticmethod
-    def rbf_student_mc_weights(x, kern, num_samples, num_batch):
-        # MC approximated BQ weights using RBF kernel and Student density
-        # MC computed by batches, because without batches we would run out of memory for large sample sizes
-        from ssmtoybox.bq.bqkern import RBFStudent
-        from ssmtoybox.utils import multivariate_t
-        from numpy import newaxis as na
-
-        assert isinstance(kern, RBFStudent)
-        # kernel parameters and input dimensionality
-        par = kern.par
-        dim, num_pts = x.shape
-
-        # inverse kernel matrix
-        iK = kern.eval_inv_dot(kern.par, x, scaling=False)
-        mean, scale, dof = np.zeros((dim,)), np.eye(dim), kern.dof
-
-        # compute MC estimates by batches
-        num_samples_batch = num_samples // num_batch
-        q_batch = np.zeros((num_pts, num_batch,))
-        Q_batch = np.zeros((num_pts, num_pts, num_batch))
-        R_batch = np.zeros((dim, num_pts, num_batch))
-        for ib in range(num_batch):
-            # multivariate t samples
-            x_samples = multivariate_t(mean, scale, dof, num_samples_batch).T
-
-            # evaluate kernel
-            k_samples = kern.eval(par, x_samples, x, scaling=False)
-            kk_samples = k_samples[:, na, :] * k_samples[..., na]
-            xk_samples = x_samples[..., na] * k_samples[na, ...]
-
-            # intermediate sums
-            q_batch[..., ib] = k_samples.sum(axis=0)
-            Q_batch[..., ib] = kk_samples.sum(axis=0)
-            R_batch[..., ib] = xk_samples.sum(axis=1)
-
-        # MC approximations == sum the sums divide by num_samples
-        c = 1 / num_samples
-        q = c * q_batch.sum(axis=-1)
-        Q = c * Q_batch.sum(axis=-1)
-        R = c * R_batch.sum(axis=-1)
-
-        # BQ moment transform weights
-        wm = q.dot(iK)
-        wc = iK.dot(Q).dot(iK)
-        wcc = R.dot(iK)
-        return wm, wc, wcc, Q
-
     def test_student_process_student(self):
         """
         Test t-Process Quadrature SF on a range of SSMs.
         """
-        # for ssm_name, data in self.ssm.items():
-        #     dim = data['x'].shape[0]
-        #     kerpar = np.atleast_2d(np.ones(dim + 1))
-        #     filt = TPQStudent(data['dyn'], data['obs'], kerpar, kerpar)
-        #     filt.forward_pass(data['y'][..., 0])
 
-        dyn = self.ssm['cv']['dyn']
-        obs = self.ssm['cv']['obs']
-        z = self.ssm['cv']['y']
-        kpar_dyn = np.array([[0.05, 100, 100, 100, 100]])
-        kpar_obs = np.array([[0.005, 10, 100, 10, 100]])
-        filt = TPQStudent(dyn, obs, kpar_dyn, kpar_obs, point_par={'kappa': 0.0})
-
-        # the weights of the TPQSF with RBF kernel need large number of MC samples (2M) to determine confidently
-        # np.random.seed(4)
-        # wm, wc, wcc, Q = self.rbf_student_mc_weights(filt.tf_dyn.model.points, filt.tf_dyn.model.kernel, int(2e6), 1000)
-        # filt.tf_dyn.wm, filt.tf_dyn.Wc, filt.tf_dyn.Wcc = wm, wc, wcc
-        # np.random.seed(4)
-        # wm, wc, wcc, Q = self.rbf_student_mc_weights(filt.tf_meas.model.points, filt.tf_meas.model.kernel, int(2e6), 1000)
-        # filt.tf_meas.wm, filt.tf_meas.Wc, filt.tf_meas.Wcc = wm, wc, wcc
-
-        # load data from TPQ_fusion branch for comparison
-        from scipy.io import loadmat
-        mat_dict = loadmat('cv_radar_simdata_100k_100mc.mat')
-        z = mat_dict['z']
-        print('Filtering ...')
-        filt.forward_pass(z[..., 0])
+        for ssm_name, data in self.ssm.items():
+            dim = data['x'].shape[0]
+            kerpar = np.atleast_2d(np.ones(dim + 1))
+            np.random.seed(1)  # for reproducibility reasons
+            filt = TPQStudent(data['dyn'], data['obs'], kerpar, kerpar)
+            filt.forward_pass(data['y'][..., 0])
 
     def test_fully_symmetric_student(self):
         """
