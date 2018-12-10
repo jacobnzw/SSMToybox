@@ -3,7 +3,8 @@ from unittest import TestCase
 import numpy as np
 import numpy.linalg as la
 
-from ssmtoybox.ssinf import GPQMKalman, GaussianProcessKalman, BayesSardKalman, TPQStudent, TPQKalman
+from ssmtoybox.ssinf import GPQMKalman, GaussianProcessKalman, BayesSardKalman, TPQStudent, TPQKalman, \
+    FullySymmetricStudent
 from ssmtoybox.ssinf import UnscentedKalman, ExtendedKalman, GaussHermiteKalman
 from ssmtoybox.ssmod import UNGMTransition, UNGMNATransition, Pendulum2DTransition, CoordinatedTurnTransition, \
     ReentryVehicle2DTransition, ConstantTurnRateSpeed, ConstantVelocity
@@ -257,7 +258,10 @@ class StudentInferenceTest(TestCase):
         """
         Test fully-symmetric SF.
         """
-        self.fail("Not implemented yet!")
+        for ssm_name, data in self.ssm.items():
+            dim = data['x'].shape[0]
+            filt = FullySymmetricStudent(data['dyn'], data['obs'])
+            filt.forward_pass(data['y'][..., 0])
 
 
 class GPQMarginalizedTest(TestCase):

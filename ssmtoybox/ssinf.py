@@ -7,7 +7,7 @@ from numpy import newaxis as na
 from ssmtoybox.ssmod import TransitionModel, MeasurementModel
 from ssmtoybox.bq.bqmtran import GaussianProcessTransform, GPQMO, StudentTProcessTransform, TPQMO, BayesSardTransform
 from ssmtoybox.mtran import MomentTransform, LinearizationTransform, TaylorGPQDTransform, \
-    SphericalRadialTransform, UnscentedTransform, GaussHermiteTransform, \
+    SphericalRadialTransform, UnscentedTransform, GaussHermiteTransform, FullySymmetricStudentTransform, \
     SphericalRadialTruncatedTransform, UnscentedTruncatedTransform, GaussHermiteTruncatedTransform
 from ssmtoybox.utils import StudentRV
 import warnings
@@ -1134,14 +1134,56 @@ class StudentInference(StateSpaceInference):
         pass
 
 
+class FullySymmetricStudent(StudentInference):
+    """
+    Student filter using the fully-symmetric moment transforms from [1]_.
+
+    dyn : TransitionModel
+        Transition model defining system dynamics with Student distributed noises and initial conditions.
+
+    obs : MeasurementModel
+        Measurement model with Student distributed noise.
+
+    degree : int, optional
+        Degree of the fully-symmetric quadrature rule. Degrees 3 and 5 implemented.
+
+    kappa : float, optional
+        Scaling parameter of the sigma-points of the quadrature rule.
+
+    dof : float, optional
+        Degrees of freedom of that the Student filter will maintain (on each measurement update) if `fixed_dof=True`.
+
+    fixed_dof : bool, optional
+        If `True` the filter will maintain degrees of freedom on a fixed value given by `dof`. This option preserves
+        the heavy-tailed behavior. If `False`, the degrees of freedom of the filtered posterior will increase with each
+        measurement update and hence the asymptotic behavior of the Student filter will be identical to that of the
+        Kalman filter (the heavy-tailed behaviour is lost).
+
+    References
+    ----------
+    .. [1] Tronarp, F. and Hostettler, R. and Särkkä, S. Sigma-point Filtering for Nonlinear Systems with Non-additive
+           Heavy-tailed Noise, 19th International Conference on Information Fusion, 2016, 1859-1866
+    """
+
+    def __init__(self, dyn, obs, degree=3, kappa=None, dof=4.0, fixed_dof=True):
+        dyn_dof = np.min((dyn.init_rv.dof, dyn.noise_rv.dof))
+        obs_dof = np.min((dyn_dof, obs.noise_rv.dof))
+        t_dyn = FullySymmetricStudentTransform(dyn.dim_in, degree, kappa, dyn_dof)
+        t_obs = FullySymmetricStudentTransform(obs.dim_in, degree, kappa, obs_dof)
+        super(FullySymmetricStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
+
+
 class TPQStudent(StudentInference):
     """
     Student's t-process quadrature Student filter (TPQSF, see [1]_) with fully-symmetric sigma-points (see [3]_).
 
     Parameters
     ----------
-    ssm : StudentStateSpaceModel
-        Studentian state-space model to perform inference on.
+    dyn : TransitionModel
+        Transition model defining system dynamics with Student distributed noises and initial conditions.
+
+    obs : MeasurementModel
+        Measurement model with Student distributed noise.
 
     kern_par_dyn : ndarray
         Kernel parameters for TPQ transformation of the state moments.
