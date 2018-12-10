@@ -22,28 +22,28 @@ class StateSpaceInference(metaclass=ABCMeta):
     mod_dyn : TransitionModel
         State transition model defining system dynamics.
 
-    mod_meas : MeasurementModel
+    mod_obs : MeasurementModel
         Measurement model describing the measurement formation process.
 
     tf_dyn : MomentTransform
         Moment transform for computing predictive state moments.
 
-    tf_meas : MomentTransform
+    tf_obs : MomentTransform
         Moment transform for computing predictive measurement moments.
 
     """
 
-    def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas):
+    def __init__(self, mod_dyn, mod_obs, tf_dyn, tf_obs):
 
         # state-space model of a dynamical system whose state is to be estimated
-        assert isinstance(mod_dyn, TransitionModel) and isinstance(mod_meas, MeasurementModel)
+        assert isinstance(mod_dyn, TransitionModel) and isinstance(mod_obs, MeasurementModel)
         self.mod_dyn = mod_dyn
-        self.mod_meas = mod_meas
+        self.mod_obs = mod_obs
 
         # separate moment transforms for system dynamics and measurement model
-        assert isinstance(tf_dyn, MomentTransform) and isinstance(tf_meas, MomentTransform)
+        assert isinstance(tf_dyn, MomentTransform) and isinstance(tf_obs, MomentTransform)
         self.tf_dyn = tf_dyn
-        self.tf_meas = tf_meas
+        self.tf_obs = tf_obs
 
         self.flags = {'filtered': False, 'smoothed': False}
         self.x_mean_pr, self.x_cov_pr, = None, None
@@ -215,21 +215,21 @@ class GaussianInference(StateSpaceInference):
 
     """
 
-    def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas):
+    def __init__(self, mod_dyn, mod_obs, tf_dyn, tf_obs):
 
         # dynamical system whose state is to be estimated
-        assert isinstance(mod_dyn, TransitionModel) and isinstance(mod_meas, MeasurementModel)
+        assert isinstance(mod_dyn, TransitionModel) and isinstance(mod_obs, MeasurementModel)
 
         # set initial condition mean and covariance, and noise covariances
         self.x0_mean, self.x0_cov = mod_dyn.init_rv.get_stats()
         self.q_mean, self.q_cov = mod_dyn.noise_rv.get_stats()
-        self.r_mean, self.r_cov = mod_meas.noise_rv.get_stats()
+        self.r_mean, self.r_cov = mod_obs.noise_rv.get_stats()
 
         self.G = mod_dyn.noise_gain
         # initial moments are taken to be the first filtered estimate
         self.x_mean_fi, self.x_cov_fi = self.x0_mean, self.x0_cov
 
-        super(GaussianInference, self).__init__(mod_dyn, mod_meas, tf_dyn, tf_meas)
+        super(GaussianInference, self).__init__(mod_dyn, mod_obs, tf_dyn, tf_obs)
 
     def reset(self):
         """Reset internal variables and flags."""
@@ -264,15 +264,15 @@ class GaussianInference(StateSpaceInference):
             self.x_cov_pr += self.G.dot(self.q_cov).dot(self.G.T)
 
         # in non-additive case, augment mean and covariance
-        mean = self.x_mean_pr if self.mod_meas.noise_additive else np.hstack((self.x_mean_pr, self.r_mean))
-        cov = self.x_cov_pr if self.mod_meas.noise_additive else block_diag(self.x_cov_pr, self.r_cov)
+        mean = self.x_mean_pr if self.mod_obs.noise_additive else np.hstack((self.x_mean_pr, self.r_mean))
+        cov = self.x_cov_pr if self.mod_obs.noise_additive else block_diag(self.x_cov_pr, self.r_cov)
         assert mean.ndim == 1 and cov.ndim == 2
 
         # apply moment transform to compute measurement mean, covariance
-        self.y_mean_pr, self.y_cov_pr, self.xy_cov = self.tf_meas.apply(self.mod_meas.meas_eval, mean, cov,
-                                                                        np.atleast_1d(time), theta_obs)
+        self.y_mean_pr, self.y_cov_pr, self.xy_cov = self.tf_obs.apply(self.mod_obs.meas_eval, mean, cov,
+                                                                       np.atleast_1d(time), theta_obs)
         # in additive case, noise covariances need to be added
-        if self.mod_meas.noise_additive:
+        if self.mod_obs.noise_additive:
             self.y_cov_pr += self.r_cov
 
         # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)
@@ -568,13 +568,13 @@ class StudentInference(StateSpaceInference):
 
     """
 
-    def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas, dof=4.0, fixed_dof=True):
+    def __init__(self, mod_dyn, mod_obs, tf_dyn, tf_obs, dof=4.0, fixed_dof=True):
         # make sure initial state and noises are Student RVs
         if not isinstance(mod_dyn.init_rv, StudentRV):
             ValueError("Initial state is not Student RV.")
         if not isinstance(mod_dyn.noise_rv, StudentRV):
             ValueError("Process noise is not Student RV.")
-        if not isinstance(mod_meas.noise_rv, StudentRV):
+        if not isinstance(mod_obs.noise_rv, StudentRV):
             ValueError("Measurement noise is not Student RV.")
         if dof <= 2.0:
             dof = 4.0
@@ -591,7 +591,7 @@ class StudentInference(StateSpaceInference):
         self.q_gain = mod_dyn.noise_gain
 
         # measurement noise statistics
-        self.r_mean, self.r_cov, self.r_dof = mod_meas.noise_rv.get_stats()
+        self.r_mean, self.r_cov, self.r_dof = mod_obs.noise_rv.get_stats()
 
         # scale matrix variables
         scale = (dof - 2)/dof
@@ -603,7 +603,7 @@ class StudentInference(StateSpaceInference):
         self.dof = dof
         self.fixed_dof = fixed_dof
 
-        super(StudentInference, self).__init__(mod_dyn, mod_meas, tf_dyn, tf_meas)
+        super(StudentInference, self).__init__(mod_dyn, mod_obs, tf_dyn, tf_obs)
 
     def reset(self):
         """Reset internal variables and flags."""
@@ -658,19 +658,19 @@ class StudentInference(StateSpaceInference):
             self.x_smat_pr += self.q_gain.dot(self.q_smat).dot(self.q_gain.T)
 
         # in non-additive case, augment mean and covariance
-        mean = self.x_mean_pr if self.mod_meas.noise_additive else np.hstack((self.x_mean_pr, self.r_mean))
-        smat = self.x_smat_pr if self.mod_meas.noise_additive else block_diag(self.x_smat_pr, self.r_smat)
+        mean = self.x_mean_pr if self.mod_obs.noise_additive else np.hstack((self.x_mean_pr, self.r_mean))
+        smat = self.x_smat_pr if self.mod_obs.noise_additive else block_diag(self.x_smat_pr, self.r_smat)
         assert mean.ndim == 1 and smat.ndim == 2
 
         # predicted measurement statistics
-        self.y_mean_pr, self.y_cov_pr, self.xy_cov = self.tf_meas.apply(self.mod_meas.meas_eval, mean, smat,
-                                                                        np.atleast_1d(time), theta_obs)
+        self.y_mean_pr, self.y_cov_pr, self.xy_cov = self.tf_obs.apply(self.mod_obs.meas_eval, mean, smat,
+                                                                       np.atleast_1d(time), theta_obs)
         # turn covariance to scale matrix
         self.y_smat_pr = scale * self.y_cov_pr
         self.xy_smat = scale * self.xy_cov
 
         # in additive case, noise covariances need to be added
-        if self.mod_meas.noise_additive:
+        if self.mod_obs.noise_additive:
             self.y_cov_pr += self.r_cov
             self.y_smat_pr += self.r_smat
 
@@ -711,11 +711,11 @@ class StudentInference(StateSpaceInference):
         # filtered covariance to filtered scale matrix
         # delta = cho_solve(cho_factor(self.y_smat_pr), y - self.y_mean_pr)
         delta = la.solve(la.cholesky(self.y_smat_pr), y - self.y_mean_pr)
-        scale = (self.dof + delta.T.dot(delta)) / (self.dof + self.mod_meas.dim_out)
+        scale = (self.dof + delta.T.dot(delta)) / (self.dof + self.mod_obs.dim_out)
         self.x_smat_fi = scale * self.x_cov_fi
 
         # update degrees of freedom
-        self.dof_fi += self.mod_meas.dim_out
+        self.dof_fi += self.mod_obs.dim_out
 
     def _smoothing_update(self):
         # Student smoother has not been developed yet.
@@ -951,13 +951,13 @@ class MultiOutputGaussianProcessKalman(GaussianInference):
 
     """
 
-    def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas):
+    def __init__(self, mod_dyn, mod_obs, tf_dyn, tf_obs):
         assert isinstance(mod_dyn, StateSpaceModel)
         nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
         nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
         t_dyn = GPQMO(nq, mod_dyn.xD, ker_par_dyn, kernel, points, point_par)
         t_obs = GPQMO(nr, mod_dyn.zD, ker_par_obs, kernel, points, point_par)
-        super(MultiOutputGaussianProcessKalman, self).__init__(mod_dyn, mod_meas, t_dyn, t_obs)
+        super(MultiOutputGaussianProcessKalman, self).__init__(mod_dyn, mod_obs, t_dyn, t_obs)
 
 
 class MultiOutputStudentProcessStudent(StudentInference):
@@ -1007,7 +1007,7 @@ class MultiOutputStudentProcessStudent(StudentInference):
            Numerische Mathematik, vol. 10, pp. 327–344, 1967
     """
 
-    def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas):
+    def __init__(self, mod_dyn, mod_obs, tf_dyn, tf_obs):
         assert isinstance(mod_dyn, StateSpaceModel)
         nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
         nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
@@ -1025,7 +1025,7 @@ class MultiOutputStudentProcessStudent(StudentInference):
 
         t_dyn = TPQMO(nq, mod_dyn.xD, ker_par_dyn, 'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
         t_obs = TPQMO(nr, mod_dyn.zD, ker_par_obs, 'rbf-student', 'fs', point_par_obs, nu=dof_tp)
-        super(MultiOutputStudentProcessStudent, self).__init__(mod_dyn, mod_meas, t_dyn, t_obs)
+        super(MultiOutputStudentProcessStudent, self).__init__(mod_dyn, mod_obs, t_dyn, t_obs)
 
 
 """
@@ -1048,7 +1048,7 @@ class MarginalInference(GaussianInference):
     tf_dyn : MomentTransform
         Moment transform for computing predictive state moments.
 
-    tf_meas : MomentTransform
+    tf_obs : MomentTransform
         Moment transform for computing predictive measurement moments.
 
     par_mean : ndarray
@@ -1067,8 +1067,8 @@ class MarginalInference(GaussianInference):
     Purely for experimental purposes!
     """
 
-    def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas):
-        super(MarginalInference, self).__init__(mod_dyn, mod_meas, tf_dyn, tf_meas)
+    def __init__(self, mod_dyn, mod_obs, tf_dyn, tf_obs):
+        super(MarginalInference, self).__init__(mod_dyn, mod_obs, tf_dyn, tf_obs)
 
         # Number of parameters for each moment transform and total number of parameters
         # TODO: Generalize, transform should provide number of parameters (sum of kernel, model and point parameters)
@@ -1209,7 +1209,7 @@ class MarginalInference(GaussianInference):
         assert mean.ndim == 1 and cov.ndim == 2
 
         # apply moment transform to compute measurement mean, covariance
-        mean, cov, ccov = self.tf_meas.apply(self.ssm.meas_eval, mean, cov, self.ssm.par_fcn(k), theta_obs)
+        mean, cov, ccov = self.tf_obs.apply(self.ssm.meas_eval, mean, cov, self.ssm.par_fcn(k), theta_obs)
         if self.ssm.r_additive:
             cov += self.r_cov
 
@@ -1294,13 +1294,13 @@ class MarginalizedGaussianProcessKalman(MarginalInference):
     -----
     For experimental purposes only. Likely a dead-end!
     """
-    def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas):
+    def __init__(self, mod_dyn, mod_obs, tf_dyn, tf_obs):
         assert isinstance(mod_dyn, StateSpaceModel)
         nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
         nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
         t_dyn = GaussianProcessTransform(nq, 1, kernel, points, point_par=point_hyp)
         t_obs = GaussianProcessTransform(nr, 1, kernel, points, point_par=point_hyp)
-        super(MarginalizedGaussianProcessKalman, self).__init__(mod_dyn, mod_meas, t_dyn, t_obs)
+        super(MarginalizedGaussianProcessKalman, self).__init__(mod_dyn, mod_obs, t_dyn, t_obs)
 
 
 """
@@ -1326,10 +1326,10 @@ class ExtendedKalmanGPQD(GaussianInference):
     el : float, optional
         Input scaling parameter (a.k.a. horizontal length-scale) of the RBF kernel.
     """
-    def __init__(self, mod_dyn, mod_meas, tf_dyn, tf_meas):
+    def __init__(self, mod_dyn, mod_obs, tf_dyn, tf_obs):
         assert isinstance(mod_dyn, StateSpaceModel)
         nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
         nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
         tf = TaylorGPQDTransform(nq, alpha, el)
         th = TaylorGPQDTransform(nr, alpha, el)
-        super(ExtendedKalmanGPQD, self).__init__(mod_dyn, mod_meas, tf, th)
+        super(ExtendedKalmanGPQD, self).__init__(mod_dyn, mod_obs, tf, th)
