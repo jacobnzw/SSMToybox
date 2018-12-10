@@ -1,10 +1,10 @@
-from ssmtoybox.mtran import MonteCarloTransform, UnscentedTransform, UnscentedTruncatedTransform
+from ssmtoybox.mtran import MonteCarloTransform, UnscentedTransform, TruncatedUnscentedTransform
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from ssmtoybox.mtran import MomentTransform
 from ssmtoybox.utils import ellipse_points, symmetrized_kl_divergence, squared_error, log_cred_ratio, mse_matrix
-from ssmtoybox.ssinf import UnscentedTruncKalman, UnscentedKalman
+from ssmtoybox.ssinf import TruncatedUnscentedKalman, UnscentedKalman
 from ssmtoybox.ssmod import ReentryVehicleRadarTrackingGaussSSM as ReentryRadarModel
 from ssmtoybox.dynsys import ReentryVehicleRadarTrackingGaussSystem as ReentryRadarSystem
 
@@ -206,5 +206,5 @@ def ukf_trunc_demo(mc_sims=50):
 
 
 if __name__ == '__main__':
-    # mt_trunc_demo(UnscentedTruncatedTransform, UnscentedTransform, [2, 5, 10, 15], kappa=0, full_input_cov=True)
+    # mt_trunc_demo(TruncatedUnscentedTransform, UnscentedTransform, [2, 5, 10, 15], kappa=0, full_input_cov=True)
     ukf_trunc_demo(mc_sims=100)

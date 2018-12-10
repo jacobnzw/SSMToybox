@@ -3,7 +3,6 @@ import unittest
 import numpy as np
 import matplotlib.pyplot as plt
 
-from ssmtoybox.ssinf import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GaussianProcessKalman, TPQKalman
 from ssmtoybox.ssmod import UNGMTransition, UNGMMeasurement, UNGMNATransition, UNGMNAMeasurement, \
     Pendulum2DTransition, Pendulum2DMeasurement, ConstantTurnRateSpeed, Radar2DMeasurement, ReentryVehicle2DTransition
 from ssmtoybox.utils import GaussRV

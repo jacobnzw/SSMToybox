@@ -1,7 +1,7 @@
 from unittest import TestCase
 
 import numpy as np
-from ssmtoybox.mtran import MonteCarloTransform, SphericalRadialTruncatedTransform, FullySymmetricStudentTransform
+from ssmtoybox.mtran import MonteCarloTransform, TruncatedSphericalRadialTransform, FullySymmetricStudentTransform
 from ssmtoybox.ssmod import UNGMGaussSSM
 
 
@@ -24,7 +24,7 @@ def cartesian2polar(x, pars, dx=False):
 class SigmaPointTruncTest(TestCase):
     def test_apply(self):
         d, d_eff = 5, 2
-        t = SphericalRadialTruncatedTransform(d, d_eff)
+        t = TruncatedSphericalRadialTransform(d, d_eff)
         f = cartesian2polar
         mean, cov = np.zeros(d), np.eye(d)
         t.apply(f, mean, cov, None)

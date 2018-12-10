@@ -8,7 +8,7 @@ from ssmtoybox.ssmod import TransitionModel, MeasurementModel
 from ssmtoybox.bq.bqmtran import GaussianProcessTransform, GPQMO, StudentTProcessTransform, TPQMO, BayesSardTransform
 from ssmtoybox.mtran import MomentTransform, LinearizationTransform, TaylorGPQDTransform, \
     SphericalRadialTransform, UnscentedTransform, GaussHermiteTransform, FullySymmetricStudentTransform, \
-    SphericalRadialTruncatedTransform, UnscentedTruncatedTransform, GaussHermiteTruncatedTransform
+    TruncatedSphericalRadialTransform, TruncatedUnscentedTransform, TruncatedGaussHermiteTransform
 from ssmtoybox.utils import StudentRV
 import warnings
 
@@ -849,7 +849,7 @@ class TruncatedUnscentedKalman(GaussianInference):
         nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
         nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
         tf = UnscentedTransform(nq, kappa=kappa, alpha=alpha, beta=beta)
-        th = UnscentedTruncatedTransform(nr, mod_dyn.rD, kappa=kappa, alpha=alpha, beta=beta)
+        th = TruncatedUnscentedTransform(nr, mod_dyn.rD, kappa=kappa, alpha=alpha, beta=beta)
         super(TruncatedUnscentedKalman, self).__init__(mod_dyn, mod_meas, tf, th)
 
 
@@ -868,7 +868,7 @@ class TruncatedCubatureKalman(GaussianInference):
         nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
         nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
         tf = SphericalRadialTransform(nq)
-        th = SphericalRadialTruncatedTransform(nr, mod_dyn.rD)
+        th = TruncatedSphericalRadialTransform(nr, mod_dyn.rD)
         super(TruncatedCubatureKalman, self).__init__(mod_dyn, mod_meas, tf, th)
 
 
@@ -890,7 +890,7 @@ class TruncatedGaussHermiteKalman(GaussianInference):
         nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
         nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
         tf = GaussHermiteTransform(nq, degree=deg)
-        th = GaussHermiteTruncatedTransform(nr, mod_dyn.rD, degree=deg)
+        th = TruncatedGaussHermiteTransform(nr, mod_dyn.rD, degree=deg)
         super(TruncatedGaussHermiteKalman, self).__init__(mod_dyn, mod_meas, tf, th)
 
 

@@ -59,56 +59,6 @@ class LinearizationTransform(MomentTransform):
         return mean_f, cov_f, cov_fx
 
 
-class TaylorOrder2Transform(MomentTransform):
-    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
-        pass
-
-
-class TaylorGPQDTransform(MomentTransform):
-    """Transformation equivalent to GPQ+D w/ RBF kernel, single sigma-point at zero and substitution x = m + z in the
-    integral. For el --> infinity the transform converges to LinearizationTransform transform.
-    """
-
-    def __init__(self, dim, alpha=1.0, el=1.0):
-        self.dim = dim
-        self.alpha = alpha
-        self.ell = el
-        self.Lam = np.diag(el ** 2 * np.ones(dim))
-        self.iLam = np.diag(el ** -2 * np.ones(dim))
-        self.eye_d = np.eye(dim)
-        # lists for logging average model variance and posterior integral variance
-        self.mvar_list = []
-        self.ivar_list = []
-
-    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
-        # TODO: equations can be optimized further
-        # wm = la.det(cov.dot(self.iLam) + self.eye_d) ** -0.5
-        wm = la.det(self.iLam.dot(cov) + self.eye_d) ** -0.5
-        fm = f(mean, fcn_pars)
-        mean_f = wm * fm
-        jacobian_f = f(mean, fcn_pars, dx=True)
-        jacobian_f = jacobian_f.reshape(len(mean_f), self.dim)
-        # wc = la.det(cov.dot(2 * self.iLam) + self.eye_d) ** -0.5
-        wc = la.det(2 * self.iLam.dot(cov) + self.eye_d) ** -0.5
-        Wc = 0.5 * self.Lam.dot(la.inv(0.5 * self.Lam + cov)).dot(cov)
-        model_var = self.alpha ** 2 - self.alpha ** 2 * wc * (1 + np.trace(Wc.dot(self.iLam)))
-        integ_var = self.alpha ** 2 * wc - wm ** 2
-        self.mvar_list.append(model_var)
-        self.ivar_list.append(integ_var)
-        cov_f = wc * (np.outer(fm, fm) + jacobian_f.dot(Wc).dot(jacobian_f.T)) - np.outer(mean_f, mean_f) + model_var
-        cov_fx = self.Lam.dot(la.inv(self.Lam + cov)).dot(cov).dot(jacobian_f.T)
-        return mean_f, cov_f, cov_fx
-
-
-class LinearTransform(MomentTransform):
-    # would have to be implemented via first order Taylor, because for linear f(x) = Ax and h(x) = Hx,
-    # the Jacobians would be A and H, which mean TaylorFirstOrder is exact inference for linear functions and,
-    # in a sense, Kalman filter does not have to be explicitly implemented, because the ExtendedKalman becomes
-    # Kalman for linear f() and h().
-    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
-        pass
-
-
 class MonteCarloTransform(MomentTransform):
     """Monte Carlo transform.
 
@@ -142,6 +92,11 @@ class MonteCarloTransform(MomentTransform):
     @staticmethod
     def unit_sigma_points(dim, n):
         return np.random.multivariate_normal(np.zeros(dim), np.eye(dim), size=n).T
+
+
+"""
+Sigma-point transforms.
+"""
 
 
 class SigmaPointTransform(MomentTransform):
@@ -623,7 +578,14 @@ class FullySymmetricStudentTransform(SigmaPointTransform):
         return sp
 
 
-class SigmaPointTruncTransform(SigmaPointTransform):
+"""
+Warning: EXPERIMENTAL!
+
+'Truncated' sigma-point transforms.
+"""
+
+
+class TruncatedSigmaPointTransform(SigmaPointTransform):
     """
     Sigma-point transform respecting effective input dimensionality.
 
@@ -660,7 +622,7 @@ class SigmaPointTruncTransform(SigmaPointTransform):
         return mean_f, cov_f, cov_fx
 
 
-class SphericalRadialTruncatedTransform(SigmaPointTruncTransform):
+class TruncatedSphericalRadialTransform(TruncatedSigmaPointTransform):
     def __init__(self, dim, dim_eff):
         self.dim, self.dim_eff = dim, dim_eff
         # weights & points for transformed mean and covariance
@@ -672,7 +634,7 @@ class SphericalRadialTruncatedTransform(SigmaPointTruncTransform):
         self.unit_sp = SphericalRadialTransform.unit_sigma_points(dim)
 
 
-class UnscentedTruncatedTransform(SigmaPointTruncTransform):
+class TruncatedUnscentedTransform(TruncatedSigmaPointTransform):
     def __init__(self, dim, dim_eff, kappa=None, alpha=1.0, beta=2.0):
         self.dim, self.dim_eff = dim, dim_eff
         # weights & points for transformed mean and covariance
@@ -684,7 +646,7 @@ class UnscentedTruncatedTransform(SigmaPointTruncTransform):
         self.unit_sp = UnscentedTransform.unit_sigma_points(dim, kappa, alpha)
 
 
-class GaussHermiteTruncatedTransform(SigmaPointTruncTransform):
+class TruncatedGaussHermiteTransform(TruncatedSigmaPointTransform):
     def __init__(self, dim, dim_eff, degree=3):
         self.dim, self.dim_eff = dim, dim_eff
         # weights & points for transformed mean and covariance
@@ -694,3 +656,47 @@ class GaussHermiteTruncatedTransform(SigmaPointTruncTransform):
         # weights & points for input-output covariance
         self.Wcc = np.diag(GaussHermiteTransform.weights(dim, degree))
         self.unit_sp = GaussHermiteTransform.unit_sigma_points(dim, degree)
+
+
+"""
+Warning: EXPERIMENTAL!
+
+Linearization transform via Gaussian process quadrature with derivative evaluations.
+"""
+
+
+class TaylorGPQDTransform(MomentTransform):
+    """
+    Transformation equivalent to GPQ+D w/ RBF kernel, single sigma-point at zero and substitution x = m + z in the
+    integral. For el --> infinity the transform converges to LinearizationTransform.
+    """
+
+    def __init__(self, dim, alpha=1.0, el=1.0):
+        self.dim = dim
+        self.alpha = alpha
+        self.ell = el
+        self.Lam = np.diag(el ** 2 * np.ones(dim))
+        self.iLam = np.diag(el ** -2 * np.ones(dim))
+        self.eye_d = np.eye(dim)
+        # lists for logging average model variance and posterior integral variance
+        self.mvar_list = []
+        self.ivar_list = []
+
+    def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
+        # TODO: equations can be optimized further
+        # wm = la.det(cov.dot(self.iLam) + self.eye_d) ** -0.5
+        wm = la.det(self.iLam.dot(cov) + self.eye_d) ** -0.5
+        fm = f(mean, fcn_pars)
+        mean_f = wm * fm
+        jacobian_f = f(mean, fcn_pars, dx=True)
+        jacobian_f = jacobian_f.reshape(len(mean_f), self.dim)
+        # wc = la.det(cov.dot(2 * self.iLam) + self.eye_d) ** -0.5
+        wc = la.det(2 * self.iLam.dot(cov) + self.eye_d) ** -0.5
+        Wc = 0.5 * self.Lam.dot(la.inv(0.5 * self.Lam + cov)).dot(cov)
+        model_var = self.alpha ** 2 - self.alpha ** 2 * wc * (1 + np.trace(Wc.dot(self.iLam)))
+        integ_var = self.alpha ** 2 * wc - wm ** 2
+        self.mvar_list.append(model_var)
+        self.ivar_list.append(integ_var)
+        cov_f = wc * (np.outer(fm, fm) + jacobian_f.dot(Wc).dot(jacobian_f.T)) - np.outer(mean_f, mean_f) + model_var
+        cov_fx = self.Lam.dot(la.inv(self.Lam + cov)).dot(cov).dot(jacobian_f.T)
+        return mean_f, cov_f, cov_fx
