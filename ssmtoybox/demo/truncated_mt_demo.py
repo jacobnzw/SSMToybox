@@ -5,8 +5,8 @@ from matplotlib.gridspec import GridSpec
 from ssmtoybox.mtran import MomentTransform
 from ssmtoybox.utils import ellipse_points, symmetrized_kl_divergence, squared_error, log_cred_ratio, mse_matrix
 from ssmtoybox.ssinf import TruncatedUnscentedKalman, UnscentedKalman
-from ssmtoybox.ssmod import ReentryVehicleRadarTrackingGaussSSM as ReentryRadarModel
-from ssmtoybox.dynsys import ReentryVehicleRadarTrackingGaussSystem as ReentryRadarSystem
+from ssmtoybox.ssmod import ReentryVehicle2DTransition, Radar2DMeasurement
+from ssmtoybox.utils import GaussRV
 
 
 def cartesian2polar(x, pars, dx=False):
@@ -118,31 +118,42 @@ def mt_trunc_demo(mt_trunc, mt, dim=None, full_input_cov=True, **kwargs):
 
 
 def ukf_trunc_demo(mc_sims=50):
-    disc_tau = 0.5  # discretization period in seconds
+    disc_tau = 0.05  # discretization period in seconds
+    duration = 200
 
-    # simulate reference state trajectory by ODE integration
-    sys = ReentryRadarSystem()
-    x = sys.simulate_trajectory(method='rk4', dt=disc_tau, duration=200, mc_sims=mc_sims)
+    # define system
+    m0 = np.array([6500.4, 349.14, -1.8093, -6.7967, 0.6932])
+    P0 = np.diag([1e-6, 1e-6, 1e-6, 1e-6, 0])
+    x0 = GaussRV(5, m0, P0)
+    q = GaussRV(3, cov=np.diag([2.4064e-5, 2.4064e-5, 0]))
+    sys = ReentryVehicle2DTransition(x0, q, dt=disc_tau)
+    # define radar measurement model
+    r = GaussRV(2, cov=np.diag([1e-6, 0.17e-6]))
+    obs = Radar2DMeasurement(r, 2)
+
+    # simulate reference state trajectory by SDE integration
+    x = sys.simulate_continuous(duration, disc_tau, mc_sims)
     x_ref = x.mean(axis=2)
     # simulate corresponding radar measurements
-    y = np.zeros((sys.zD,) + x.shape[1:])
-    for i in range(mc_sims):
-        y[..., i] = sys.simulate_measurements(x[..., i], mc_per_step=1).squeeze()
+    y = obs.simulate_measurements(x)
 
     # initialize state-space model; uses cartesian2polar as measurement (not polar2cartesian)
-    ssm = ReentryRadarModel(dt=disc_tau)
+    P0 = np.diag([1e-6, 1e-6, 1e-6, 1e-6, 1])
+    x0 = GaussRV(5, m0, P0)
+    q = GaussRV(3, cov=np.diag([2.4064e-5, 2.4064e-5, 1e-6]))
+    dyn = ReentryVehicle2DTransition(x0, q, dt=disc_tau)
 
     # initialize UKF and UKF in truncated version
     alg = (
-        UnscentedKalman(ssm, mod_meas,,,
-        UnscentedTruncKalman(ssm, mod_meas,,,
+        UnscentedKalman(dyn, obs),
+        TruncatedUnscentedKalman(dyn, obs),
     )
     num_alg = len(alg)
 
     # space for filtered mean and covariance
     steps = x.shape[1]
-    x_mean = np.zeros((ssm.xD, steps, mc_sims, num_alg))
-    x_cov = np.zeros((ssm.xD, ssm.xD, steps, mc_sims, num_alg))
+    x_mean = np.zeros((dyn.dim_in, steps, mc_sims, num_alg))
+    x_cov = np.zeros((dyn.dim_in, dyn.dim_in, steps, mc_sims, num_alg))
 
     # filtering estimate of the state trajectory based on provided measurements
     for i_est, estimator in enumerate(alg):
@@ -157,12 +168,12 @@ def ukf_trunc_demo(mc_sims=50):
 
     # Earth surface w/ radar position
     t = 0.02 * np.arange(-1, 4, 0.1)
-    plt.plot(sys.R0 * np.cos(t), sys.R0 * np.sin(t), color='darkblue', lw=2)
-    plt.plot(sys.sx, sys.sy, 'ko')
+    plt.plot(dyn.R0 * np.cos(t), dyn.R0 * np.sin(t), color='darkblue', lw=2)
+    plt.plot(dyn.sx, dyn.sy, 'ko')
 
     plt.plot(x_ref[0, :], x_ref[1, :], color='r', ls='--')
     # Convert from polar to cartesian
-    meas = np.stack((sys.sx + y[0, ...] * np.cos(y[1, ...]), sys.sy + y[0, ...] * np.sin(y[1, ...])), axis=0)
+    meas = np.stack((dyn.sx + y[0, ...] * np.cos(y[1, ...]), dyn.sy + y[0, ...] * np.sin(y[1, ...])), axis=0)
     for i in range(mc_sims):
         # Vehicle trajectory
         # plt.plot(x[0, :, i], x[1, :, i], alpha=0.35, color='r', ls='--')
@@ -206,5 +217,5 @@ def ukf_trunc_demo(mc_sims=50):
 
 
 if __name__ == '__main__':
-    # mt_trunc_demo(TruncatedUnscentedTransform, UnscentedTransform, [2, 5, 10, 15], kappa=0, full_input_cov=True)
-    ukf_trunc_demo(mc_sims=100)
+    mt_trunc_demo(TruncatedUnscentedTransform, UnscentedTransform, [2, 5, 10, 15], kappa=0, full_input_cov=True)
+    # ukf_trunc_demo(mc_sims=100)
