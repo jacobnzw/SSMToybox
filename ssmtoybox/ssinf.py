@@ -5,7 +5,7 @@ from scipy.linalg import cho_factor, cho_solve, block_diag
 from scipy.stats import multivariate_normal
 from numpy import newaxis as na
 from ssmtoybox.ssmod import TransitionModel, MeasurementModel
-from ssmtoybox.bq.bqmtran import GaussianProcessTransform, GPQMO, StudentTProcessTransform, TPQMO, BayesSardTransform
+from ssmtoybox.bq.bqmtran import GaussianProcessTransform, MultiOutputGaussianProcessTransform, StudentTProcessTransform, MultiOutputStudentTProcessTransform, BayesSardTransform
 from ssmtoybox.mtran import MomentTransform, LinearizationTransform, TaylorGPQDTransform, \
     SphericalRadialTransform, UnscentedTransform, GaussHermiteTransform, FullySymmetricStudentTransform, \
     TruncatedSphericalRadialTransform, TruncatedUnscentedTransform, TruncatedGaussHermiteTransform
@@ -952,8 +952,8 @@ class MultiOutputGaussianProcessKalman(GaussianInference):
     """
 
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None):
-        t_dyn = GPQMO(dyn.dim_in, dyn.dim_state, kern_par_dyn, kernel, points, point_hyp)
-        t_obs = GPQMO(obs.dim_in, obs.dim_out, kern_par_obs, kernel, points, point_hyp)
+        t_dyn = MultiOutputGaussianProcessTransform(dyn.dim_in, dyn.dim_state, kern_par_dyn, kernel, points, point_hyp)
+        t_obs = MultiOutputGaussianProcessTransform(obs.dim_in, obs.dim_out, kern_par_obs, kernel, points, point_hyp)
         super(MultiOutputGaussianProcessKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
 
@@ -1013,8 +1013,10 @@ class MultiOutputStudentProcessStudent(StudentInference):
         point_par_dyn.update({'dof': q_dof})
         point_par_obs.update({'dof': r_dof})
 
-        t_dyn = TPQMO(dyn.dim_in, dyn.dim_state, kern_par_dyn, 'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
-        t_obs = TPQMO(obs.dim_in, obs.dim_out, kern_par_obs, 'rbf-student', 'fs', point_par_obs, nu=dof_tp)
+        t_dyn = MultiOutputStudentTProcessTransform(dyn.dim_in, dyn.dim_state, kern_par_dyn,
+                                                    'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
+        t_obs = MultiOutputStudentTProcessTransform(obs.dim_in, obs.dim_out, kern_par_obs,
+                                                    'rbf-student', 'fs', point_par_obs, nu=dof_tp)
         super(MultiOutputStudentProcessStudent, self).__init__(dyn, obs, t_dyn, t_obs)
 
 

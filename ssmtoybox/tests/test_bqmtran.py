@@ -4,7 +4,7 @@ from unittest import TestCase
 import numpy as np
 import numpy.linalg as la
 
-from ssmtoybox.bq.bqmtran import GaussianProcessTransform, GPQMO, BayesSardTransform
+from ssmtoybox.bq.bqmtran import GaussianProcessTransform, MultiOutputGaussianProcessTransform, BayesSardTransform
 from ssmtoybox.ssmod import UNGMTransition, Pendulum2DTransition, CoordinatedTurnTransition, ReentryVehicle2DTransition
 from ssmtoybox.utils import GaussRV
 
@@ -117,7 +117,7 @@ class GPQMOTest(TestCase):
         dim_in, dim_out = 1, 1
         khyp = np.array([[1, 3]])
         phyp = {'kappa': 0.0, 'alpha': 1.0}
-        tf = GPQMO(dim_in, dim_out, khyp, point_par=phyp)
+        tf = MultiOutputGaussianProcessTransform(dim_in, dim_out, khyp, point_par=phyp)
         wm, wc, wcc = tf.wm, tf.Wc, tf.Wcc
         self.assertTrue(np.allclose(wc, wc.swapaxes(0, 1).swapaxes(2, 3)), "Covariance weight matrix not symmetric.")
 
@@ -127,7 +127,7 @@ class GPQMOTest(TestCase):
                          [1, 2, 2, 2, 2],
                          [1, 3, 3, 3, 3]])
         phyp = {'kappa': 0.0, 'alpha': 1.0}
-        tf = GPQMO(dim_in, dim_out, khyp, point_par=phyp)
+        tf = MultiOutputGaussianProcessTransform(dim_in, dim_out, khyp, point_par=phyp)
         wm, wc, wcc = tf.wm, tf.Wc, tf.Wcc
         self.assertTrue(np.allclose(wc, wc.swapaxes(0, 1).swapaxes(2, 3)), "Covariance weight matrix not symmetric.")
 
@@ -136,7 +136,7 @@ class GPQMOTest(TestCase):
         f = dyn.dyn_eval
         dim_in, dim_out = dyn.dim_in, dyn.dim_state
         ker_par = np.hstack((np.ones((dim_out, 1)), 3*np.ones((dim_out, dim_in))))
-        tf = GPQMO(dim_in, dim_out, ker_par)
+        tf = MultiOutputGaussianProcessTransform(dim_in, dim_out, ker_par)
         mean, cov = np.zeros(dim_in, ), np.eye(dim_in)
         tmean, tcov, tccov = tf.apply(f, mean, cov, np.atleast_1d(1.0))
         print("Transformed moments\nmean: {}\ncov: {}\nccov: {}".format(tmean, tcov, tccov))
@@ -169,7 +169,7 @@ class GPQMOTest(TestCase):
 
         # multi-output GPQ
         ker_par_mo = np.hstack((np.ones((dim_out, 1)), 25 * np.ones((dim_out, dim_in))))
-        tf_mo = GPQMO(dim_in, dim_out, ker_par_mo)
+        tf_mo = MultiOutputGaussianProcessTransform(dim_in, dim_out, ker_par_mo)
 
         # transformed moments
         # FIXME: transformed covariances different
@@ -195,7 +195,7 @@ class GPQMOTest(TestCase):
         dim_in, dim_out = dyn.dim_in, dyn.dim_state
 
         par0 = 1 + np.random.rand(dim_out, dim_in + 1)
-        tf = GPQMO(dim_in, dim_out, par0)
+        tf = MultiOutputGaussianProcessTransform(dim_in, dim_out, par0)
 
         # use sampled system state trajectory to create training data
         fy = np.zeros((dim_out, steps))
@@ -225,7 +225,7 @@ class GPQMOTest(TestCase):
 
         # par0 = np.hstack((np.ones((dim_out, 1)), 5*np.ones((dim_out, dim_in+1))))
         par0 = 10*np.ones((dim_out, dim_in+1))
-        tf = GPQMO(dim_in, dim_out, par0)
+        tf = MultiOutputGaussianProcessTransform(dim_in, dim_out, par0)
 
         # use sampled system state trajectory to create training data
         fy = np.zeros((dim_out, steps))

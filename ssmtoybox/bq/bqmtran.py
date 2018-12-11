@@ -415,7 +415,14 @@ class StudentTProcessTransform(BQTransform):
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + emv
 
 
-class GPQMO(BQTransform):
+"""
+Warning: EXPERIMENTAL!
+
+Moment transforms based on Bayesian quadrature with multi-output GP/TP integrand models. 
+"""
+
+
+class MultiOutputGaussianProcessTransform(BQTransform):
     def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None, estimate_par=False):
         """
 
@@ -442,7 +449,8 @@ class GPQMO(BQTransform):
         when provided with the same parameters.
 
         """
-        super(GPQMO, self).__init__(dim_in, dim_out, kern_par, 'gp-mo', kern_str, point_str, point_par, estimate_par)
+        super(MultiOutputGaussianProcessTransform, self).__init__(dim_in, dim_out, kern_par, 'gp-mo', kern_str,
+                                                                  point_str, point_par, estimate_par)
 
         # output dimension (number of outputs)
         self.e = dim_out
@@ -515,13 +523,13 @@ class GPQMO(BQTransform):
         pass
 
 
-class TPQMO(BQTransform):
+class MultiOutputStudentTProcessTransform(BQTransform):
 
     def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None, estimate_par=False,
                  nu=3.0):
 
-        super(TPQMO, self).__init__(dim_in, dim_out, kern_par, 'tp-mo', kern_str, point_str, point_par, estimate_par,
-                                    nu=nu)
+        super(MultiOutputStudentTProcessTransform, self).__init__(dim_in, dim_out, kern_par, 'tp-mo', kern_str,
+                                                                  point_str, point_par, estimate_par, nu=nu)
 
         # output dimension (number of outputs)
         self.e = dim_out
