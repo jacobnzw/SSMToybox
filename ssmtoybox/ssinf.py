@@ -1001,15 +1001,15 @@ class MultiOutputStudentProcessStudent(StudentInference):
            Numerische Mathematik, vol. 10, pp. 327–344, 1967
     """
 
-    def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, point_par=None, dof=4.0, dof_tp=4.0):
+    def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, point_par=None, dof=4.0, fixed_dof=True, dof_tp=4.0):
         # degrees of freedom for SSM noises
         q_dof, r_dof = dyn.get_pars('q_dof', 'r_dof')
 
         # add DOF of the noises to the sigma-point parameters
         if point_par is None:
             point_par = dict()
-        point_par_dyn = point_par
-        point_par_obs = point_par
+        point_par_dyn = point_par.copy()
+        point_par_obs = point_par.copy()
         point_par_dyn.update({'dof': q_dof})
         point_par_obs.update({'dof': r_dof})
 
@@ -1017,7 +1017,7 @@ class MultiOutputStudentProcessStudent(StudentInference):
                                                     'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
         t_obs = MultiOutputStudentTProcessTransform(obs.dim_in, obs.dim_out, kern_par_obs,
                                                     'rbf-student', 'fs', point_par_obs, nu=dof_tp)
-        super(MultiOutputStudentProcessStudent, self).__init__(dyn, obs, t_dyn, t_obs)
+        super(MultiOutputStudentProcessStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
 
 
 """
@@ -1034,22 +1034,10 @@ class MarginalInference(GaussianInference):
 
     Parameters
     ----------
-    dyn : TransitionModel
-        Transition model defining system dynamics with Student distributed noises and initial conditions.
-
-    obs : MeasurementModel
-        Measurement model with Student distributed noise.
-
-    tf_dyn : MomentTransform
-        Moment transform for computing predictive state moments.
-
-    tf_obs : MomentTransform
-        Moment transform for computing predictive measurement moments.
-
-    par_mean : ndarray
+    par_mean : (num_par, ) ndarray
         Mean of the Gaussian prior over moment transform parameters.
 
-    par_cov : ndarray
+    par_cov : (num_par, num_par) ndarray
         Covariance of the Gaussian prior over moment transform parameters.
 
     Notes
@@ -1062,13 +1050,13 @@ class MarginalInference(GaussianInference):
     Purely for experimental purposes!
     """
 
-    def __init__(self, mod_dyn, mod_obs, tf_dyn, tf_obs):
-        super(MarginalInference, self).__init__(mod_dyn, mod_obs, tf_dyn, tf_obs)
+    def __init__(self, dyn, obs, tf_dyn, tf_obs, par_mean=None, par_cov=None):
+        super(MarginalInference, self).__init__(dyn, obs, tf_dyn, tf_obs)
 
         # Number of parameters for each moment transform and total number of parameters
         # TODO: Generalize, transform should provide number of parameters (sum of kernel, model and point parameters)
-        self.param_dyn_dim = self.ssm.xD + 1
-        self.param_obs_dim = self.ssm.xD + 1
+        self.param_dyn_dim = self.mod_dyn.dim_in + 1
+        self.param_obs_dim = self.mod_obs.dim_state + 1
         self.param_dim = self.param_dyn_dim + self.param_obs_dim
 
         # Log-parameter prior mean and covariance
@@ -1116,8 +1104,8 @@ class MarginalInference(GaussianInference):
         # Marginalization of moment transform parameters
         param_cov_chol = la.cholesky(self.param_cov)
         param_pts = self.param_mean[:, na] + param_cov_chol.dot(self.param_upts)
-        mean = np.zeros((self.ssm.xD, self.param_pts_num))
-        cov = np.zeros((self.ssm.xD, self.ssm.xD, self.param_pts_num))
+        mean = np.zeros((self.mod_dyn.dim_in, self.param_pts_num))
+        cov = np.zeros((self.mod_dyn.dim_in, self.mod_dyn.dim_in, self.param_pts_num))
 
         # Evaluate state posterior with different values of transform parameters
         for i in range(self.param_pts_num):
@@ -1189,23 +1177,23 @@ class MarginalInference(GaussianInference):
         theta_dyn, theta_obs = np.exp(theta[:self.param_dyn_dim]), np.exp(theta[self.param_dyn_dim:])
 
         # in non-additive case, augment mean and covariance
-        mean = self.x_mean_fi if self.ssm.q_additive else np.hstack((self.x_mean_fi, self.q_mean))
-        cov = self.x_cov_fi if self.ssm.q_additive else block_diag(self.x_cov_fi, self.q_cov)
+        mean = self.x_mean_fi if self.mod_dyn.noise_additive else np.hstack((self.x_mean_fi, self.q_mean))
+        cov = self.x_cov_fi if self.mod_dyn.noise_additive else block_diag(self.x_cov_fi, self.q_cov)
         assert mean.ndim == 1 and cov.ndim == 2
 
         # apply moment transform to compute predicted state mean, covariance
-        mean, cov, ccov = self.tf_dyn.apply(self.ssm.dyn_eval, mean, cov, self.ssm.par_fcn(k), theta_dyn)
-        if self.ssm.q_additive:
+        mean, cov, ccov = self.tf_dyn.apply(self.mod_dyn.dyn_eval, mean, cov, np.atleast_1d(k), theta_dyn)
+        if self.mod_dyn.noise_additive:
             cov += self.G.dot(self.q_cov).dot(self.G.T)
 
         # in non-additive case, augment mean and covariance
-        mean = mean if self.ssm.r_additive else np.hstack((mean, self.r_mean))
-        cov = cov if self.ssm.r_additive else block_diag(cov, self.r_cov)
+        mean = mean if self.mod_obs.noise_additive else np.hstack((mean, self.r_mean))
+        cov = cov if self.mod_obs.noise_additive else block_diag(cov, self.r_cov)
         assert mean.ndim == 1 and cov.ndim == 2
 
         # apply moment transform to compute measurement mean, covariance
-        mean, cov, ccov = self.tf_obs.apply(self.ssm.meas_eval, mean, cov, self.ssm.par_fcn(k), theta_obs)
-        if self.ssm.r_additive:
+        mean, cov, ccov = self.tf_obs.apply(self.mod_obs.meas_eval, mean, cov, np.atleast_1d(k), theta_obs)
+        if self.mod_obs.noise_additive:
             cov += self.r_cov
 
         return multivariate_normal.logpdf(y, mean, cov)
@@ -1289,13 +1277,15 @@ class MarginalizedGaussianProcessKalman(MarginalInference):
     -----
     For experimental purposes only. Likely a dead-end!
     """
-    def __init__(self, mod_dyn, mod_obs, tf_dyn, tf_obs):
-        assert isinstance(mod_dyn, StateSpaceModel)
-        nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
-        nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
-        t_dyn = GaussianProcessTransform(nq, 1, kernel, points, point_par=point_hyp)
-        t_obs = GaussianProcessTransform(nr, 1, kernel, points, point_par=point_hyp)
-        super(MarginalizedGaussianProcessKalman, self).__init__(mod_dyn, mod_obs, t_dyn, t_obs)
+
+    def __init__(self, dyn, obs, kernel='rbf', points='ut', point_hyp=None, par_mean=None, par_cov=None):
+        # arbitrary dummy kernel parameters, because transforms wouldn't initialize
+        kpar_dyn = np.ones((1, dyn.dim_in + 1))
+        kpar_obs = np.ones((1, obs.dim_state + 1))
+
+        t_dyn = GaussianProcessTransform(dyn.dim_in, 1, kpar_dyn, kernel, points, point_hyp)
+        t_obs = GaussianProcessTransform(obs.dim_state, 1, kpar_obs, kernel, points, point_hyp)
+        super(MarginalizedGaussianProcessKalman, self).__init__(dyn, obs, t_dyn, t_obs, par_mean, par_cov)
 
 
 """

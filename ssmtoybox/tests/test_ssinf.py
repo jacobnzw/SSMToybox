@@ -265,39 +265,52 @@ class StudentInferenceTest(TestCase):
 
 
 class GPQMarginalizedTest(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        # setup UNGM
+        x0 = GaussRV(1, cov=np.atleast_2d(1.0))
+        q = GaussRV(1, cov=np.atleast_2d(10.0))
+        cls.dyn_ungm = UNGMTransition(x0, q)
+        r = GaussRV(1, cov=np.atleast_2d(1.0))
+        cls.obs_ungm = UNGMMeasurement(r, 1)
+
+        # setup pendulum
+        dt = 0.01
+        x0 = GaussRV(2, np.array([1.5, 0]), 0.01*np.eye(2))
+        q = GaussRV(2, cov=np.array([[dt**3/3, dt**2/2], [dt**2/2, dt]]))
+        cls.dyn_pend = Pendulum2DTransition(x0, q, dt)
+        r = GaussRV(1, cov=np.atleast_2d(0.1))
+        cls.obs_pend = Pendulum2DMeasurement(r, cls.dyn_pend.dim_state)
+
     def test_init(self):
-        ssm = UNGMGaussSSM()
-        alg = MarginalizedGaussianProcessKalman(ssm, mod_meas, 'rbf', 'sr')
+        alg = MarginalizedGaussianProcessKalman(self.dyn_ungm, self.obs_ungm, 'rbf', 'sr')
 
     def test_time_update(self):
-        ssm = UNGMGaussSSM()
-        alg = MarginalizedGaussianProcessKalman(ssm, mod_meas, 'rbf', 'sr')
+        alg = MarginalizedGaussianProcessKalman(self.dyn_ungm, self.obs_ungm, 'rbf', 'sr')
         alg._time_update(1)
         par_dyn, par_obs = np.array([1, 1]), np.array([1, 1])
         alg._time_update(1, par_dyn, par_obs)
 
     def test_laplace_approx(self):
-        ssm = UNGMGaussSSM()
-        alg = MarginalizedGaussianProcessKalman(ssm, mod_meas, 'rbf', 'sr')
+        alg = MarginalizedGaussianProcessKalman(self.dyn_ungm, self.obs_ungm, 'rbf', 'sr')
         # Random measurement
         y = np.sqrt(10)*np.random.randn(1)
         alg._param_posterior_moments(y, 10)
-        la.cholesky(alg.param_cov)
+        # does parameter posterior have positive semi-definite covariance?
+        self.assertTrue(np.all(np.linalg.eigvals(alg.param_cov) >= 0))
 
     def test_measurement_update(self):
-        ssm = UNGMGaussSSM()
-        ssm_state, ssm_observations = ssm.simulate(5)
-        alg = MarginalizedGaussianProcessKalman(ssm, mod_meas, 'rbf', 'sr')
-        alg._measurement_update(ssm_observations[:, 0, 0], 1)
+        y = self.obs_ungm.simulate_measurements(self.dyn_ungm.simulate_discrete(5))
+        alg = MarginalizedGaussianProcessKalman(self.dyn_ungm, self.obs_ungm, 'rbf', 'sr')
+        alg._measurement_update(y[:, 0, 0], 1)
 
     def test_filtering_ungm(self):
-        ssm = UNGMGaussSSM()
-        ssm_state, ssm_observations = ssm.simulate(100)
-        alg = MarginalizedGaussianProcessKalman(ssm, mod_meas, 'rbf', 'sr')
-        alg.forward_pass(ssm_observations[..., 0])
+        y = self.obs_ungm.simulate_measurements(self.dyn_ungm.simulate_discrete(100))
+        alg = MarginalizedGaussianProcessKalman(self.dyn_ungm, self.obs_ungm, 'rbf', 'sr')
+        alg.forward_pass(y[..., 0])
 
     def test_filtering_pendulum(self):
-        ssm = PendulumGaussSSM()
-        ssm_state, ssm_observations = ssm.simulate(100)
-        alg = MarginalizedGaussianProcessKalman(ssm, mod_meas, 'rbf', 'sr')
-        alg.forward_pass(ssm_observations[..., 0])
+        y = self.obs_pend.simulate_measurements(self.dyn_pend.simulate_discrete(100))
+        alg = MarginalizedGaussianProcessKalman(self.dyn_pend, self.obs_pend, 'rbf', 'sr')
+        alg.forward_pass(y[..., 0])
