@@ -213,6 +213,18 @@ class GaussianInference(StateSpaceInference):
     """
     Base class for all Gaussian state-space inference algorithms, such as nonlinear Kalman filters and smoothers.
 
+    dyn : TransitionModel
+        Transition model defining system dynamics with Gaussian distributed noises and initial conditions.
+
+    obs : MeasurementModel
+        Measurement model with Gaussian distributed noise.
+
+    tf_dyn : MomentTransform
+        Moment transform for the dynamics. Computes predictive state mean, covariance and cross-covariance.
+
+    tf_obs : MomentTransform
+        Moment transform for the measurement model. Computes predictive measurement mean,
+        covariance and cross-covariance.
     """
 
     def __init__(self, mod_dyn, mod_obs, tf_dyn, tf_obs):
@@ -331,12 +343,9 @@ class GaussianInference(StateSpaceInference):
 
 class ExtendedKalman(GaussianInference):
     """
-    Extended Kalman filter and smoother. For linear system functions this is a Kalman filter/smoother.
+    Extended Kalman filter and smoother.
 
-    Parameters
-    ----------
-    sys : GaussianStateSpaceModel
-        State-space model to perform inference on. Needs to have Jacobians implemented.
+    For linear dynamics and measurement model this is a Kalman filter and Rauch-Tung-Striebel smoother.
     """
 
     def __init__(self, dyn, obs):
@@ -346,14 +355,7 @@ class ExtendedKalman(GaussianInference):
 
 
 class CubatureKalman(GaussianInference):
-    """
-    Cubature Kalman filter and smoother.
-
-    Parameters
-    ----------
-    sys : GaussianStateSpaceModel
-        State-space model to perform inference on.
-    """
+    """ Cubature Kalman filter and smoother. """
 
     def __init__(self, dyn, obs):
         tf = SphericalRadialTransform(dyn.dim_in)
@@ -367,8 +369,12 @@ class UnscentedKalman(GaussianInference):
 
     Parameters
     ----------
-    sys : GaussianStateSpaceModel
-        State-space model to perform inference on.
+    kappa : float or None, optional
+        Controls spread of points around the mean. If `None`, `kappa=max(3-dim, 0)`
+
+    alpha : float, optional
+    beta : float, optional
+        Parameters of the Unscented transform.
     """
 
     def __init__(self, dyn, obs, kappa=None, alpha=1.0, beta=2.0):
@@ -383,9 +389,6 @@ class GaussHermiteKalman(GaussianInference):
 
     Parameters
     ----------
-    sys : GaussianStateSpaceModel
-        State-space model to perform inference on.
-
     deg : int, optional
         Degree of the Gauss-Hermite integration rule. Determines the number of sigma-points.
     """
@@ -447,13 +450,10 @@ class GaussianProcessKalman(GaussianInference):
 
 class BayesSardKalman(GaussianInference):
     """
-    Bayes-Sard quadrature Kalman filter (BSQKF) and smoother.
+    Bayes-Sard quadrature Kalman filter (BSQKF) and smoother (see [1]_).
 
     Parameters
     ----------
-    ssm : GaussianStateSpaceModel
-        State-space model to perform inference on.
-
     kern_par_dyn : ndarray
         Kernel parameters for GPQ transformation of the state moments.
 
@@ -483,6 +483,11 @@ class BayesSardKalman(GaussianInference):
 
     point_hyp : dict, optional
         Hyper-parameters of the sigma-point set.
+
+    References
+    ----------
+    Prüher, J., Karvonen, T., Oates, C. J., Straka, O. and Särkkä, S.
+    Improved Calibration of Numerical Integration Error in Sigma-Point Filters, https://export.arxiv.org/abs/1811.11474
     """
 
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, mulind_dyn=2, mulind_obs=2, points='ut', point_hyp=None):
@@ -497,9 +502,6 @@ class StudentProcessKalman(GaussianInference):
 
     Parameters
     ----------
-    ssm : GaussianStateSpaceModel
-        Gaussian state-space model to perform inference on.
-
     kern_par_dyn : ndarray
         Kernel parameters for TPQ transformation of the state moments.
 
@@ -541,8 +543,8 @@ class StudentProcessKalman(GaussianInference):
     """
 
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None, nu=3.0):
-        t_dyn = StudentTProcessTransform(dyn.dim_in, 1, kern_par_dyn, kernel, points, point_hyp)
-        t_obs = StudentTProcessTransform(obs.dim_in, 1, kern_par_obs, kernel, points, point_hyp)
+        t_dyn = StudentTProcessTransform(dyn.dim_in, 1, kern_par_dyn, kernel, points, point_hyp, nu=nu)
+        t_obs = StudentTProcessTransform(obs.dim_in, 1, kern_par_obs, kernel, points, point_hyp, nu=nu)
         super(StudentProcessKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
 
@@ -553,10 +555,23 @@ class StudentInference(StateSpaceInference):
 
     Parameters
     ----------
-    dof : float
+    mod_dyn : TransitionModel
+        Transition model defining system dynamics with Student distributed noises and initial conditions.
+
+    mod_obs : MeasurementModel
+        Measurement model with Student distributed noise.
+
+    tf_dyn : MomentTransform
+        Moment transform for the dynamics. Computes predictive state mean, covariance and cross-covariance.
+
+    tf_obs : MomentTransform
+        Moment transform for the measurement model. Computes predictive measurement mean,
+        covariance and cross-covariance.
+
+    dof : float, optional
         Degree of freedom parameter of the filtered density.
 
-    fixed_dof : bool
+    fixed_dof : bool, optional
         If `True`, DOF will be fixed for all time steps, which preserves the heavy-tailed behaviour of the filter.
         If `False`, DOF will be increasing after each measurement update, which means the heavy-tailed behaviour is
         not preserved and therefore converges to a Gaussian filter.
@@ -565,7 +580,6 @@ class StudentInference(StateSpaceInference):
     -----
     Even though Student's t distribution is not parametrized by the covariance matrix like the Gaussian,
     the filter still produces mean and covariance of the state.
-
     """
 
     def __init__(self, mod_dyn, mod_obs, tf_dyn, tf_obs, dof=4.0, fixed_dof=True):
@@ -726,12 +740,8 @@ class FullySymmetricStudent(StudentInference):
     """
     Student filter using the fully-symmetric moment transforms from [1]_.
 
-    dyn : TransitionModel
-        Transition model defining system dynamics with Student distributed noises and initial conditions.
-
-    obs : MeasurementModel
-        Measurement model with Student distributed noise.
-
+    Parameters
+    ----------
     degree : int, optional
         Degree of the fully-symmetric quadrature rule. Degrees 3 and 5 implemented.
 
@@ -767,12 +777,6 @@ class StudentProcessStudent(StudentInference):
 
     Parameters
     ----------
-    dyn : TransitionModel
-        Transition model defining system dynamics with Student distributed noises and initial conditions.
-
-    obs : MeasurementModel
-        Measurement model with Student distributed noise.
-
     kern_par_dyn : ndarray
         Kernel parameters for TPQ transformation of the state moments.
 
@@ -786,7 +790,7 @@ class StudentProcessStudent(StudentInference):
         Desired degrees of freedom during the filtering process.
 
     dof_tp : float, optional
-        Degrees of freedom of the Student's t-regression model. TODO: could be merged with `fixed_dof`.
+        Degrees of freedom of the Student's t-regression model.
 
     fixed_dof : bool, optional
         Fix degrees of freedom during filtering. If `True`, preserves the heavy-tailed behavior of the Student
@@ -819,7 +823,6 @@ class StudentProcessStudent(StudentInference):
         point_par_dyn.update({'dof': q_dof})
         point_par_obs.update({'dof': r_dof})
         # TODO: why is q_dof parameter for unit-points of the dynamics?
-        # TODO: finish fixing DOFs, DOF for TPQ and DOF for the filtered state.
 
         t_dyn = StudentTProcessTransform(dyn.dim_in, 1, kern_par_dyn, 'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
         t_obs = StudentTProcessTransform(obs.dim_in, 1, kern_par_obs, 'rbf-student', 'fs', point_par_obs, nu=dof_tp)
@@ -907,14 +910,11 @@ class MultiOutputGaussianProcessKalman(GaussianInference):
 
     Parameters
     ----------
-    ssm : GaussianStateSpaceModel
-        State-space model to perform inference on.
+    kern_par_dyn : (dim_out, num_par) ndarray
+        Kernel parameters for GPQ transformation of the state moments. One row per output.
 
-    ker_par_dyn : ndarray
-        Kernel parameters for GPQ transformation of the state moments.
-
-    ker_par_obs : ndarray
-        Kernel parameters for GPQ transformation of the measurement moments.
+    kern_par_obs : (dim_out, num_par) ndarray
+        Kernel parameters for GPQ transformation of the measurement moments. One row per output.
 
     kernel : str {'rbf'}, optional
         Kernel (covariance function) of the internal Gaussian process regression model.
@@ -951,13 +951,10 @@ class MultiOutputGaussianProcessKalman(GaussianInference):
 
     """
 
-    def __init__(self, mod_dyn, mod_obs, tf_dyn, tf_obs):
-        assert isinstance(mod_dyn, StateSpaceModel)
-        nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
-        nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
-        t_dyn = GPQMO(nq, mod_dyn.xD, ker_par_dyn, kernel, points, point_par)
-        t_obs = GPQMO(nr, mod_dyn.zD, ker_par_obs, kernel, points, point_par)
-        super(MultiOutputGaussianProcessKalman, self).__init__(mod_dyn, mod_obs, t_dyn, t_obs)
+    def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None):
+        t_dyn = GPQMO(dyn.dim_in, dyn.dim_state, kern_par_dyn, kernel, points, point_hyp)
+        t_obs = GPQMO(obs.dim_in, obs.dim_out, kern_par_obs, kernel, points, point_hyp)
+        super(MultiOutputGaussianProcessKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
 
 class MultiOutputStudentProcessStudent(StudentInference):
@@ -967,13 +964,10 @@ class MultiOutputStudentProcessStudent(StudentInference):
 
     Parameters
     ----------
-    ssm : StudentStateSpaceModel
-        Studentian state-space model to perform inference on.
-
-    ker_par_dyn : ndarray
+    kern_par_dyn : ndarray
         Kernel parameters for TPQ transformation of the state moments.
 
-    ker_par_obs : ndarray
+    kern_par_obs : ndarray
         Kernel parameters for TPQ transformation of the measurement moments.
 
     point_par : dict, optional
@@ -983,7 +977,7 @@ class MultiOutputStudentProcessStudent(StudentInference):
         Desired degrees of freedom during the filtering process.
 
     dof_tp : float, optional
-        Degrees of freedom of the Student's t-regression model. TODO: could be merged with `fixed_dof`.
+        Degrees of freedom of the Student's t-regression model.
 
     fixed_dof : bool, optional
         Fix degrees of freedom during filtering. If `True`, preserves the heavy-tailed behavior of the Student
@@ -1007,13 +1001,9 @@ class MultiOutputStudentProcessStudent(StudentInference):
            Numerische Mathematik, vol. 10, pp. 327–344, 1967
     """
 
-    def __init__(self, mod_dyn, mod_obs, tf_dyn, tf_obs):
-        assert isinstance(mod_dyn, StateSpaceModel)
-        nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
-        nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
-
+    def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, point_par=None, dof=4.0, dof_tp=4.0):
         # degrees of freedom for SSM noises
-        q_dof, r_dof = mod_dyn.get_pars('q_dof', 'r_dof')
+        q_dof, r_dof = dyn.get_pars('q_dof', 'r_dof')
 
         # add DOF of the noises to the sigma-point parameters
         if point_par is None:
@@ -1023,9 +1013,9 @@ class MultiOutputStudentProcessStudent(StudentInference):
         point_par_dyn.update({'dof': q_dof})
         point_par_obs.update({'dof': r_dof})
 
-        t_dyn = TPQMO(nq, mod_dyn.xD, ker_par_dyn, 'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
-        t_obs = TPQMO(nr, mod_dyn.zD, ker_par_obs, 'rbf-student', 'fs', point_par_obs, nu=dof_tp)
-        super(MultiOutputStudentProcessStudent, self).__init__(mod_dyn, mod_obs, t_dyn, t_obs)
+        t_dyn = TPQMO(dyn.dim_in, dyn.dim_state, kern_par_dyn, 'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
+        t_obs = TPQMO(obs.dim_in, obs.dim_out, kern_par_obs, 'rbf-student', 'fs', point_par_obs, nu=dof_tp)
+        super(MultiOutputStudentProcessStudent, self).__init__(dyn, obs, t_dyn, t_obs)
 
 
 """
@@ -1042,8 +1032,11 @@ class MarginalInference(GaussianInference):
 
     Parameters
     ----------
-    ssm : GaussianStateSpaceModel
-        State-space model to perform inference on.
+    dyn : TransitionModel
+        Transition model defining system dynamics with Student distributed noises and initial conditions.
+
+    obs : MeasurementModel
+        Measurement model with Student distributed noise.
 
     tf_dyn : MomentTransform
         Moment transform for computing predictive state moments.
