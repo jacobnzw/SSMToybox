@@ -5,7 +5,7 @@ import numpy.linalg as la
 from numpy import newaxis as na
 import numba as nb
 
-from ssmtoybox.bq.bqkern import RBF, RBFStudent
+from ssmtoybox.bq.bqkern import RBFGauss, RBFStudent
 
 
 class RBFKernelTest(TestCase):
@@ -14,8 +14,8 @@ class RBFKernelTest(TestCase):
     def setUpClass(cls):
         cls.par_1d = np.array([[1, 3]])
         cls.par_2d = np.array([[1, 3, 3]])
-        cls.kern_rbf_1d = RBF(1, cls.par_1d)
-        cls.kern_rbf_2d = RBF(2, cls.par_2d)
+        cls.kern_rbf_1d = RBFGauss(1, cls.par_1d)
+        cls.kern_rbf_2d = RBFGauss(2, cls.par_2d)
         cls.data_1d = np.array([[1, -1, 0]], dtype=float)
         cls.data_2d = np.hstack((np.zeros((2, 1)), np.eye(2), -np.eye(2)))
         cls.test_data_1d = np.atleast_2d(np.linspace(-5, 5, 50))
@@ -179,7 +179,7 @@ class RBFKernelTest(TestCase):
         y = x[0, :]
 
         par = np.array([[1, 1, 3]], dtype=float)
-        kernel = RBF(dim, par)
+        kernel = RBFGauss(dim, par)
         dK_dpar = kernel.der_par(par.squeeze(), x)
 
 

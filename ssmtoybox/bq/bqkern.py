@@ -292,7 +292,7 @@ class Kernel(object, metaclass=ABCMeta):
         pass
 
 
-class RBF(Kernel):  # TODO rename to RBFGauss
+class RBFGauss(Kernel):
     """
     Radial Basis Function kernel.
 
@@ -321,7 +321,7 @@ class RBF(Kernel):  # TODO rename to RBFGauss
 
     def __init__(self, dim, par, jitter=1e-8):
         assert par.shape[1] == dim + 1
-        super(RBF, self).__init__(dim, par, jitter)
+        super(RBFGauss, self).__init__(dim, par, jitter)
 
     def __str__(self):  # TODO: improve string representation
         return '{} {}'.format(self.__class__.__name__, self.par.update({'jitter': self.jitter}))
@@ -330,7 +330,7 @@ class RBF(Kernel):  # TODO rename to RBFGauss
         if x2 is None:
             x2 = x1.copy()
 
-        alpha, sqrt_inv_lam = RBF._unpack_parameters(par)
+        alpha, sqrt_inv_lam = RBFGauss._unpack_parameters(par)
         alpha = 1.0 if not scaling else alpha
 
         x1 = sqrt_inv_lam.dot(x1)
@@ -345,7 +345,7 @@ class RBF(Kernel):  # TODO rename to RBFGauss
     def exp_x_kx(self, par, x, scaling=False):
         # a.k.a. kernel mean map w.r.t. standard Gaussian PDF
         # par (D+1,) array_like
-        alpha, sqrt_inv_lam = RBF._unpack_parameters(par)
+        alpha, sqrt_inv_lam = RBFGauss._unpack_parameters(par)
         alpha = 1.0 if not scaling else alpha
 
         inv_lam = sqrt_inv_lam ** 2
@@ -356,7 +356,7 @@ class RBF(Kernel):  # TODO rename to RBFGauss
         return c * np.exp(-0.5 * np.sum(x * xl, axis=0))
 
     def exp_x_xkx(self, par, x):
-        alpha, sqrt_inv_lam = RBF._unpack_parameters(par)
+        alpha, sqrt_inv_lam = RBFGauss._unpack_parameters(par)
         lam = np.diag(sqrt_inv_lam.diagonal() ** -2)
 
         mu_q = la.inv(lam + self.eye_d).dot(x)
@@ -390,8 +390,8 @@ class RBF(Kernel):  # TODO rename to RBFGauss
         """
 
         # unpack kernel parameters
-        alpha, sqrt_inv_lam = RBF._unpack_parameters(par_0)
-        alpha_1, sqrt_inv_lam_1 = RBF._unpack_parameters(par_1)
+        alpha, sqrt_inv_lam = RBFGauss._unpack_parameters(par_0)
+        alpha_1, sqrt_inv_lam_1 = RBFGauss._unpack_parameters(par_1)
         alpha, alpha_1 = (1.0, 1.0) if not scaling else (alpha, alpha_1)
         inv_lam = sqrt_inv_lam ** 2
         inv_lam_1 = sqrt_inv_lam_1 ** 2
@@ -415,11 +415,11 @@ class RBF(Kernel):  # TODO rename to RBFGauss
         return la.det(r) ** -0.5 * np.exp(n)
 
     def exp_x_kxx(self, par):
-        alpha, sqrt_inv_lam = RBF._unpack_parameters(par)
+        alpha, sqrt_inv_lam = RBFGauss._unpack_parameters(par)
         return alpha ** 2
 
     def exp_xy_kxy(self, par):
-        alpha, sqrt_inv_lam = RBF._unpack_parameters(par)
+        alpha, sqrt_inv_lam = RBFGauss._unpack_parameters(par)
         inv_lam = sqrt_inv_lam ** 2
         return alpha ** 2 * la.det(2 * inv_lam + self.eye_d) ** -0.5
 
@@ -454,7 +454,7 @@ class RBF(Kernel):  # TODO rename to RBFGauss
         return par[0], np.diag(par[1:] ** -1)
 
 
-class RBFStudent(RBF):  # TODO might inherit from Kernel? unclear how to model Kernel-Density-Expectation relationship
+class RBFStudent(RBFGauss):  # TODO might inherit from Kernel? unclear how to model Kernel-Density-Expectation relationship
     """
     RBF kernel with Student's expectations approximated by Monte Carlo.
     """

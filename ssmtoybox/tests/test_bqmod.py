@@ -149,9 +149,9 @@ class GPModelTest(TestCase):
         y = np.apply_along_axis(dyn.dyn_eval, 0, x, None)
 
         # kernel and it's initial parameters
-        from ssmtoybox.bq.bqkern import RBF
+        from ssmtoybox.bq.bqkern import RBFGauss
         lhyp = np.log([1.0] + 5 * [3.0])
-        kernel = RBF(dyn.dim_in, self.ker_par_5d)
+        kernel = RBFGauss(dyn.dim_in, self.ker_par_5d)
 
         from scipy.optimize import check_grad
         err = check_grad(self._total_nlml, self._total_nlml_grad, lhyp, kernel, y.T, x)
