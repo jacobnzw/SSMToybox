@@ -671,12 +671,12 @@ class TaylorGPQDTransform(MomentTransform):
     integral. For el --> infinity the transform converges to LinearizationTransform.
     """
 
-    def __init__(self, dim, alpha=1.0, el=1.0):
+    def __init__(self, dim, ker_par):
         self.dim = dim
-        self.alpha = alpha
-        self.ell = el
-        self.Lam = np.diag(el ** 2 * np.ones(dim))
-        self.iLam = np.diag(el ** -2 * np.ones(dim))
+        self.alpha = ker_par[0, 0]
+        self.ell = ker_par[0, 1:]
+        self.Lam = np.diag(self.ell**2 * np.ones(dim))
+        self.iLam = np.diag(self.ell**-2 * np.ones(dim))
         self.eye_d = np.eye(dim)
         # lists for logging average model variance and posterior integral variance
         self.mvar_list = []

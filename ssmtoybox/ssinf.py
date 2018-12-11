@@ -1302,19 +1302,14 @@ class ExtendedKalmanGPQD(GaussianInference):
 
     Parameters
     ----------
-    sys : GaussianStateSpaceModel
-        State-space model to perform inference on. Needs to have Jacobians implemented.
+    rbf_par_dyn : (1, dim_in+1) ndarray
+        RBF kernel parameters for the dynamics.
 
-    alpha : float, optional
-        Scaling parameter of the RBF kernel.
-
-    el : float, optional
-        Input scaling parameter (a.k.a. horizontal length-scale) of the RBF kernel.
+    rbf_par_obs : (1, dim_in+1) ndarray
+        RBF kernel parameters for the measurement model.
     """
-    def __init__(self, mod_dyn, mod_obs, tf_dyn, tf_obs):
-        assert isinstance(mod_dyn, StateSpaceModel)
-        nq = mod_dyn.xD if mod_dyn.q_additive else mod_dyn.xD + mod_dyn.qD
-        nr = mod_dyn.xD if mod_dyn.r_additive else mod_dyn.xD + mod_dyn.rD
-        tf = TaylorGPQDTransform(nq, alpha, el)
-        th = TaylorGPQDTransform(nr, alpha, el)
-        super(ExtendedKalmanGPQD, self).__init__(mod_dyn, mod_obs, tf, th)
+
+    def __init__(self, dyn, obs, rbf_par_dyn, rbf_par_obs):
+        tf = TaylorGPQDTransform(dyn.dim_in, rbf_par_dyn)
+        th = TaylorGPQDTransform(obs.dim_state, rbf_par_obs)
+        super(ExtendedKalmanGPQD, self).__init__(dyn, obs, tf, th)
