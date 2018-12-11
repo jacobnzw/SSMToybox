@@ -15,7 +15,6 @@ def default_bq_hypers(dyn, obs):
 
 
 class TestUNGM(unittest.TestCase):
-    # TODO: Tests for classes deriving from StateSpaceModel should ensure function implementation meet requirements.
     def test_dyn_fcn(self):
         pass
 

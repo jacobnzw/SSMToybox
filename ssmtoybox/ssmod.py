@@ -1159,7 +1159,6 @@ class BearingMeasurement(MeasurementModel):
     dim_noise = None
     noise_additive = True
 
-    # TODO: can be generalized to 3D
     def __init__(self, noise_rv, dim_state, state_index=None, sensor_pos=None):
         super(BearingMeasurement, self).__init__(noise_rv, dim_state, state_index)
         # default: 4 sensor positions
@@ -1194,8 +1193,6 @@ class Radar2DMeasurement(MeasurementModel):
         \end{bmatrix} + r_k
 
     Reasonable statistics: :math:`r_k \sim N(0, \diag([1e-6, 0.17e-6]))`
-
-    # TODO: (optionally) range rate measurements
     """
 
     dim_substate = 2
@@ -1229,6 +1226,7 @@ class Radar2DMeasurement(MeasurementModel):
         : (dim_y, ) ndarray
             Range and bearing measurements.
         """
+        # TODO: (optionally) range rate measurements
         # range
         rng = np.sqrt((x[0] - self.radar_loc[0]) ** 2 + (x[1] - self.radar_loc[1]) ** 2)
         # bearing

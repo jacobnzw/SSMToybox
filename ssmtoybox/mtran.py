@@ -683,7 +683,6 @@ class TaylorGPQDTransform(MomentTransform):
         self.ivar_list = []
 
     def apply(self, f, mean, cov, fcn_pars, tf_pars=None):
-        # TODO: equations can be optimized further
         # wm = la.det(cov.dot(self.iLam) + self.eye_d) ** -0.5
         wm = la.det(self.iLam.dot(cov) + self.eye_d) ** -0.5
         fm = f(mean, fcn_pars)

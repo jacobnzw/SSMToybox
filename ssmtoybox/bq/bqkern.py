@@ -323,7 +323,7 @@ class RBFGauss(Kernel):
         assert par.shape[1] == dim + 1
         super(RBFGauss, self).__init__(dim, par, jitter)
 
-    def __str__(self):  # TODO: improve string representation
+    def __str__(self):
         return '{} {}'.format(self.__class__.__name__, self.par.update({'jitter': self.jitter}))
 
     def eval(self, par, x1, x2=None, diag=False, scaling=True):

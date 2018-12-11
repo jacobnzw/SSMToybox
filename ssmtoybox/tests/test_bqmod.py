@@ -183,7 +183,6 @@ class GPModelTest(TestCase):
         # plot after optimization
         model.plot_model(xtest, y, fcn_true=f, par=hyp_ml2)
 
-        # TODO: test fitting of multioutput GPs, GPy supports this in GPRegression
         # plot NLML surface
         # x = np.log(np.mgrid[1:10:0.5, 0.5:20:0.5])
         # m, n = x.shape[1:]
