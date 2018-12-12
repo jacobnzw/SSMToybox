@@ -86,7 +86,7 @@ def mt_trunc_demo(mt_trunc, mt, dim=None, full_input_cov=True, **kwargs):
         X[..., i, 1] = ellipse_points(M[:, i, 1], C[..., i, 1])
 
     # PLOTS: transformed samples, MC mean and covariance ground truth
-    fig, ax = plt.subplots(2, 1)
+    fig, ax = plt.subplots(1, 2)
     ax[0].plot(fx[0, :], fx[1, :], 'k.', alpha=0.15)
     ax[0].plot(M_mc[0], M_mc[1], 'ro', markersize=6, lw=2)
     ax[0].plot(X_mc[0, :], X_mc[1, :], 'r--', lw=2, label='MC')
@@ -118,7 +118,7 @@ def mt_trunc_demo(mt_trunc, mt, dim=None, full_input_cov=True, **kwargs):
 
 
 def ukf_trunc_demo(mc_sims=50):
-    disc_tau = 0.05  # discretization period in seconds
+    disc_tau = 0.5  # discretization period in seconds
     duration = 200
 
     # define system
@@ -129,7 +129,7 @@ def ukf_trunc_demo(mc_sims=50):
     sys = ReentryVehicle2DTransition(x0, q, dt=disc_tau)
     # define radar measurement model
     r = GaussRV(2, cov=np.diag([1e-6, 0.17e-6]))
-    obs = Radar2DMeasurement(r, 2)
+    obs = Radar2DMeasurement(r, sys.dim_state)
 
     # simulate reference state trajectory by SDE integration
     x = sys.simulate_continuous(duration, disc_tau, mc_sims)
@@ -156,8 +156,9 @@ def ukf_trunc_demo(mc_sims=50):
     x_cov = np.zeros((dyn.dim_in, dyn.dim_in, steps, mc_sims, num_alg))
 
     # filtering estimate of the state trajectory based on provided measurements
+    from tqdm import trange
     for i_est, estimator in enumerate(alg):
-        for i_mc in range(mc_sims):
+        for i_mc in trange(mc_sims):
             x_mean[..., i_mc, i_est], x_cov[..., i_mc, i_est] = estimator.forward_pass(y[..., i_mc])
             estimator.reset()
 
@@ -167,13 +168,14 @@ def ukf_trunc_demo(mc_sims=50):
     plt.subplot(g[:, :2])
 
     # Earth surface w/ radar position
+    radar_x, radar_y = dyn.R0, 0
     t = 0.02 * np.arange(-1, 4, 0.1)
     plt.plot(dyn.R0 * np.cos(t), dyn.R0 * np.sin(t), color='darkblue', lw=2)
-    plt.plot(dyn.sx, dyn.sy, 'ko')
+    plt.plot(radar_x, radar_y, 'ko')
 
     plt.plot(x_ref[0, :], x_ref[1, :], color='r', ls='--')
     # Convert from polar to cartesian
-    meas = np.stack((dyn.sx + y[0, ...] * np.cos(y[1, ...]), dyn.sy + y[0, ...] * np.sin(y[1, ...])), axis=0)
+    meas = np.stack(( + y[0, ...] * np.cos(y[1, ...]), radar_y + y[0, ...] * np.sin(y[1, ...])), axis=0)
     for i in range(mc_sims):
         # Vehicle trajectory
         # plt.plot(x[0, :, i], x[1, :, i], alpha=0.35, color='r', ls='--')
@@ -217,5 +219,8 @@ def ukf_trunc_demo(mc_sims=50):
 
 
 if __name__ == '__main__':
+    # truncated transform significantly improves the SKL between the true and approximate Gaussian
     mt_trunc_demo(TruncatedUnscentedTransform, UnscentedTransform, [2, 5, 10, 15], kappa=0, full_input_cov=True)
-    # ukf_trunc_demo(mc_sims=100)
+
+    # truncated transform performance virtually identical when applied in filtering
+    # ukf_trunc_demo(mc_sims=50)
