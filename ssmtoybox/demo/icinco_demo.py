@@ -1,14 +1,13 @@
+import sys
+import time
 import numpy as np
 import pandas as pd
-from numpy import newaxis as na
-from scipy.stats import multivariate_normal
-from scipy.linalg import cho_factor, cho_solve
-from numpy.linalg import cholesky
-from ssmtoybox.ssinf import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GaussianProcessKalman
-from ssmtoybox.ssmod import UNGMGaussSSM
-from ssmtoybox.utils import bootstrap_var, squared_error, neg_log_likelihood, log_cred_ratio, mse_matrix
 import matplotlib.pyplot as plt
-import time
+from tqdm import trange
+from numpy import newaxis as na
+from ssmtoybox.ssinf import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GaussianProcessKalman
+from ssmtoybox.ssmod import UNGMTransition, UNGMMeasurement
+from ssmtoybox.utils import bootstrap_var, squared_error, neg_log_likelihood, log_cred_ratio, mse_matrix, GaussRV
 
 
 def evaluate_performance(x, mean_f, cov_f, mean_s, cov_s, bootstrap_variance=True):
@@ -77,42 +76,47 @@ def print_table(data, row_labels=None, col_labels=None, latex=False):
 
 def tables():
     steps, mc = 500, 100
-    ssm = UNGMGaussSSM()  # initialize UNGM model
-    x, z = ssm.simulate(steps, mc_sims=mc)  # generate some data
 
-    kern_par_sr = np.array([[1.0, 0.3 * ssm.xD]])
-    kern_par_ut = np.array([[1.0, 3.0 * ssm.xD]])
-    kern_par_gh = np.array([[1.0, 0.1 * ssm.xD]])
+    # setup univariate non-stationary growth model
+    x0 = GaussRV(1, cov=np.atleast_2d(5.0))
+    q = GaussRV(1, cov=np.atleast_2d(10.0))
+    dyn = UNGMTransition(x0, q)  # dynamics
+    r = GaussRV(1)
+    obs = UNGMMeasurement(r, 1)  # observation model
+    x = dyn.simulate_discrete(steps, mc_sims=mc)  # generate some data
+    z = obs.simulate_measurements(x)
+
+    kern_par_sr = np.array([[1.0, 0.3 * dyn.dim_in]])
+    kern_par_ut = np.array([[1.0, 3.0 * dyn.dim_in]])
+    kern_par_gh = np.array([[1.0, 0.1 * dyn.dim_in]])
 
     # initialize filters/smoothers
     algorithms = (
-        # ExtendedKalman(ssm),
-        CubatureKalman(ssm, mod_meas,,,
-        UnscentedKalman(ssm, mod_meas,,,
-        GaussHermiteKalman(ssm, mod_meas,,,
-        GaussHermiteKalman(ssm, mod_meas,,,
-        GaussHermiteKalman(ssm, mod_meas,,,
-        GaussHermiteKalman(ssm, mod_meas,,,
-        GaussHermiteKalman(ssm, mod_meas,,,
-        GaussianProcessKalman(ssm, mod_meas, kern_par_sr, kern_par_sr),
-        GaussianProcessKalman(ssm, mod_meas, kern_par_ut, kern_par_ut),
-        GaussianProcessKalman(ssm, mod_meas, kern_par_sr, kern_par_sr),
-        GaussianProcessKalman(ssm, mod_meas, kern_par_gh, kern_par_gh),
-        GaussianProcessKalman(ssm, mod_meas, kern_par_gh, kern_par_gh),
-        GaussianProcessKalman(ssm, mod_meas, kern_par_gh, kern_par_gh),
-        GaussianProcessKalman(ssm, mod_meas, kern_par_gh, kern_par_gh),
+        CubatureKalman(dyn, obs),
+        UnscentedKalman(dyn, obs),
+        GaussHermiteKalman(dyn, obs),
+        GaussHermiteKalman(dyn, obs),
+        GaussHermiteKalman(dyn, obs),
+        GaussHermiteKalman(dyn, obs),
+        GaussHermiteKalman(dyn, obs),
+        GaussianProcessKalman(dyn, obs, kern_par_sr, kern_par_sr),
+        GaussianProcessKalman(dyn, obs, kern_par_ut, kern_par_ut),
+        GaussianProcessKalman(dyn, obs, kern_par_sr, kern_par_sr),
+        GaussianProcessKalman(dyn, obs, kern_par_gh, kern_par_gh),
+        GaussianProcessKalman(dyn, obs, kern_par_gh, kern_par_gh),
+        GaussianProcessKalman(dyn, obs, kern_par_gh, kern_par_gh),
+        GaussianProcessKalman(dyn, obs, kern_par_gh, kern_par_gh),
     )
     num_algs = len(algorithms)
 
     # space for estimates
-    mean_f, cov_f = np.zeros((ssm.xD, steps, mc, num_algs)), np.zeros((ssm.xD, ssm.xD, steps, mc, num_algs))
-    mean_s, cov_s = np.zeros((ssm.xD, steps, mc, num_algs)), np.zeros((ssm.xD, ssm.xD, steps, mc, num_algs))
+    mean_f, cov_f = np.zeros((dyn.dim_in, steps, mc, num_algs)), np.zeros((dyn.dim_in, dyn.dim_in, steps, mc, num_algs))
+    mean_s, cov_s = np.zeros((dyn.dim_in, steps, mc, num_algs)), np.zeros((dyn.dim_in, dyn.dim_in, steps, mc, num_algs))
     # do filtering/smoothing
     t0 = time.time()  # measure execution time
-    print('Running filters/smoothers ...')
+    print('Running filters/smoothers ...', flush=True)
     for a, alg in enumerate(algorithms):
-        print('{}'.format(alg.__class__.__name__))  # print filter/smoother name
-        for sim in range(mc):
+        for sim in trange(mc, desc='{:25}'.format(alg.__class__.__name__), file=sys.stdout):
             mean_f[..., sim, a], cov_f[..., sim, a] = alg.forward_pass(z[..., sim])
             mean_s[..., sim, a], cov_s[..., sim, a] = alg.backward_pass()
             alg.reset()
@@ -157,20 +161,31 @@ def tables():
             'smoother_RMSE': rmse_table_s, 'smoother_NCI': nci_table_s, 'smoother_NLL': nll_table_s}
 
 
-def hypers_demo(lscale=[1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1, 3, 1e1, 3e1]):
+def hypers_demo(lscale=None):
+    # set default lengthscales if unspecified
+    if lscale is None:
+        lscale = [1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1, 3, 1e1, 3e1]
+
     steps, mc = 500, 20
-    ssm = UNGMGaussSSM()  # initialize UNGM model
-    x, z = ssm.simulate(steps, mc_sims=mc)  # generate some data
+
+    # setup univariate non-stationary growth model
+    x0 = GaussRV(1, cov=np.atleast_2d(5.0))
+    q = GaussRV(1, cov=np.atleast_2d(10.0))
+    dyn = UNGMTransition(x0, q)  # dynamics
+    r = GaussRV(1)
+    obs = UNGMMeasurement(r, 1)  # observation model
+    x = dyn.simulate_discrete(steps, mc_sims=mc)  # generate some data
+    z = obs.simulate_measurements(x)
+
     num_el = len(lscale)
-    # lscale = [1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1, 3, 1e1, 3e1]  # , 1e2, 3e2]
-    mean_f, cov_f = np.zeros((ssm.xD, steps, mc, num_el)), np.zeros((ssm.xD, ssm.xD, steps, mc, num_el))
+    mean_f, cov_f = np.zeros((dyn.dim_in, steps, mc, num_el)), np.zeros((dyn.dim_in, dyn.dim_in, steps, mc, num_el))
     for iel, el in enumerate(lscale):
 
         # kernel parameters
-        ker_par = np.array([[1.0, el * ssm.xD]])
+        ker_par = np.array([[1.0, el * dyn.dim_in]])
 
         # initialize BHKF with current lenghtscale
-        f = GaussianProcessKalman(ssm, mod_meas, ker_par, ker_par)
+        f = GaussianProcessKalman(dyn, obs, ker_par, ker_par)
         # filtering
         for s in range(mc):
             mean_f[..., s, iel], cov_f[..., s, iel] = f.forward_pass(z[..., s])
@@ -201,10 +216,9 @@ def hypers_demo(lscale=[1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1, 3, 1e1, 3e1]):
     plt.legend()
     plt.show()
 
-    plot_data = {'el': lscale, 'rmse': rmseVsEl, 'nci': nciVsEl, 'neg_log_likelihood': nllVsEl}
-    return plot_data
+    return {'el': lscale, 'rmse': rmseVsEl, 'nci': nciVsEl, 'neg_log_likelihood': nllVsEl}
 
 
 if __name__ == '__main__':
-    tables_dict = tables()
+    # tables_dict = tables()
     plot_data = hypers_demo()
