@@ -1,16 +1,3 @@
-# Evaluate performance of the following filters/smoothers
-#   - EKF
-#   - GPQKF w/ RBF kernel, one unit sigma-point (zero) and derivative observation
-#   - GPQKF w/ AFFINE kernel, one unit sigma-point (zero) and derivative observation
-#       * By using affine kernel we hope to recover an algorithm similar to EKF
-#       * Difference to EKF is that this algorithm utilizes integral variance
-#       * It could be construed as "Bayesian Quadrature EKF" (GP quadrature EKF)
-#   - GPQKF w/ given kernel, UT unit sigma-points w/ derivative observation at the middle point ONLY
-#       Kernels could be:
-#       * RBF:
-#       * AFFINE: This variant should be closest to the EKF
-#       * HERMITE:
-
 import time
 
 import numpy as np
@@ -18,45 +5,46 @@ import pandas as pd
 
 from ssmtoybox.demo.icinco_demo import evaluate_performance
 from ssmtoybox.ssinf import ExtendedKalman, ExtendedKalmanGPQD
-from ssmtoybox.ssmod import UNGMGaussSSM
+from ssmtoybox.ssmod import UNGMTransition, UNGMMeasurement
 from ssmtoybox.mtran import UnscentedTransform
+from ssmtoybox.utils import GaussRV
 
 steps, mc = 50, 10  # time steps, mc simulations
-# initialize SSM and generate some data
-ssm = UNGMGaussSSM()
-x, z = ssm.simulate(steps, mc)
+
+# setup univariate non-stationary growth model
+x0 = GaussRV(1, cov=np.atleast_2d(5.0))
+q = GaussRV(1, cov=np.atleast_2d(10.0))
+dyn = UNGMTransition(x0, q)  # dynamics
+r = GaussRV(1)
+obs = UNGMMeasurement(r, 1)  # observation model
+
+x = dyn.simulate_discrete(steps, mc)
+z = obs.simulate_measurements(x)
+
 # use only the central sigma-point
-usp_0 = np.zeros((ssm.xD, 1))
-usp_ut = UnscentedTransform.unit_sigma_points(ssm.xD)
+usp_0 = np.zeros((dyn.dim_in, 1))
+usp_ut = UnscentedTransform.unit_sigma_points(dyn.dim_in)
+
 # set the RBF kernel hyperparameters
-hyp_rbf = {'sig_var': 1.0, 'lengthscale': 3.0 * np.ones(ssm.xD, ), 'noise_var': 1e-8}
-hyp_rbf_ut = {'sig_var': 8.0, 'lengthscale': 0.5 * np.ones((1,)), 'noise_var': 1e-16}
-hyp_affine = {'bias': 1.0, 'variance': 1.0 * np.ones(ssm.xD, ), 'noise_var': 1e-16}
+hyp_rbf = np.array([[1.0] + dyn.dim_in*[3.0]])
+hyp_rbf_ut = np.array([[8.0] + dyn.dim_in*[0.5]])
+
 # derivative observations only at the central point
 der_mask = np.array([0])
+
 # filters/smoothers to test
 algorithms = (
     # EKF, GPQ+D w/ affine kernel, GPQ+D w/ RBF kernel (el --> infty)
-    ExtendedKalman(ssm, mod_meas,,,
+    ExtendedKalman(dyn, obs),
     # GPQ+D RBF kernel w/ single sigma-point, becomes EKF for el --> infinity
-    ExtendedKalmanGPQD(ssm, mod_meas,,,
-    # GPQ+D affine kernel w/ single sigma-point, x = m + L*xi
-    # GPQuadDerAffineKalman(ssm, usp_0, usp_0, hyp_affine, hyp_affine, which_der=der_mask),
-    # GPQ+D RBF kernel w/ single sigma-point, x = m + L*xi
-    # GPQuadDerRBFKalman(ssm, usp_0, usp_0, hyp_rbf, hyp_rbf, which_der=der_mask),
-    # UKF
-    # UnscentedKalman(ssm, kappa=0.0),
-    # GPQ-UT w/ UT sigma-points, should be same as UKF
-    # GPQ-RBF w/ UT sigma-points
-    # GaussianProcessKalman(ssm, usp_ut, usp_ut, hyp_rbf_ut, hyp_rbf_ut),
-    # GPQ+D RBF kernel w/ UT sigma-points (derivative at the central point only)
-    # GPQuadDerRBFKalman(ssm, usp_ut, usp_ut, hyp_rbf_ut, hyp_rbf_ut, which_der=der_mask),
+    ExtendedKalmanGPQD(dyn, obs, hyp_rbf, hyp_rbf),
 )
 num_alg = len(algorithms)
 
 # space for estimates
-mean_f, cov_f = np.zeros((ssm.xD, steps, mc, num_alg)), np.zeros((ssm.xD, ssm.xD, steps, mc, num_alg))
-mean_s, cov_s = np.zeros((ssm.xD, steps, mc, num_alg)), np.zeros((ssm.xD, ssm.xD, steps, mc, num_alg))
+mean_f, cov_f = np.zeros((dyn.dim_in, steps, mc, num_alg)), np.zeros((dyn.dim_in, dyn.dim_in, steps, mc, num_alg))
+mean_s, cov_s = np.zeros((dyn.dim_in, steps, mc, num_alg)), np.zeros((dyn.dim_in, dyn.dim_in, steps, mc, num_alg))
+
 # do filtering/smoothing
 t0 = time.time()  # measure execution time
 print('Running filters/smoothers ...')
@@ -80,7 +68,7 @@ rmseStd_f, nciStd_f, nllStd_f, rmseStd_s, nciStd_s, nllStd_s = scores[6:]
 # put data into Pandas DataFrame for fancy printing and latex export
 row_labels = ['EKF', 'EKF-GPQD']  # ['EKF', 'GPQD-RBF', 'GPQD-AFFINE', 'UKF', 'GPQD-UT-RBF']
 col_labels = ['RMSE', '2STD', 'NCI', '2STD', 'NLL', '2STD']
-pd.set_option('precision', 4)
+pd.set_option('precision', 4, 'max_columns', 6)
 table_f = pd.DataFrame(np.hstack((rmseMean_f, rmseStd_f, nciMean_f, nciStd_f, nllMean_f, nllStd_f)),
                        index=row_labels, columns=col_labels)
 table_s = pd.DataFrame(np.hstack((rmseMean_s, rmseStd_s, nciMean_s, nciStd_s, nllMean_s, nllStd_s)),
