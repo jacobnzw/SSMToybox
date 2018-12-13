@@ -1,9 +1,9 @@
 import numpy as np
 import numpy.linalg as la
 from scipy.linalg import cho_factor, cho_solve
-from ssmod import ReentryRadar
-from bq.bqmtran import GPQ
-from mtran import MonteCarlo
+from ssmtoybox.ssmod import ReentryVehicleRadarTrackingGaussSSM
+from ssmtoybox.bq.bqmtran import GaussianProcessTransform
+from ssmtoybox.mtran import MonteCarloTransform
 from unittest import TestCase
 
 
@@ -39,7 +39,7 @@ class MultTest(TestCase):
 
         dim_in, dim_out = 2, 1
         ker_par_mo = np.hstack((np.ones((dim_out, 1)), 1 * np.ones((dim_out, dim_in))))
-        tf_mo = GPQ(dim_in, ker_par_mo, points='sr')
+        tf_mo = GaussianProcessTransform(dim_in, dim_out, ker_par_mo, point_str='sr')
         iK, Q = tf_mo.iK, tf_mo.Q
 
         C1 = iK.dot(Q).dot(iK)
@@ -51,7 +51,7 @@ class MultTest(TestCase):
         # attempt to compute the transformed covariance using cholesky decomposition
 
         # integrand
-        ssm = ReentryRadar()
+        ssm = ReentryVehicleRadarTrackingGaussSSM()
         f = ssm.dyn_eval
         dim_in, dim_out = ssm.xD, 1
 
@@ -60,10 +60,10 @@ class MultTest(TestCase):
 
         # transform
         ker_par_mo = np.hstack((np.ones((dim_out, 1)), 25 * np.ones((dim_out, dim_in))))
-        tf_so = GPQ(dim_in, ker_par_mo, points='sr')
+        tf_so = GaussianProcessTransform(dim_in, dim_out, ker_par_mo, point_str='sr')
 
         # Monte-Carlo for ground truth
-        tf_mc = MonteCarlo(dim_in, 1000)
+        tf_mc = MonteCarloTransform(dim_in, 1000)
         mean_mc, cov_mc, ccov_mc = tf_mc.apply(f, mean_in, cov_in, None)
         C_MC = cov_mc + np.outer(mean_mc, mean_mc.T)
 

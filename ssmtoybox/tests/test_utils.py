@@ -1,6 +1,6 @@
 import unittest
 
-from utils import *
+from ssmtoybox.utils import *
 
 
 class TestMetrics(unittest.TestCase):
@@ -28,3 +28,20 @@ class TestMSEMatrix(unittest.TestCase):
         x = np.random.randn(dim, mc)
         m = np.random.randn(dim, mc)
         mse_matrix(x, m)
+
+
+class TestGaussMixture(unittest.TestCase):
+
+    def test_gauss_mixture(self):
+        means = ([0, 0], [1, 1], [3, 0], [0, -3])
+        covs = (0.1 * np.eye(2), 0.2 * np.eye(2), 0.3 * np.eye(2), 0.1 * np.eye(2))
+        alphas = (0.15, 0.3, 0.4, 0.15)
+        num_samples = 1000
+        samples, indexes = gauss_mixture(means, covs, alphas, num_samples)
+
+        import matplotlib.pyplot as plt
+        plot_opts = {'linestyle': '', 'marker': '.', 'markersize': 2}
+        for i in range(len(alphas)):
+            sel = indexes == i
+            plt.plot(samples[sel, 0], samples[sel, 1], **plot_opts)
+        plt.show()
