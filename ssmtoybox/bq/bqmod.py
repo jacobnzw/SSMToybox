@@ -156,6 +156,8 @@ class Model(object, metaclass=ABCMeta):
         par : ndarray
             Kernel parameters.
 
+        args : tuple
+
         Returns
         -------
         wm : ndarray
@@ -185,6 +187,8 @@ class Model(object, metaclass=ABCMeta):
         par : ndarray
             Kernel parameters.
 
+        args : tuple
+
         Returns
         -------
         : float
@@ -201,6 +205,8 @@ class Model(object, metaclass=ABCMeta):
         ----------
         par : ndarray
             Kernel parameters.
+
+        args : tuple
 
         Returns
         -------
@@ -420,31 +426,29 @@ class Model(object, metaclass=ABCMeta):
 class GaussianProcessModel(Model):
     """
     Gaussian process regression model of the integrand in the Bayesian quadrature.
+
+    Parameters
+    ----------
+    dim : int
+        Number of input dimensions.
+
+    kern_par : ndarray
+        Kernel parameters in matrix.
+
+    kern_str : str
+        Acronym of the covariance function of the Gaussian process model.
+
+    point_str : str
+        Acronym for the sigma-point set to use in BQ.
+
+    point_par : dict
+        Parameters of the sigma-point set.
+
+    estimate_par : bool, optional
+        If `True`, kernel parameters will be estimated. Applies only under `MarginalInference`.
     """
 
     def __init__(self, dim, kern_par, kern_str, point_str, point_par=None, estimate_par=False):
-        """
-        Gaussian process regression model.
-
-        Parameters
-        ----------
-        estimate_par
-        dim : int
-            Number of input dimensions.
-
-        kern_par : ndarray
-            Kernel parameters in matrix.
-
-        kern_str : str
-            Acronym of the covariance function of the Gaussian process model.
-
-        point_str : str
-            Acronym for the sigma-point set to use in BQ.
-
-        point_par : dict
-            Parameters of the sigma-point set.
-        """
-
         super(GaussianProcessModel, self).__init__(dim, kern_par, kern_str, point_str, point_par, estimate_par)
 
     def predict(self, test_data, fcn_obs, x_obs=None, par=None):
@@ -1056,32 +1060,29 @@ class BayesSardModel(Model):
 class StudentTProcessModel(GaussianProcessModel):
     """
     Student t process regression model of the integrand in the Bayesian quadrature.
+
+    Parameters
+    ----------
+    dim : int
+        Number of input dimensions.
+
+    kern_par : ndarray
+        Kernel parameters in matrix.
+
+    kern_str : str
+        Acronym of the covariance function of the Gaussian process model.
+
+    point_str : str
+        Acronym for the sigma-point set to use in BQ.
+
+    point_par : dict
+        Parameters of the sigma-point set.
+
+    estimate_par : bool, optional
+        If `True`, kernel parameters will be estimated. Applies only under `MarginalInference`.
     """
 
     def __init__(self, dim, kern_par, kern_str, point_str, point_par=None, estimate_par=False, nu=4.0):
-        """
-        Student's t-process regression model.
-
-        Parameters
-        ----------
-        estimate_par
-        dim : int
-            Number of input dimensions.
-
-        kern_par : ndarray
-            Kernel parameters in matrix.
-
-        kern_str : str
-            Acronym of the covariance function of the Gaussian process model.
-
-        point_str : str
-            Acronym for the sigma-point set to use in BQ.
-
-        point_par : dict
-            Parameters of the sigma-point set.
-
-        """
-
         super(StudentTProcessModel, self).__init__(dim, kern_par, kern_str, point_str, point_par, estimate_par)
         nu = 3.0 if nu < 2 else nu  # nu > 2
         self.nu = nu
@@ -1480,33 +1481,29 @@ class MultiOutputModel(Model):
 class GaussianProcessMO(MultiOutputModel):  # TODO: Multiple inheritance could be used here
     """
     Multi-output Gaussian process regression model of the integrand in the Bayesian quadrature.
+
+    Parameters
+    ----------
+    dim_in : int
+        Number of input dimensions.
+
+    dim_out : int
+        Number of output dimensions.
+
+    kern_par : numpy.ndarray
+        Kernel parameters in matrix.
+
+    kern_str : string
+        Acronym of the covariance function of the Gaussian process model.
+
+    point_str : string
+        Acronym for the sigma-point set to use in BQ.
+
+    point_par : dict
+        Parameters of the sigma-point set.
     """
 
     def __init__(self, dim_in, dim_out, kern_par, kern_str, point_str, point_par=None):
-        """
-        Multi-output Gaussian process regression model.
-
-        Parameters
-        ----------
-        dim_in : int
-            Number of input dimensions.
-
-        dim_out : int
-            Number of output dimensions.
-
-        kern_par : numpy.ndarray
-            Kernel parameters in matrix.
-
-        kern_str : string
-            Acronym of the covariance function of the Gaussian process model.
-
-        point_str : string
-            Acronym for the sigma-point set to use in BQ.
-
-        point_par : dict
-            Parameters of the sigma-point set.
-        """
-
         super(GaussianProcessMO, self).__init__(dim_in, dim_out, kern_par, kern_str, point_str, point_par)
 
     def predict(self, test_data, fcn_obs, par=None):
@@ -1612,32 +1609,31 @@ class GaussianProcessMO(MultiOutputModel):  # TODO: Multiple inheritance could b
 
 
 class StudentTProcessMO(MultiOutputModel):
+    """
+    Multi-output Student's t-process regression model.
+
+    Parameters
+    ----------
+    dim_in : int
+        Number of input dimensions.
+
+    dim_out : int
+        Number of output dimensions.
+
+    kern_par : ndarray
+        Kernel parameters in matrix.
+
+    kern_str : str
+        Acronym of the covariance function of the Gaussian process model.
+
+    point_str : str
+        Acronym for the sigma-point set to use in BQ.
+
+    point_par : dict
+        Parameters of the sigma-point set.
+    """
 
     def __init__(self, dim_in, dim_out, kern_par, kern_str, point_str, point_par=None, nu=3.0):
-        """
-        Multi-output Student's t-process regression model.
-
-        Parameters
-        ----------
-        dim_in : int
-            Number of input dimensions.
-
-        dim_out : int
-            Number of output dimensions.
-
-        kern_par : ndarray
-            Kernel parameters in matrix.
-
-        kern_str : str
-            Acronym of the covariance function of the Gaussian process model.
-
-        point_str : str
-            Acronym for the sigma-point set to use in BQ.
-
-        point_par : dict
-            Parameters of the sigma-point set.
-        """
-
         super(StudentTProcessMO, self).__init__(dim_in, dim_out, kern_par, kern_str, point_str, point_par)
         self.nu = nu
 
