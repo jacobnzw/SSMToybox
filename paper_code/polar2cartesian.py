@@ -1,10 +1,10 @@
-from bq.bqmtran import GPQ
-from mtran import MonteCarlo, SphericalRadial, GaussHermite
-from utils import *
-import numpy.linalg as la
 # import matplotlib as mpl
 # import matplotlib.pyplot as plt
 from paper_code.journal_figure import *
+from ssmtoybox.bq.bqmtran import GaussianProcessTransform
+from ssmtoybox.mtran import MonteCarloTransform, SphericalRadialTransform, GaussHermiteTransform
+from ssmtoybox.utils import *
+import numpy.linalg as la
 from collections import OrderedDict
 
 
@@ -34,9 +34,10 @@ def gpq_polar2cartesian_demo():
 
     # Initialize transforms
     # high el[0], because the function is linear given x[1]
-    tf_gpq = GPQ(dim, 'rbf', 'sr', {'alpha': 1.0, 'el': [600, 6]})
-    tf_sr = SphericalRadial(dim)
-    tf_mc = MonteCarlo(dim, n=1e4)  # 10k samples
+    kpar = np.array([[1.0, 600, 6]])
+    tf_gpq = GaussianProcessTransform(dim, 1, kpar, kern_str='rbf', point_str='sr')
+    tf_sr = SphericalRadialTransform(dim)
+    tf_mc = MonteCarloTransform(dim, n=1e4)  # 10k samples
 
     # Input mean and covariance
     mean_in = np.array([1, np.pi / 2])
@@ -118,10 +119,10 @@ def polar2cartesian_skl_demo():
     # COMPARE moment transforms
     ker_par = np.array([[1.0, 60, 6]])
     moment_tforms = OrderedDict([
-        ('gpq-sr', GPQ(num_dim, ker_par, kernel='rbf', points='sr')),
-        ('sr', SphericalRadial(num_dim)),
+        ('gpq-sr', GaussianProcessTransform(num_dim, 1, ker_par, kern_str='rbf', point_str='sr')),
+        ('sr', SphericalRadialTransform(num_dim)),
     ])
-    baseline_mtf = MonteCarlo(num_dim, n=10000)
+    baseline_mtf = MonteCarloTransform(num_dim, n=10000)
     num_tforms = len(moment_tforms)
 
     # initialize storage of SKL scores
@@ -238,7 +239,7 @@ def polar2cartesian_spiral_demo():
 
     # points on a spiral, i.e. input means
     ax.plot(pol_spiral_pt[0, :], pol_spiral_pt[1, :], 'o', color='k', ms=4)
-    ax.text(pol_spiral_pt[0, 5]-0.15, pol_spiral_pt[1, 5]+0.75, r'$[r_i, \theta_i]$')
+    ax.text(pol_spiral_pt[0, 5]-0.15, pol_spiral_pt[1, 5]+1.25, r'$[r_i, \theta_i]$')
     rgr = [2, 4, 6]
     plt.rgrids(rgr, [str(r) for r in rgr])
     ax.grid(True, linestyle=':', lw=1, alpha=0.5)

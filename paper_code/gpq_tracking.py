@@ -1,11 +1,9 @@
-from utils import *
-# from paper_code.journal_figure import *
+from ssmtoybox.utils import *
+from paper_code.journal_figure import *
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
-from ssinf import GPQKalman, UnscentedKalman
-from dynsys import ReentryRadar, ReentryRadarSimple
-from ssmod import ReentryRadar as ReentryRadarModel
-from ssmod import ReentryRadarSimple as ReentryRadarSimpleModel
+from ssmtoybox.ssinf import GaussianProcessKalman, UnscentedKalman
+from ssmtoybox.ssmod import ReentryVehicle1DTransition, RangeMeasurement
 
 
 def reentry_gpq_demo():
@@ -29,7 +27,7 @@ def reentry_gpq_demo():
     hdyn = {'alpha': 1.0, 'el': 5 * [25.0]}
     hobs = {'alpha': 1.0, 'el': [25.0, 25.0, 1e4, 1e4, 1e4]}
     alg = (
-        GPQKalman(ssm, 'rbf', 'ut', hdyn, hobs),
+        GaussianProcessKalman(ssm, 'rbf', 'ut', hdyn, hobs),
         UnscentedKalman(ssm),
     )
 
@@ -121,29 +119,38 @@ def reentry_simple_gpq_demo(dur=30, tau=0.1, mc=100):
 
     """
 
-    # Generate reference trajectory by ODE integration
-    sys = ReentryRadarSimple()
-    x = sys.simulate_trajectory(method='rk4', dt=tau, duration=dur, mc_sims=mc)
+    # ground-truth data generator (true system)
+    m0 = np.array([90, 6, 1.5])
+    P0 = np.diag([0.0929, 1.4865, 1e-4])
+    x0 = GaussRV(3, m0, P0)
+    q = GaussRV(3, cov=np.zeros((3, 3)))
+    sys = ReentryVehicle1DTransition(x0, q, dt=tau)
 
+    # Generate reference trajectory
+    x = sys.simulate_continuous(dur, mc_sims=mc)
     # pick only non-divergent trajectories
     x = x[..., np.all(x >= 0, axis=(0, 1))]
-    mc = x.shape[2]
 
-    y = np.zeros((sys.zD,) + x.shape[1:])
-    for i in range(mc):
-        y[..., i] = sys.simulate_measurements(x[..., i], mc_per_step=1).squeeze()
+    # range measurement model
+    r = GaussRV(1, cov=np.array([[0.03048 ** 2]]))
+    obs = RangeMeasurement(r, 3)
+    y = obs.simulate_measurements(x)
+
+    # state-space model used by the filter
+    m0 = np.array([90, 6, 1.7])
+    P0 = np.diag([0.0929, 1.4865, 1e-4])
+    x0 = GaussRV(3, m0, P0)
+    q = GaussRV(3, cov=np.zeros((3, 3)))
+    dyn = ReentryVehicle1DTransition(x0, q, dt=tau)
 
     # GPQKF kernel parameters
     kpar_dyn_ut = np.array([[0.5, 10, 10, 10]])
     kpar_obs_ut = np.array([[0.5, 15, 20, 20]])
 
-    # Initialize model
-    ssm = ReentryRadarSimpleModel(dt=tau)
-
     # Initialize filters
     alg = (
-        GPQKalman(ssm, kpar_dyn_ut, kpar_obs_ut, kernel='rbf', points='ut'),
-        UnscentedKalman(ssm),
+        GaussianProcessKalman(dyn, obs, kpar_dyn_ut, kpar_obs_ut, kernel='rbf', points='ut'),
+        UnscentedKalman(dyn, obs),
     )
 
     num_alg = len(alg)
@@ -294,34 +301,40 @@ def reentry_simple_gpq_demo(dur=30, tau=0.1, mc=100):
 
 
 def reentry_simple_data(dur=30, tau=0.1, mc=100):
-    # Generate reference trajectory by ODE integration
-    sys = ReentryRadarSimple()
-    x = sys.simulate_trajectory(method='rk4', dt=tau, duration=dur, mc_sims=mc)
+    # ground-truth data generator (true system)
+    m0 = np.array([90, 6, 1.5])
+    P0 = np.diag([0.0929, 1.4865, 1e-4])
+    x0 = GaussRV(3, m0, P0)
+    q = GaussRV(3, cov=np.zeros((3, 3)))
+    sys = ReentryVehicle1DTransition(x0, q, dt=tau)
 
+    # Generate reference trajectory
+    x = sys.simulate_continuous(dur, mc_sims=mc)
     # pick only non-divergent trajectories
     x = x[..., np.all(x >= 0, axis=(0, 1))]
     mc = x.shape[2]
 
-    y = np.zeros((sys.zD,) + x.shape[1:])
-    for i in range(mc):
-        y[..., i] = sys.simulate_measurements(x[..., i], mc_per_step=1).squeeze()
+    # range measurement model
+    r = GaussRV(1, cov=np.array([[0.03048**2]]))
+    obs = RangeMeasurement(r, 3)
+    y = obs.simulate_measurements(x)
+
+    # state-space model used by the filter
+    m0 = np.array([90, 6, 1.7])
+    P0 = np.diag([0.0929, 1.4865, 1e-4])
+    x0 = GaussRV(3, m0, P0)
+    q = GaussRV(3, cov=np.zeros((3, 3)))
+    dyn = ReentryVehicle1DTransition(x0, q, dt=tau)
 
     # GPQKF kernel parameters
-    # hdyn = {'alpha': 1.0, 'el': 3 * [20]}
-    # hobs = {'alpha': 1.0, 'el': [20, 1e2, 1e2]}
-    # hdyn = {'alpha': 1.0, 'el': [7, 7, 7]}
-    # hobs = {'alpha': 1.0, 'el': [7, 20, 20]}
-    hdyn = {'alpha': 0.5, 'el': [10, 10, 10]}
-    hobs = {'alpha': 0.5, 'el': [15, 20, 20]}
-
-    # Initialize model
-    ssm = ReentryRadarSimpleModel(dt=tau)
+    hdyn = np.array([[0.5, 10, 10, 10]])
+    hobs = np.array([[0.5, 15, 20, 20]])
 
     # Initialize filters
     alg = (
-        GPQKalman(ssm, 'rbf', 'ut', hdyn, hobs),
+        GaussianProcessKalman(dyn, obs, hdyn, hobs, kernel='rbf', points='ut'),
         # CubatureKalman(ssm),
-        UnscentedKalman(ssm),
+        UnscentedKalman(dyn, obs),
     )
 
     num_alg = len(alg)
@@ -540,22 +553,22 @@ if __name__ == '__main__':
     import pickle
     # # get simulation results
     print('Running simulations ...')
-    # data_dict = reentry_simple_data(mc=100)
-    reentry_simple_gpq_demo(mc=100, dur=30)
-    #
-    # # dump simulated data for fast re-plotting
-    # print('Pickling data ...')
-    # with open('reentry_score_data.dat', 'wb') as f:
-    #     pickle.dump(data_dict, f)
-    #     f.close()
+    data_dict = reentry_simple_data(mc=100)
+    # reentry_simple_gpq_demo(mc=100, dur=30)
 
-    # load pickled data
+    # dump simulated data for fast re-plotting
+    print('Pickling data ...')
+    with open('reentry_score_data.dat', 'wb') as f:
+        pickle.dump(data_dict, f)
+        f.close()
+
+    # # load pickled data
     # print('Unpickling data ...')
     # with open('reentry_score_data.dat', 'rb') as f:
     #     data_dict = pickle.load(f)
     #     f.close()
 
     # calculate scores and generate publication ready figures
-    # reentry_simple_plots(data_dict)
-    # reentry_simple_trajectory_plot(data_dict)
-    # reentry_simple_gpq_demo()
+    reentry_simple_plots(data_dict)
+    reentry_simple_trajectory_plot(data_dict)
+    reentry_simple_gpq_demo()
