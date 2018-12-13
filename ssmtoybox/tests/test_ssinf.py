@@ -1,8 +1,5 @@
-from unittest import TestCase
-
 import numpy as np
-import numpy.linalg as la
-
+from unittest import TestCase
 from ssmtoybox.ssinf import MarginalizedGaussianProcessKalman, GaussianProcessKalman, BayesSardKalman, \
     StudentProcessStudent, StudentProcessKalman, FullySymmetricStudent
 from ssmtoybox.ssinf import UnscentedKalman, ExtendedKalman, GaussHermiteKalman
@@ -11,6 +8,7 @@ from ssmtoybox.ssmod import UNGMTransition, UNGMNATransition, Pendulum2DTransiti
 from ssmtoybox.ssmod import UNGMMeasurement, UNGMNAMeasurement, Pendulum2DMeasurement, BearingMeasurement, \
     Radar2DMeasurement
 from ssmtoybox.utils import GaussRV, StudentRV
+
 np.set_printoptions(precision=4)
 
 

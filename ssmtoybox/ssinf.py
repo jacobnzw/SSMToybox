@@ -548,7 +548,7 @@ class StudentProcessKalman(GaussianInference):
         super(StudentProcessKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
 
-class StudentInference(StateSpaceInference):
+class StudentianInference(StateSpaceInference):
     """
     Base class for state-space inference algorithms, which assume that the state and measurement variables are jointly
     Student's t-distributed.
@@ -617,7 +617,7 @@ class StudentInference(StateSpaceInference):
         self.dof = dof
         self.fixed_dof = fixed_dof
 
-        super(StudentInference, self).__init__(mod_dyn, mod_obs, tf_dyn, tf_obs)
+        super(StudentianInference, self).__init__(mod_dyn, mod_obs, tf_dyn, tf_obs)
 
     def reset(self):
         """Reset internal variables and flags."""
@@ -625,7 +625,7 @@ class StudentInference(StateSpaceInference):
         scale = (self.dof - 2) / self.dof
         self.x_smat_fi = scale * self.x_cov_fi
         self.x_smat_pr, self.y_smat_pr, self.xy_smat = None, None, None
-        super(StudentInference, self).reset()
+        super(StudentianInference, self).reset()
 
     def _time_update(self, time, theta_dyn=None, theta_obs=None):
         """
@@ -736,7 +736,7 @@ class StudentInference(StateSpaceInference):
         pass
 
 
-class FullySymmetricStudent(StudentInference):
+class FullySymmetricStudent(StudentianInference):
     """
     Student filter using the fully-symmetric moment transforms from [1]_.
 
@@ -771,7 +771,7 @@ class FullySymmetricStudent(StudentInference):
         super(FullySymmetricStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
 
 
-class StudentProcessStudent(StudentInference):
+class StudentProcessStudent(StudentianInference):
     """
     Student's t-process quadrature Student filter (TPQSF, see [1]_) with fully-symmetric sigma-points (see [3]_).
 
@@ -957,7 +957,7 @@ class MultiOutputGaussianProcessKalman(GaussianInference):
         super(MultiOutputGaussianProcessKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
 
-class MultiOutputStudentProcessStudent(StudentInference):
+class MultiOutputStudentProcessStudent(StudentianInference):
     """
     Student's t-process quadrature Student filter (TPQSF, see [1]_) with fully-symmetric sigma-points (see [3]_) and
     multi-output Student's t-process regression model.
