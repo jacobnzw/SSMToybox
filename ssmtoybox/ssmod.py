@@ -204,7 +204,7 @@ class TransitionModel(metaclass=ABCMeta):
 
         .. math::
 
-            x_k+1 = x_k + f(x_k, k)*dt + q_k, q_k ~ N(0, dt*Q)
+            x_{k+1} = x_k + f(x_k, k) \\mathrm{d}t + q_k, \\quad q_k \\sim N(0, \\mathrm{d}t \\cdot Q)
 
         Parameters
         ----------
@@ -253,9 +253,9 @@ class UNGMTransition(TransitionModel):
     The model is
 
     .. math::
-        x_{k+1} = 0.5 x_k * \frac{25 x_k}{1 + x_k^2} + 8*\cos(1.2 k) + q_k
+        x_{k+1} = 0.5 x_k + \\frac{25 x_k}{1 + x_k^2} + 8\\cos(1.2 k) + q_k
 
-    Typically used with :math:`x_0 ~ N(0, 1)`, :math:`q_k ~ N(0, 10)`.
+    Typically used with :math:`x_0 \\sim N(0, 1)`, :math:`q_k \\sim N(0, 10)`.
     """
 
     dim_state = 1
@@ -284,9 +284,9 @@ class UNGMNATransition(TransitionModel):
     The model is
 
     .. math::
-        x_{k+1} = 0.5 x_k \frac{25 x_k}{1 + x_k^2} + 8 q_k \cos(1.2 k)
+        x_{k+1} = 0.5 x_k \\frac{25 x_k}{1 + x_k^2} + 8 q_k \\cos(1.2 k)
 
-    Typically used with :math:`x_0 ~ N(0, 1)`, :math:`q_k ~ N(0, 10)`.
+    Typically used with :math:`x_0 \\sim N(0, 1)`, :math:`q_k \\sim N(0, 10)`.
     """
 
     dim_state = 1
@@ -310,36 +310,34 @@ class Pendulum2DTransition(TransitionModel):
     """
     Pendulum with unit length and mass in 2D [1]_ (Example 5.1).
 
-    State
-    -----
-    `x[0]`: :math:`\alpha` angle from the perpendicular and the direction of the pendulum
-    `x[1]`: :math:`\dot{\alpha}` angular speed
-
     Notes
     -----
 
     .. math ::
 
-        \begin{bmatrix}
-            \alpha_{k+1} \\
-            \dot{\alpha}_{k+1}
-        \end{bmatrix} =
-        \begin{bmatrix}
-            \alpha_k + \dot{\alpha}_k\Delta t \\
-            \dot{\alpha}_k - g\sin(\alpha_k)\Delta t
-        \end{bmatrix} + \mathbf{q}_k
+        \\begin{bmatrix}
+            \\alpha_{k+1} \\\\
+            \\dot{\\alpha}_{k+1}
+        \\end{bmatrix} =
+        \\begin{bmatrix}
+            \\alpha_k + \\dot{\\alpha}_k\\Delta t \\\\
+            \\dot{\\alpha}_k - g\\sin(\\alpha_k)\\Delta t
+        \\end{bmatrix} + \\mathbf{q}_k
 
-    Reasonable statistics: :math:`x_0 \sim N(m_0, P_0),\ q_k \sim N(0, Q)` where
+    where the state consists of
+
+    :math:`\\alpha` angle from the perpendicular and the direction of the pendulum
+
+    :math:`\\dot{\\alpha}` angular speed
+
+    Reasonable default statistics: :math:`x_0 \\sim N(m_0, P_0),\\ q_k \\sim N(0, Q)` where
 
     .. math::
-        m_0 = \begin{bmatrix}1.5 \\ 0\end{bmatrix},\ P_0 = 0.01 I
-
-    .. math::
-        Q = q_c
-        \begin{bmatrix}
-            {\Delta t}^3/3 & {\Delta t}^2/2 \\
-            {\Delta t}^2/2 & {\Delta t}
-        \end{bmatrix}
+        m_0 = \\begin{bmatrix}1.5 \\\\ 0 \\end{bmatrix},\\quad P_0 = 0.01 I,\\quad Q = q_c
+        \\begin{bmatrix}
+            {\\Delta t}^3/3 & {\\Delta t}^2/2 \\\\
+            {\\Delta t}^2/2 & {\\Delta t}
+        \\end{bmatrix}
 
     References
     ----------
@@ -375,8 +373,6 @@ class ReentryVehicle1DTransition(TransitionModel):
     altitude at a very high velocity. Acceleration due to gravity is negligible compared to the altitude and
     velocity-dependent drag terms. The body is constrained so that it falls vertically." [1]_
 
-    State
-    -----
     :math:`\\mathbf{x} = [y, \\dot{y}, \\omega]`, where
         :math:`y`
             Altitude.
@@ -390,24 +386,24 @@ class ReentryVehicle1DTransition(TransitionModel):
     Notes
     -----
     .. math::
-        \begin{bmatrix}
-            y_{k+1} \\
-            \\dot{y}_{k+1} \\
+        \\begin{bmatrix}
+            y_{k+1} \\\\
+            \\dot{y}_{k+1} \\\\
             \\omega_{k+1}
-        \end{bmatrix} =
-        \begin{bmatrix}
-            y_k - \\Delta t \\dot{y}_k \\
-            \\dot{y}_k - \\Delta t \exp(-\gamma y_k) \\dot{y}_k^2 \\omega \\
+        \\end{bmatrix} =
+        \\begin{bmatrix}
+            y_k - \\Delta t \\dot{y}_k \\\\
+            \\dot{y}_k - \\Delta t \\exp(-\\gamma y_k) \\dot{y}_k^2 \\omega_k \\\\
             \\omega_k
-        \end{bmatrix} + q_k
+        \\end{bmatrix} + q_k
 
-    reasonable statistics: :math:`x_0 \sim N(m_0, P_0),\ q_k \sim N(0, Q)`
+    Reasonable default statistics: :math:`x_0 \\sim N(m_0, P_0),\\ q_k \\sim N(0, Q)`
 
     .. math::
         m_0 =
-        \begin{bmatrix}
-            90 km \\ 6 km/s \\ 1.7
-        \end{bmatrix},\ P_0 = \diag([0.3048^2, 1.2192^2, 10]),\ Q = 0
+        \\begin{bmatrix}
+            90 km \\\\ 6 km/s \\\\ 1.7
+        \\end{bmatrix},\\ P_0 = \\mathrm{diag}([0.3048^2, 1.2192^2, 10]),\\ Q = 0
 
 
     References
@@ -443,7 +439,7 @@ class ReentryVehicle2DTransition(TransitionModel):
     """
     Reentry vehicle entering the atmosphere at high altitude and at a very speed.
 
-    "This type of problem has been identified by a number of authors [2]_-[5]_ as being particularly stressful for
+    "This type of problem has been identified by a number of authors [2]_ - [5]_ as being particularly stressful for
     filters and trackers because of the strong nonlinearities exhibited by the forces which act on the vehicle. There
     are three types of forces in effect. The most dominant is aerodynamic drag, which is a function of vehicle speed
     and has a substantial nonlinear variation in altitude. The second type of force is gravity, which accelerates the
@@ -452,7 +448,7 @@ class ReentryVehicle2DTransition(TransitionModel):
     "The tracking problem is made more difficult by the fact that the drag properties of the vehicle might be only very
     crudely known." [1]_
 
-    The model is specified in Cartesian `geocentric coordinates <https://en.wikipedia.org/wiki/ECEF>`.
+    The model is specified in Cartesian `geocentric coordinates <https://en.wikipedia.org/wiki/ECEF>`_.
 
     State
     -----
@@ -471,31 +467,39 @@ class ReentryVehicle2DTransition(TransitionModel):
 
     .. math::
         \\mathbf{x}_{k+1} = \\mathbf{x}_k +
-        \begin{bmatrix}
-            x_k\\Delta t \\
-            y_k\\Delta t \\
-            (D_k \\dot{x}_k + G_k x_k)\\Delta t \\
-            (D_k \\dot{y}_k + G_k y_k)\\Delta t \\
+        \\begin{bmatrix}
+            x_k\\Delta t \\\\
+            y_k\\Delta t \\\\
+            (D_k \\dot{x}_k + G_k x_k)\\Delta t \\\\
+            (D_k \\dot{y}_k + G_k y_k)\\Delta t \\\\
             0
-        \end{bmatrix} + \\mathbf{G}\\mathbf{q}_k
-        \\mathbf{G} =
-        \begin{bmatrix}
-            \\mathbf{0}_{2\times 3}
-            \\mathbf{I}_{3\times 3}
-        \end{bmatrix}
+        \\end{bmatrix} + \\mathbf{G}\\mathbf{q}_k
 
-    Reasonable statistics: :math:`\\mathbf{x}_0 ~ N(\\mathbf{m}_0, \\mathbf{P}_0),\ \\mathbf{q}_k ~ N(0, \\mathbf{Q})`
+    where the noise gain is
+
+    .. math::
+        \\mathbf{G} =
+        \\begin{bmatrix}
+            \\mathbf{0}_{2 \\times 3} \\\\
+            \\mathbf{I}_{3 \\times 3}
+        \\end{bmatrix}
+
+    Reasonable default statistics:
+    :math:`\\mathbf{x}_0 \\sim N(\\mathbf{m}_0, \\mathbf{P}_0),\\quad \\mathbf{q}_k \\sim N(0, \\mathbf{Q})`
 
     .. math::
         \\mathbf{m}_0 =
-        \begin{bmatrix}
+        \\begin{bmatrix}
             6500.4 km, 349.14 km, -1.8093 km/s, -6.7967 km/s, 0.6932
-        \end{bmatrix},\ \\mathbf{P}_0 = \diag([1e-6, 1e-6, 1e-6, 1e-6, 1])
-
-    Covariance of the Euler-Maruyama discretized model
+        \\end{bmatrix},
 
     .. math::
-        \\mathbf{Q} = {\\Delta t}^{-1} \diag([2.4064e-5\ 2.4064e-5\ 1e-6])
+        \\mathbf{P}_0 = \\mathrm{diag}([10^{-6}, 10^{-6}, 10^{-6}, 10^{-6}, 1])
+
+    Covariance of the Euler-Maruyama discretized model is
+
+    .. math::
+        \\mathbf{Q} = {\\Delta t}^{-1} \\mathrm{diag}([2.4064 \\times 10^{-5}\\ 2.4064\\times 10^{-5}\\ 10^{-6}])
 
     References
     ----------
@@ -586,47 +590,58 @@ class CoordinatedTurnTransition(TransitionModel):
     Model in [2]_ is implemented here, where the turn rate can change in time.
     [3]_ considers only bearing measurements.
 
-    State
-    -----
-    x = [x_1, v_1, x_2, v_2, omega]
-        x_1, x_2 - target position [m]
-        v_1, v_2 - target velocity [m/s]
-        omega - target turn rate [deg/s]
-
     .. math::
-    x_{k+1} =
-    \begin{bmatrix}
-        1 & c & 0 & -d & 0 \\
-        0 & b & 0 & -a & 0 \\
-        0 & d & 1 &  c & 0 \\
-        0 & a & 0 &  b & 0 \\
-        0 & 0 & 0 &  0 & 1
-    \end{bmatrix} x_k + q_k
 
-    where :math:`a = \\sin(\\omega \\Delta t)`, :math:`b = \\cos(\\omega \\Delta t)`,
+        \\begin{bmatrix}
+            x_{k+1} \\\\
+            \\dot{x}_{k+1} \\\\
+            y_{k+1} \\\\
+            \\dot{y}_{k+1} \\\\
+            \\omega_{k+1}
+        \\end{bmatrix} =
+        \\begin{bmatrix}
+            1 & c & 0 & -d & 0 \\\\
+            0 & b & 0 & -a & 0 \\\\
+            0 & d & 1 &  c & 0 \\\\
+            0 & a & 0 &  b & 0 \\\\
+            0 & 0 & 0 &  0 & 1
+        \\end{bmatrix} x_k + q_k
+
+    where the state consists of
+
+    :math:`x,\\ y` - target position [m]
+
+    :math:`\\dot{x},\\ \\dot{y}` - target velocity [m/s]
+
+    :math:`\\omega` - target turn rate [deg/s]
+
+    and :math:`a = \\sin(\\omega \\Delta t)`, :math:`b = \\cos(\\omega \\Delta t)`,
     :math:`c = \\sin(\\omega \Delta t) / \\omega`, :math:`d = (1 - \\cos(\\omega \\Delta t)) / \\omega`.
 
-    Reasonable statistics [2]_: :math:`x_0 \sim N(m_0, P_0),\ q_k \sim N(0, Q)`
+    Reasonable default statistics [2]_: :math:`x_0 \\sim N(m_0, P_0),\\ q_k \\sim N(0, Q)` where
 
     .. math::
 
         m_0 =
         \\begin{bmatrix}
-            1000 m \\
-            300 m/s \\
-            1000 m \\
-            0 m/s \\
+            1000 m \\\\
+            300 m/s \\\\
+            1000 m \\\\
+            0 m/s \\\\
             -3.0 * \\pi / 180 rad/s
-        \\end{bmatrix},\ P_0 = \diag([100, 10, 100, 10, 0.1])
-        Q = \\mathrm{blkdiag}([\\rho_1 A, \\rho_1 A, \\rho_2\\Delta t])
+        \\end{bmatrix},\\ P_0 = \\mathrm{diag}([100,\\ 10,\\ 100,\\ 10,\\ 0.1])
 
-    where noise intensities :math:`\\rho_1 = 0.1,\ \\rho_2 = 1.75e-4` and
+    .. math::
+
+        Q = \\mathrm{blkdiag}([\\rho_1 A,\\ \\rho_1 A,\\ \\rho_2\\Delta t])
+
+    where noise intensities :math:`\\rho_1 = 0.1,\\ \\rho_2 = 1.75\\times 10^{-4}` and
 
     .. math::
 
         A =
         \\begin{bmatrix}
-            {\\Delta t}^3/3 & {\\Delta t}^2/2 \\
+            {\\Delta t}^3/3 & {\\Delta t}^2/2 \\\\
             {\\Delta t}^2/2 & \\Delta t
         \\end{bmatrix}
 
@@ -686,9 +701,9 @@ class ConstantTurnRateSpeed(TransitionModel):
     Constant Turn-Rate and Speed (velocity magnitude).
 
 
-    State vector: :math:`[p_x, p_y, v, \\psi, \\dot{\\psi}]`
+    State vector: :math:`[p_x,\\ p_y,\\ v,\\ \\psi,\\ \\dot{\\psi}]`
 
-    Noise vector: :math:`[\\nu_a, \\nu_{\\ddot{\\psi}}]`
+    Noise vector: :math:`[\\nu_a,\\ \\nu_{\\ddot{\\psi}}]`
 
     Process model:
 
@@ -698,17 +713,17 @@ class ConstantTurnRateSpeed(TransitionModel):
 
         x_{k+1} = x_k +
         \\begin{bmatrix}
-            \frac{v_k}{\\dot{\\psi}_k} (\\sin(\\psi_k + \\dot{\\psi}_k \\Delta t) - \\sin(\\psi_k)) \\
-            \frac{v_k}{\\dot{\\psi}_k} (-\\cos(\\psi_k + \\dot{\\psi}_k \\Delta t) + \\cos(\\psi_k)) \\
-            0 \\
-            \\dot{\\psi}_k \\Delta t \\
+            \\frac{v_k}{\\dot{\\psi}_k} (\\sin(\\psi_k + \\dot{\\psi}_k \\Delta t) - \\sin(\\psi_k)) \\\\
+            \\frac{v_k}{\\dot{\\psi}_k} (-\\cos(\\psi_k + \\dot{\\psi}_k \\Delta t) + \\cos(\\psi_k)) \\\\
+            0 \\\\
+            \\dot{\\psi}_k \\Delta t \\\\
             0
         \\end{bmatrix} +
         \\begin{bmatrix}
-             \\frac{1}{2} (\\Delta t)^2 \\cos(\\psi_k) \\nu_{a,k} \\
-             \\frac{1}{2} (\\Delta t)^2 \\sin(\\psi_k) \\nu_{\\dot{\\psi},k} \\
-             \\Delta t \\nu_{a,k} \\
-             \\frac{1}{2}(\\Delta t)^2 \\nu_{\\ddot{\\psi},k} \\
+             \\frac{1}{2} (\\Delta t)^2 \\cos(\\psi_k) \\nu_{a,k} \\\\
+             \\frac{1}{2} (\\Delta t)^2 \\sin(\\psi_k) \\nu_{\\dot{\\psi},k} \\\\
+             \\Delta t \\nu_{a,k} \\\\
+             \\frac{1}{2}(\\Delta t)^2 \\nu_{\\ddot{\\psi},k} \\\\
              \\Delta t \\nu_{\\ddot{\\psi},k}
         \\end{bmatrix}
 
@@ -717,15 +732,15 @@ class ConstantTurnRateSpeed(TransitionModel):
     .. math::
         x_{k+1} = x_k +
         \\begin{bmatrix}
-            \\Delta t v_k \\cos(\\psi_k) \\
-            \\Delta t v_k \\sin(\\psi_k) \\
-            \\Delta t \\nu_{a,k} \\
-            \\Delta t \\psi_k + \frac{1}{2}(\\Delta t)^2 \\nu_{\\dot{\\psi},k}  \\
+            \\Delta t v_k \\cos(\\psi_k) \\\\
+            \\Delta t v_k \\sin(\\psi_k) \\\\
+            \\Delta t \\nu_{a,k} \\\\
+            \\Delta t \\psi_k + \\frac{1}{2}(\\Delta t)^2 \\nu_{\\dot{\\psi},k} \\\\
             \\Delta t \\nu_{\\dot{\\psi},k}
         \\end{bmatrix}
 
-    Reasonable statistics: :math:`x_0 \\sim N(0, 0.1I) \\ q_k \\sim N(0, \\mathrm{diag}([0.1, 0.1\\pi])`
-    :math:`r_k \\sim N(0, \\mathrm{diag}([0.3, 0.03]))`
+    Reasonable default statistics: :math:`x_0 \\sim N(0, 0.1I) \\ q_k \\sim N(0, \\mathrm{diag}([0.1,\\ 0.1\\pi])`
+    :math:`r_k \\sim N(0, \\mathrm{diag}([0.3,\\ 0.03]))`
 
     """
 
@@ -777,31 +792,35 @@ class ConstantVelocity(TransitionModel):
     .. math::
         x_{k+1} =
         \\begin{bmatrix}
-            1 & \\tau & 0 & 0 \\
-            0 & 1 & 0 & 0 \\
-            0 & 0 & 1 & \\tau \\
-            0 & 0 & 0 & 1 \\
+            1 & \\tau & 0 & 0 \\\\
+            0 & 1 & 0 & 0 \\\\
+            0 & 0 & 1 & \\tau \\\\
+            0 & 0 & 0 & 1 \\\\
         \\end{bmatrix} x_k +
         \\begin{bmatrix}
-            \\frac{\\tau^2}{2} & 0 \\
-            \\tau & 0 \\
-            0 & \\frac{\\tau^2}{2} \\
-            0 & \\tau \\
+            \\frac{\\tau^2}{2} & 0 \\\\
+            \\tau & 0 \\\\
+            0 & \\frac{\\tau^2}{2} \\\\
+            0 & \\tau \\\\
         \\end{bmatrix} q_k
 
-    Reasonable statistics:
-    :math:`x_0 \\sim N(m_0, P_0)`
-    m_0 =
-    \\begin{bmatrix}
-        10000 & 300 & 1000 & -40
-    \\end{bmatrix}
-    P_0 =
-    \\mathrm{diag}
-    \\begin{bmatrix}
-        10000 & 100 & 10000 & 100
-    \\end{bmatrix}
+    Reasonable default statistics: :math:`x_0 \\sim N(m_0, P_0)` :math:`q_k \\sim N(0, \\mathrm{diag}([50,\\ 5]))`
+    where
 
-    :math:`q_k \\sim N(0, \\mathrm{diag}([50 \\ 5]))`
+    .. math::
+
+        m_0 =
+        \\begin{bmatrix}
+            10000 & 300 & 1000 & -40
+        \\end{bmatrix}
+
+    .. math::
+
+        P_0 =
+        \\mathrm{diag}
+        \\begin{bmatrix}
+            10000 & 100 & 10000 & 100
+        \\end{bmatrix}
 
     """
 
@@ -1025,9 +1044,9 @@ class UNGMMeasurement(MeasurementModel):
     Measurement model for the UNGM.
 
     .. math::
-        z_k = 0.05*x_k^2 + r_k
+        z_k = 0.05 x_k^2 + r_k
 
-    Reasonable statistics: r_k \sim N(0, 1)
+    Reasonable default statistics: :math:`r_k \\sim N(0, 1)`
     """
 
     dim_substate = 1
@@ -1050,9 +1069,9 @@ class UNGMNAMeasurement(MeasurementModel):
     Measurement model for the UNGM with non-additive noise.
 
     .. math::
-        z_k = 0.05*x_k^2*r_k
+        z_k = 0.05 x_k^2 r_k
 
-    Reasonable statistics: r_k \sim N(0, 1)
+    Reasonable default statistics: :math:`r_k \\sim N(0, 1)`
     """
 
     dim_substate = 1
@@ -1076,12 +1095,12 @@ class Pendulum2DMeasurement(MeasurementModel):
 
     Input
     -----
-        `x[0]`: :math:`\alpha` angle
-
     .. math::
-        z_k = \sin(\alpha_k) + r_k
+        z_k = \\sin(\\alpha_k) + r_k
 
-    Reasonable statistics: :math:`r_k \sim N(0, 0.1)`
+    where :math:`\\alpha` is angle from the perpendicular line.
+
+    Reasonable default statistics: :math:`r_k \\sim N(0, 0.1)`
     """
 
     dim_substate = 1
@@ -1105,14 +1124,12 @@ class RangeMeasurement(MeasurementModel):
 
     Notes
     -----
-
-    Input: `x[0]`: :math:`y_k`
-
     .. math::
-        z_k = \sqrt(s_x^2 + (y_k - s_y)) + r_k
+        z_k = \\sqrt{s_x^2 + (y_k - s_y)^2} + r_k
 
-    reasonable statistics: :math:`r_k \sim N(0, 0.03048^2)`
-    :math:`s_x,\ s_y` sensor position
+    where :math:`y` is the vertical coordinate and :math:`s_x,\\ s_y` are the sensor coordinates.
+
+    Reasonable default statistics: :math:`r_k \\sim N(0, 0.03048^2)`
 
     """
 
@@ -1139,12 +1156,12 @@ class BearingMeasurement(MeasurementModel):
     """
     Bearing measurement.
 
-    :math:`S` bearing measurements :math:`\\mathbf{z}_k = [z^{(1)}_k, \ldots, z^{(S)}_k]` where
+    :math:`S` bearing measurements :math:`\\mathbf{z}_k = [z^{(1)}_k, \\ldots, z^{(S)}_k]` where
 
     .. math::
         z^{(s)}_k = \\mathrm{atan2}(y_k - p^{(s)}_y, x_k - p^{(s)}_x) + r^{(s)}_k
 
-    Reasonable statistics: :math:`r^{(s)}_k \sim N(0, 10e-3)`
+    Reasonable default statistics: :math:`r^{(s)}_k \\sim N(0, 10^{-3})`
 
 
     Parameters
@@ -1187,12 +1204,12 @@ class Radar2DMeasurement(MeasurementModel):
 
     .. math::
         z_k =
-        \begin{bmatrix}
-            \\sqrt((x_k - s_x)^2 + (y_k - s_y)^2) \\
-            \\atan2(y_k - s_y, x_k - s_x)
-        \end{bmatrix} + r_k
+        \\begin{bmatrix}
+            \\sqrt{(x_k - s_x)^2 + (y_k - s_y)^2} \\\\
+            \\mathrm{atan2}(y_k - s_y, x_k - s_x)
+        \\end{bmatrix} + r_k
 
-    Reasonable statistics: :math:`r_k \sim N(0, \diag([1e-6, 0.17e-6]))`
+    Reasonable default statistics: :math:`r_k \\sim N(0, \\mathrm{diag}([10^{-6}\\ 0.17\\times 10^{-6}]))`
     """
 
     dim_substate = 2

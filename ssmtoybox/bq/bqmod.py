@@ -537,11 +537,11 @@ class GaussianProcessModel(Model):
         The likelihood is given by
 
         .. math::
-        \[
-        -\\log p(Y \\mid X, \\theta) = -\\sum_{e=1}^{\\mathrm{dim_out}} \\log p(y_e \\mid X, \\theta)
-        \]
 
-        where :math:`y_e` is e-th column of :math:`Y`. We have the same parameters :math:`\theta` for all outputs,
+            -\\log p(Y \\mid X, \\theta) = -\\sum_{e=1}^{\\mathrm{E}} \\log p(y_e \\mid X, \\theta)
+
+
+        where :math:`y_e` is e-th column of :math:`Y`. We have the same parameters :math:`\\theta` for all outputs,
         which is more limiting than the multi-output case. For single-output dimension the expression is equivalent to
         negative marginal log-likelihood.
 
@@ -1557,13 +1557,12 @@ class GaussianProcessMO(MultiOutputModel):  # TODO: Multiple inheritance could b
         The likelihood is given by
 
         .. math::
-        \[
-        -\log p(Y \mid X, \Theta) = -\sum_{e=1}^{\mathrm{dim_out}} \log p(y_e \mid X, \theta_e)
-        \]
 
-        where :math:`y_e` is e-th column of :math:`Y` and :math:`\theta_e` is e-th column of :math:`\Theta`. The
+            -\\log p(Y \\mid X, \\Theta) = -\\sum_{e=1}^{\\mathrm{E}} \\log p(y_e \\mid X, \\theta_e)
+
+        where :math:`y_e` is e-th column of :math:`Y` and :math:`\\theta_e` is e-th column of :math:`\\Theta`. The
         multi-output model uses one set of kenrel parameters for every output, thus having greater flexibility than the
-        single-output GP models.the same parameters :math:`\theta` for all outputs, which is more limiting than the
+        single-output GP models.the same parameters :math:`\\theta` for all outputs, which is more limiting than the
         multi-output case. For single-output dimension the expression is equivalent to negative marginal log-likelihood.
         This function implements only one term in the sum above, because the outputs are assumed independent given
         the inputs and thus we can run the optimizer for each output independently.

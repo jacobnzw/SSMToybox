@@ -450,7 +450,7 @@ class GaussianProcessKalman(GaussianInference):
 
 class BayesSardKalman(GaussianInference):
     """
-    Bayes-Sard quadrature Kalman filter (BSQKF) and smoother (see [1]_).
+    Bayes-Sard quadrature Kalman filter (BSQKF) and smoother [1]_.
 
     Parameters
     ----------
@@ -479,15 +479,16 @@ class BayesSardKalman(GaussianInference):
         ``gh``
             Gauss-Hermite sigma-points (originally used in GHKF).
         ``fs``
-            Fully-symmetric sigma-points [3]_ (originally used in [2]_).
+            Fully-symmetric sigma-points.
 
     point_hyp : dict, optional
         Hyper-parameters of the sigma-point set.
 
     References
     ----------
-    Prüher, J., Karvonen, T., Oates, C. J., Straka, O. and Särkkä, S.
-    Improved Calibration of Numerical Integration Error in Sigma-Point Filters, https://export.arxiv.org/abs/1811.11474
+    .. [1] Prüher, J., Karvonen, T., Oates, C. J., Straka, O. and Särkkä, S.
+           Improved Calibration of Numerical Integration Error in Sigma-Point Filters,
+           https://export.arxiv.org/abs/1811.11474
     """
 
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, mulind_dyn=2, mulind_obs=2, points='ut', point_hyp=None):

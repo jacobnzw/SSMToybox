@@ -69,7 +69,7 @@ def log_cred_ratio(x, m, P, MSE):
     Logarithm of Credibility Ratio [Li2006]_ is given by
 
     .. math::
-        \\gamma_n = 10*\\log_10 \\frac{(x - m_n)^{\\top}P_n^{-1}(x - m_n)}{(x - m_n)^{\\top}\Sigma^{-1}(x - m_n)}
+        \\gamma_n = 10 \\log_{10} \\frac{(x - m_n)^{\\top}P_n^{-1}(x - m_n)}{(x - m_n)^{\\top}\Sigma^{-1}(x - m_n)}
 
     Parameters
     ----------
@@ -187,10 +187,12 @@ def symmetrized_kl_divergence(mean_0, cov_0, mean_1, cov_1):
     Symmetrized KL-divergence
 
     .. math::
+
         \\mathrm{SKL} = \\frac{1}{2}[KL(q(x)||p(x)) + KL(p(x)||q(x))]
 
-    between the true :math:`p(x) = \\mathrm{N}(x | m_0, C_0)` and the approximate Gaussian probability density function
-     :math:`q(x) = \\mathrm{N}(x | m_1, C_1)`.
+
+    between the true Gaussian PDF :math:`p(x) = \\mathrm{N}(x | m_0, C_0)` and the approximate Gaussian PDF
+    :math:`q(x) = \\mathrm{N}(x | m_1, C_1)`.
 
     Parameters
     ----------
@@ -373,7 +375,7 @@ def multivariate_t(mean, scale, nu, size):
     Notes
     -----
     If :math:`y \\sim \\mathrm{N}(0, \\Sigma)` and :math:`u \\sim \\mathrm{Gamma}(k=\\nu/2, \\theta=2/\\nu)`,
-    then :math:`x \\sim \\mathrm{St}(\\mu, \\Sigma, \\nu)`, where :math:`x = \\mu + \\frac{y}{\\sqrt{u}}`.
+    then :math:`x \\sim \\mathrm{St}(\\mu, \\Sigma, \\nu)`, where :math:`x = \\mu + y\\frac{1}{\\sqrt{u}}`.
     """
     v = np.random.gamma(nu / 2, 2 / nu, size)[:, na]
     n = np.random.multivariate_normal(np.zeros_like(mean), scale, size)
