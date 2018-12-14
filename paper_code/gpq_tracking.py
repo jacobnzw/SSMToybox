@@ -3,32 +3,46 @@ from paper_code.journal_figure import *
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from ssmtoybox.ssinf import GaussianProcessKalman, UnscentedKalman
-from ssmtoybox.ssmod import ReentryVehicle1DTransition, RangeMeasurement
+from ssmtoybox.ssmod import ReentryVehicle1DTransition, RangeMeasurement, ReentryVehicle2DTransition, Radar2DMeasurement
 
 
 def reentry_gpq_demo():
     mc_sims = 20
     disc_tau = 0.5  # discretization period
 
-    # Generate reference trajectory by ODE integration
-    sys = ReentryRadar()
-    x = sys.simulate_trajectory(method='rk4', dt=disc_tau, duration=200, mc_sims=mc_sims)
-    x_ref = x.mean(axis=2)
-    y = np.zeros((sys.zD,) + x.shape[1:])
-    for i in range(mc_sims):
-        y[..., i] = sys.simulate_measurements(x[..., i], mc_per_step=1).squeeze()
+    # ground-truth data generator (true system)
+    m0 = np.array([6500.4, 349.14, -1.8093, -6.7967, 0.6932])
+    P0 = np.diag([1e-6, 1e-6, 1e-6, 1e-6, 0])
+    x0 = GaussRV(5, m0, P0)
+    Q = np.diag([2.4064e-5, 2.4064e-5, 0])
+    q = GaussRV(3, cov=Q)
+    sys = ReentryVehicle2DTransition(x0, q, dt=disc_tau)
 
-    # Initialize model
-    ssm = ReentryRadarModel(dt=disc_tau)
-    # x, y = ssm.simulate(steps=750, mc_sims=10)
-    # x_ref = x.mean(axis=2)
+    # radar measurement model
+    r = GaussRV(2, cov=np.diag([1e-6, 0.17e-6]))
+    radar_x, radar_y = sys.R0, 0
+    obs = Radar2DMeasurement(r, 5, radar_loc=np.array([radar_x, radar_y]))
+
+    # Generate reference trajectory by Euler-Maruyama integration
+    x = sys.simulate_continuous(duration=200, dt=disc_tau, mc_sims=mc_sims)
+    x_ref = x.mean(axis=2)
+
+    # generate radar measurements
+    y = obs.simulate_measurements(x)
+
+    # setup SSM for the filter
+    m0 = np.array([6500.4, 349.14, -1.8093, -6.7967, 0])
+    P0 = np.diag([1e-6, 1e-6, 1e-6, 1e-6, 1])
+    x0 = GaussRV(5, m0, P0)
+    q = GaussRV(3, cov=disc_tau*Q)
+    dyn = ReentryVehicle2DTransition(x0, q, dt=disc_tau)
 
     # Initialize filters
-    hdyn = {'alpha': 1.0, 'el': 5 * [25.0]}
-    hobs = {'alpha': 1.0, 'el': [25.0, 25.0, 1e4, 1e4, 1e4]}
+    hdyn = np.array([[1.0, 25, 25, 25, 25, 25]])
+    hobs = np.array([[1.0, 25, 25, 1e4, 1e4, 1e4]])
     alg = (
-        GaussianProcessKalman(ssm, 'rbf', 'ut', hdyn, hobs),
-        UnscentedKalman(ssm),
+        GaussianProcessKalman(dyn, obs, hdyn, hobs, kernel='rbf', points='ut'),
+        UnscentedKalman(dyn, obs),
     )
 
     # Are both filters using the same sigma-points?
@@ -50,11 +64,11 @@ def reentry_gpq_demo():
     # Earth surface w/ radar position
     t = 0.02 * np.arange(-1, 4, 0.1)
     plt.plot(sys.R0 * np.cos(t), sys.R0 * np.sin(t), color='darkblue', lw=2)
-    plt.plot(sys.sx, sys.sy, 'ko')
+    plt.plot(radar_x, radar_y, 'ko')
 
     plt.plot(x_ref[0, :], x_ref[1, :], color='r', ls='--')
     # Convert from polar to cartesian
-    meas = np.stack((sys.sx + y[0, ...] * np.cos(y[1, ...]), sys.sy + y[0, ...] * np.sin(y[1, ...])), axis=0)
+    meas = np.stack((radar_x + y[0, ...] * np.cos(y[1, ...]), radar_y + y[0, ...] * np.sin(y[1, ...])), axis=0)
     for i in range(mc_sims):
         # Vehicle trajectory
         # plt.plot(x[0, :, i], x[1, :, i], alpha=0.35, color='r', ls='--')
@@ -550,17 +564,17 @@ def reentry_simple_trajectory_plot(data_scores):
 
 
 if __name__ == '__main__':
-    import pickle
+    # import pickle
     # # get simulation results
-    print('Running simulations ...')
-    data_dict = reentry_simple_data(mc=100)
-    # reentry_simple_gpq_demo(mc=100, dur=30)
-
-    # dump simulated data for fast re-plotting
-    print('Pickling data ...')
-    with open('reentry_score_data.dat', 'wb') as f:
-        pickle.dump(data_dict, f)
-        f.close()
+    # print('Running simulations ...')
+    # data_dict = reentry_simple_data(mc=100)
+    # # reentry_simple_gpq_demo(mc=100, dur=30)
+    #
+    # # dump simulated data for fast re-plotting
+    # print('Pickling data ...')
+    # with open('reentry_score_data.dat', 'wb') as f:
+    #     pickle.dump(data_dict, f)
+    #     f.close()
 
     # # load pickled data
     # print('Unpickling data ...')
@@ -569,6 +583,9 @@ if __name__ == '__main__':
     #     f.close()
 
     # calculate scores and generate publication ready figures
-    reentry_simple_plots(data_dict)
-    reentry_simple_trajectory_plot(data_dict)
-    reentry_simple_gpq_demo()
+    # reentry_simple_plots(data_dict)
+    # reentry_simple_trajectory_plot(data_dict)
+    # reentry_simple_gpq_demo()
+
+    # radar tracking of a reentry vehicle with more complicated dynamics
+    reentry_gpq_demo()
