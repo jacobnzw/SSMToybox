@@ -1,32 +1,34 @@
-# Content
+# SSM Toybox
+Python 3 implementation of the nonlinear sigma-point filters based on Bayesian quadrature, such as
 
-This branch of repo contains source code to reproduce the results published in the article
+* Gaussian Process Quadrature Kalman Filter [1]
+* Student's t-Process Quadrature Kalman Filter [2]
 
-J. Prüher, F. Tronarp, T. Karvonen, S. Särkkä and O. Straka, [Student-t process quadratures for filtering of non-linear systems with heavy-tailed noise](https://dx.doi.org/10.23919/ICIF.2017.8009742), 20th International Conference on Information Fusion (Fusion), Xi'an, 2017, pp. 1-8.
+Included are also the well-known classical nonlinear Kalman filters such as:
 
-**Abstract**
-> The aim of this article is to design a moment transformation for Student-t distributed random variables, which is able to account for the error in the numerically computed mean. We employ Student-t process quadrature, an instance of Bayesian quadrature, which allows us to treat the integral itself as a random variable whose variance provides information about the incurred integration error. Advantage of the Student-t process quadrature over the traditional Gaussian process quadrature, is that the integral variance depends also on the function values, allowing for a more robust modelling of the integration error. The moment transform is applied in nonlinear sigma-point filtering and evaluated on two numerical examples, where it is shown to outperform the state-of-the-art moment transforms.
+* Extended Kalman Filter
+* Unscented Kalman Filter
+* Cubature Kalman Filter
+* Gauss-Hermite Kalman Filter
 
-All the code needed to reproduce the results is contained in the `fusion_paper` directory.
 
-## Reproducing the Results
-I was developing on Windows 10, so before launching, set the `PYTHONPATH` temporarily using
+### Build documentation
+```
+cd docs
+sphinx-apidoc -o ./ ../ssmtoybox ../ssmtoybox/tests
+make html
+```
 
-`set PYTHONPATH=%PYTHONPATH%;[your_drive]:\path\to\SSMToybox\`
 
-and switch to the directory
+### Why toybox?
+Because 'toolbox' sounds too serious :-).
 
-`cd fusion_paper`
 
-Executing `python synthetic.py` will run the experiment comparing the *Student's t-Process Quadrature Student's Filter* (TPQSF) with the *Student's Filter* (SF) in the radar tracking with glint noise scenario.
+### References
+[1]: [[DOI](http://dx.doi.org/10.1109/TAC.2017.2774444) | [PDF](https://arxiv.org/abs/1701.01356)] 
+Prüher, J. and Straka, O. Gaussian Process Quadrature Moment Transform, IEEE Transactions on Automatic Control, 2017
 
-## Requirements
+[2]: [[DOI](http://dx.doi.org/10.23919/ICIF.2017.8009742) | [PDF](https://arxiv.org/abs/1703.05189)] 
+Prüher, J.; Tronarp, F.; Karvonen, T.; Särkkä, S. and Straka, O. Student-t Process Quadratures for Filtering of 
+Non-linear Systems with Heavy-tailed Noise, 20th International Conference on Information Fusion (Fusion), 1-8, 2017 
 
-The following libraries are required to run the script
-
-- Python 3
-- NumPy
-- SciPy
-- GPy
-- Matplotlib
-- Pandas
