@@ -81,8 +81,14 @@ class TestMeasurementModels(unittest.TestCase):
         r = GaussRV(2)
         dim_state = 5
         st_ind = np.array([0, 2])
-        obs = Radar2DMeasurement(r, dim_state, state_index=st_ind)
+        radar_location = np.array([6378.0, 0])
+        obs = Radar2DMeasurement(r, dim_state, state_index=st_ind, radar_loc=radar_location)
         st, n = np.random.randn(5), np.random.randn(2)
+
+        # check evaluation of the measurement function
+        hx = obs.meas_eval(st, n, dx=False)
+        self.assertTrue(hx.shape == (2, ))
+
         jac = obs.meas_eval(st, n, dx=True)
         # check proper dimensions
         self.assertEqual(jac.shape, (2, 5))

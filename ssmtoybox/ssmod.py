@@ -1221,7 +1221,8 @@ class Radar2DMeasurement(MeasurementModel):
         super(Radar2DMeasurement, self).__init__(noise_rv, dim_state, state_index)
         # set default radar location
         if radar_loc is None:
-            self.radar_loc = np.array([0, 0])
+            radar_loc = np.array([0, 0])
+        self.radar_loc = radar_loc
 
     def meas_fcn(self, x, r, time):
         """
