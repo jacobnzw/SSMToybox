@@ -564,28 +564,29 @@ def reentry_simple_trajectory_plot(data_scores):
 
 
 if __name__ == '__main__':
-    # import pickle
-    # # get simulation results
-    # print('Running simulations ...')
-    # data_dict = reentry_simple_data(mc=100)
-    # # reentry_simple_gpq_demo(mc=100, dur=30)
-    #
-    # # dump simulated data for fast re-plotting
-    # print('Pickling data ...')
-    # with open('reentry_score_data.dat', 'wb') as f:
-    #     pickle.dump(data_dict, f)
-    #     f.close()
+    import pickle
+    # get simulation results
+    print('Running simulations ...')
+    data_dict = reentry_simple_data(mc=100)
+    # reentry_simple_gpq_demo(mc=100, dur=30)
 
-    # # load pickled data
-    # print('Unpickling data ...')
-    # with open('reentry_score_data.dat', 'rb') as f:
-    #     data_dict = pickle.load(f)
-    #     f.close()
+    # dump simulated data for fast re-plotting
+    print('Pickling data ...')
+    with open('reentry_score_data.dat', 'wb') as f:
+        pickle.dump(data_dict, f)
+        f.close()
+
+    # load pickled data
+    print('Unpickling data ...')
+    with open('reentry_score_data.dat', 'rb') as f:
+        data_dict = pickle.load(f)
+        f.close()
 
     # calculate scores and generate publication ready figures
-    # reentry_simple_plots(data_dict)
-    # reentry_simple_trajectory_plot(data_dict)
-    # reentry_simple_gpq_demo()
+    reentry_simple_plots(data_dict)
+    reentry_simple_trajectory_plot(data_dict)
+    reentry_simple_gpq_demo()
 
     # radar tracking of a reentry vehicle with more complicated dynamics
-    reentry_gpq_demo()
+    # GPQKF fails with posdef: unable to find good kernel parameters
+    # reentry_gpq_demo()
