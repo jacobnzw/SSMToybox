@@ -6,10 +6,10 @@ import scipy.linalg as la
 from scipy.optimize import minimize
 from scipy.special import factorial, factorial2
 
-from .bqkern import RBFGauss, RQ, RBFStudent
 from ssmtoybox.mtran import SphericalRadialTransform, UnscentedTransform, GaussHermiteTransform, \
     FullySymmetricStudentTransform
 from ssmtoybox.utils import vandermonde, n_sum_k
+from .bqkern import RBFGauss, RQ, RBFStudent
 
 
 class Model(object, metaclass=ABCMeta):

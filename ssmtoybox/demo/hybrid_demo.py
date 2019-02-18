@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 
 from ssmtoybox.demo.icinco_demo import evaluate_performance
+from ssmtoybox.mtran import UnscentedTransform
 from ssmtoybox.ssinf import ExtendedKalman, ExtendedKalmanGPQD
 from ssmtoybox.ssmod import UNGMTransition, UNGMMeasurement
-from ssmtoybox.mtran import UnscentedTransform
 from ssmtoybox.utils import GaussRV
 
 steps, mc = 50, 10  # time steps, mc simulations

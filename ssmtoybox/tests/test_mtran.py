@@ -1,6 +1,7 @@
 from unittest import TestCase
 
 import numpy as np
+
 from ssmtoybox.mtran import MonteCarloTransform, TruncatedSphericalRadialTransform, FullySymmetricStudentTransform
 from ssmtoybox.ssmod import UNGMTransition
 from ssmtoybox.utils import GaussRV, StudentRV

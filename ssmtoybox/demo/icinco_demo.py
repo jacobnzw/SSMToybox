@@ -1,11 +1,13 @@
 import sys
 import time
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from tqdm import trange
 from numpy import newaxis as na
-from ssmtoybox.ssinf import ExtendedKalman, CubatureKalman, UnscentedKalman, GaussHermiteKalman, GaussianProcessKalman
+from tqdm import trange
+
+from ssmtoybox.ssinf import CubatureKalman, UnscentedKalman, GaussHermiteKalman, GaussianProcessKalman
 from ssmtoybox.ssmod import UNGMTransition, UNGMMeasurement
 from ssmtoybox.utils import bootstrap_var, squared_error, neg_log_likelihood, log_cred_ratio, mse_matrix, GaussRV
 

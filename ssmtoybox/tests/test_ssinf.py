@@ -1,12 +1,14 @@
-import numpy as np
 from unittest import TestCase
+
+import numpy as np
+
 from ssmtoybox.ssinf import MarginalizedGaussianProcessKalman, GaussianProcessKalman, BayesSardKalman, \
     StudentProcessStudent, StudentProcessKalman, FullySymmetricStudent
 from ssmtoybox.ssinf import UnscentedKalman, ExtendedKalman, GaussHermiteKalman
-from ssmtoybox.ssmod import UNGMTransition, UNGMNATransition, Pendulum2DTransition, CoordinatedTurnTransition, \
-    ReentryVehicle2DTransition, ConstantTurnRateSpeed, ConstantVelocity
 from ssmtoybox.ssmod import UNGMMeasurement, UNGMNAMeasurement, Pendulum2DMeasurement, BearingMeasurement, \
     Radar2DMeasurement
+from ssmtoybox.ssmod import UNGMTransition, UNGMNATransition, Pendulum2DTransition, CoordinatedTurnTransition, \
+    ReentryVehicle2DTransition, ConstantTurnRateSpeed, ConstantVelocity
 from ssmtoybox.utils import GaussRV, StudentRV
 
 np.set_printoptions(precision=4)

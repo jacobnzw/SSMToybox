@@ -3,7 +3,6 @@ from unittest import TestCase
 import numpy as np
 import numpy.linalg as la
 from numpy import newaxis as na
-import numba as nb
 
 from ssmtoybox.bq.bqkern import RBFGauss, RBFStudent
 

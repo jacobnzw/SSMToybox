@@ -1,16 +1,19 @@
+import warnings
 from abc import ABCMeta, abstractmethod
+
 import numpy as np
 import numpy.linalg as la
+from numpy import newaxis as na
 from scipy.linalg import cho_factor, cho_solve, block_diag
 from scipy.stats import multivariate_normal
-from numpy import newaxis as na
-from ssmtoybox.ssmod import TransitionModel, MeasurementModel
-from ssmtoybox.bq.bqmtran import GaussianProcessTransform, MultiOutputGaussianProcessTransform, StudentTProcessTransform, MultiOutputStudentTProcessTransform, BayesSardTransform
+
+from ssmtoybox.bq.bqmtran import GaussianProcessTransform, MultiOutputGaussianProcessTransform, \
+    StudentTProcessTransform, MultiOutputStudentTProcessTransform, BayesSardTransform
 from ssmtoybox.mtran import MomentTransform, LinearizationTransform, TaylorGPQDTransform, \
     SphericalRadialTransform, UnscentedTransform, GaussHermiteTransform, FullySymmetricStudentTransform, \
     TruncatedSphericalRadialTransform, TruncatedUnscentedTransform, TruncatedGaussHermiteTransform
+from ssmtoybox.ssmod import TransitionModel, MeasurementModel
 from ssmtoybox.utils import StudentRV
-import warnings
 
 
 class StateSpaceInference(metaclass=ABCMeta):

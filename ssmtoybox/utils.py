@@ -1,11 +1,11 @@
-import numpy as np
+import sys
+from abc import ABCMeta, abstractmethod
+
 import numba as nb
+import numpy as np
+import pandas as pd
 import scipy as sp
 from numpy import newaxis as na, linalg as la
-import pandas as pd
-import sys
-
-from abc import ABCMeta, abstractmethod
 
 """
 Preliminary implementation of routines computing various performance metrics used in state estimation.

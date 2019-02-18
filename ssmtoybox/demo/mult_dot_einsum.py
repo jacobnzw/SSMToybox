@@ -1,10 +1,12 @@
+from unittest import TestCase
+
 import numpy as np
 import numpy.linalg as la
 from scipy.linalg import cho_factor, cho_solve
-from ssmtoybox.ssmod import ReentryVehicleRadarTrackingGaussSSM
+
 from ssmtoybox.bq.bqmtran import GaussianProcessTransform
 from ssmtoybox.mtran import MonteCarloTransform
-from unittest import TestCase
+from ssmtoybox.ssmod import ReentryVehicleRadarTrackingGaussSSM
 
 
 def sym(a):

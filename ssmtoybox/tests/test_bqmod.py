@@ -1,17 +1,16 @@
 import unittest
 from unittest import TestCase
 
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy.linalg as la
-import matplotlib.pyplot as plt
 from numpy import newaxis as na
 
 from ssmtoybox.bq.bqmod import GaussianProcessModel, StudentTProcessModel, BayesSardModel
 from ssmtoybox.mtran import UnscentedTransform, GaussHermiteTransform, SphericalRadialTransform
-from ssmtoybox.utils import vandermonde
 from ssmtoybox.ssmod import CoordinatedTurnTransition
 from ssmtoybox.utils import GaussRV
-
+from ssmtoybox.utils import vandermonde
 
 fcn = lambda x: np.sin((x + 1) ** -1)
 # fcn = lambda x: 0.5 * x + 25 * x / (1 + x ** 2)

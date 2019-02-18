@@ -1,10 +1,10 @@
 import unittest
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 from ssmtoybox.ssmod import UNGMTransition, UNGMMeasurement, UNGMNATransition, UNGMNAMeasurement, \
-    Pendulum2DTransition, Pendulum2DMeasurement, ConstantTurnRateSpeed, Radar2DMeasurement, ReentryVehicle2DTransition
+    ConstantTurnRateSpeed, Radar2DMeasurement, ReentryVehicle2DTransition
 from ssmtoybox.utils import GaussRV
 
 
