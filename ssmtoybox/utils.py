@@ -597,11 +597,16 @@ class GaussRV(RandomVariable):
         # standard Gaussian distribution if mean, cov not specified
         if mean is None:
             mean = np.zeros((dim, ))
+        # if mean is scalar, ensure 1D mean
+        mean = np.atleast_1d(mean)
         if mean.ndim != 1:
             ValueError(
                 "{:s}: mean has to be 1D array. Supplied {:d}D array.".format(self.__class__.__name__, mean.ndim))
+
         if cov is None:
             cov = np.eye(dim)
+        # if cov is scalar, ensure 2D cov
+        cov = np.atleast_2d(cov)
         if cov.ndim != 2:
             ValueError(
                 "{:s}: covariance has to be 2D array. Supplied {:d}D array.".format(self.__class__.__name__, cov.ndim))
@@ -640,15 +645,19 @@ class StudentRV(RandomVariable):
         # zero mean if not given
         if mean is None:
             mean = np.zeros((dim,))
+        mean = np.atleast_1d(mean)
         if mean.ndim != 1:
             ValueError(
                 "{:s}: mean has to be 1D array. Supplied {:d}D array.".format(self.__class__.__name__, mean.ndim))
+
         # unit scale if not given
         if scale is None:
             scale = np.eye(dim)
+        scale = np.atleast_2d(scale)
         if scale.ndim != 2:
             ValueError("{:s}: scale matrix has to be 2D array. Supplied {:d}D array.".format(
                 self.__class__.__name__, scale.ndim))
+
         # dof must be > 2
         if dof <= 2.0:
             dof = 3.0
