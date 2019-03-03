@@ -1125,7 +1125,7 @@ class StudentTProcessModel(GaussianProcessModel):
             x_obs = self.points
 
         mean, var = super(StudentTProcessModel, self).predict(test_data, fcn_obs, x_obs, par)
-        iK = self.kernel.eval_inv_dot(par, self.points)
+        iK = self.kernel.eval_inv_dot(par, x_obs)
         scale = (nu - 2 + fcn_obs.T.dot(iK).dot(fcn_obs)) / (nu - 2 + self.num_pts)
         return mean, scale * var
 

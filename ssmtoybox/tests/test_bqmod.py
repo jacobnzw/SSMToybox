@@ -486,6 +486,20 @@ class TPModelTest(TestCase):
         StudentTProcessModel(1, self.ker_par_1d, 'rbf', 'ut')
         StudentTProcessModel(5, self.ker_par_5d, 'rbf', 'ut')
 
+    def test_predict(self):
+        model = StudentTProcessModel(1, self.ker_par_1d, 'rbf', 'ut')
+
+        # training inputs == sigma-points
+        xtest = np.linspace(-5, 5, 50)[na, :]
+        y = np.squeeze(fcn(model.points))
+        mean, var = model.predict(xtest, y)
+
+        # custom training inputs
+        i_train = [5, 10, 18, 20, 35]
+        xtrain = xtest[:, i_train]
+        y = np.squeeze(fcn(xtrain))
+        mean, var = model.predict(xtest, y, xtrain)
+
     def test_plotting(self):
         model = StudentTProcessModel(1, self.ker_par_1d, 'rbf', 'ut')
         xtest = np.linspace(-5, 5, 50)[na, :]
