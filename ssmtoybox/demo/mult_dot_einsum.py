@@ -1,12 +1,16 @@
 from unittest import TestCase
 
+import logging
 import numpy as np
 import numpy.linalg as la
 from scipy.linalg import cho_factor, cho_solve
 
 from ssmtoybox.bq.bqmtran import GaussianProcessTransform
-from ssmtoybox.mtran import MonteCarloTransform
-from ssmtoybox.ssmod import ReentryVehicleRadarTrackingGaussSSM
+from ssmtoybox.mtran import MonteCarloTransform, UnscentedTransform
+from ssmtoybox.ssmod import ReentryVehicle2DTransition
+from ssmtoybox.utils import GaussRV
+
+logging.basicConfig(level=logging.DEBUG)
 
 
 def sym(a):
@@ -42,7 +46,7 @@ class MultTest(TestCase):
         dim_in, dim_out = 2, 1
         ker_par_mo = np.hstack((np.ones((dim_out, 1)), 1 * np.ones((dim_out, dim_in))))
         tf_mo = GaussianProcessTransform(dim_in, dim_out, ker_par_mo, point_str='sr')
-        iK, Q = tf_mo.iK, tf_mo.Q
+        iK, Q = tf_mo.model.iK, tf_mo.model.Q
 
         C1 = iK.dot(Q).dot(iK)
         C2 = np.einsum('ab, bc, cd', iK, Q, iK)
@@ -53,28 +57,30 @@ class MultTest(TestCase):
         # attempt to compute the transformed covariance using cholesky decomposition
 
         # integrand
-        ssm = ReentryVehicleRadarTrackingGaussSSM()
-        f = ssm.dyn_eval
-        dim_in, dim_out = ssm.xD, 1
-
         # input moments
-        mean_in, cov_in = ssm.pars['x0_mean'], ssm.pars['x0_cov']
+        mean_in = np.array([6500.4, 349.14, 1.8093, 6.7967, 0.6932])
+        cov_in = np.diag([1e-6, 1e-6, 1e-6, 1e-6, 1])
+
+        f = ReentryVehicle2DTransition(GaussRV(5, mean_in, cov_in), GaussRV(3)).dyn_eval
+        dim_in, dim_out = ReentryVehicle2DTransition.dim_state, 1
 
         # transform
         ker_par_mo = np.hstack((np.ones((dim_out, 1)), 25 * np.ones((dim_out, dim_in))))
         tf_so = GaussianProcessTransform(dim_in, dim_out, ker_par_mo, point_str='sr')
 
         # Monte-Carlo for ground truth
+        # tf_ut = UnscentedTransform(dim_in)
+        # tf_ut.apply(f, mean_in, cov_in, np.atleast_1d(1), None)
         tf_mc = MonteCarloTransform(dim_in, 1000)
-        mean_mc, cov_mc, ccov_mc = tf_mc.apply(f, mean_in, cov_in, None)
+        mean_mc, cov_mc, ccov_mc = tf_mc.apply(f, mean_in, cov_in, np.atleast_1d(1))
         C_MC = cov_mc + np.outer(mean_mc, mean_mc.T)
 
         # evaluate integrand
         x = mean_in[:, None] + la.cholesky(cov_in).dot(tf_so.model.points)
-        Y = np.apply_along_axis(f, 0, x, None)
+        Y = np.apply_along_axis(f, 0, x, 1.0, None)
 
         # covariance via np.dot
-        iK, Q = tf_so.iK, tf_so.Q
+        iK, Q = tf_so.model.iK, tf_so.model.Q
         C1 = iK.dot(Q).dot(iK)
         C1 = Y.dot(C1).dot(Y.T)
 
@@ -92,8 +98,8 @@ class MultTest(TestCase):
         C3_dot = bet.dot(bet.T)
         C3_ein = np.einsum('ij, jk', bet, bet.T)
 
-        print("MAX DIFF: {:.4e}".format(np.abs(C1 - C2).max()))
-        print("MAX DIFF: {:.4e}".format(np.abs(C3_dot - C3_ein).max()))
+        logging.debug("MAX DIFF: {:.4e}".format(np.abs(C1 - C2).max()))
+        logging.debug("MAX DIFF: {:.4e}".format(np.abs(C3_dot - C3_ein).max()))
         self.assertTrue(np.allclose(C1, C2), "MAX DIFF: {:.4e}".format(np.abs(C1 - C2).max()))
         self.assertTrue(np.allclose(C3_dot, C3_ein), "MAX DIFF: {:.4e}".format(np.abs(C3_dot - C3_ein).max()))
         self.assertTrue(np.allclose(C1, C3_dot), "MAX DIFF: {:.4e}".format(np.abs(C1 - C3_dot).max()))
