@@ -38,7 +38,7 @@ class MultTest(TestCase):
         c = b.dot(A)
         C = B.dot(A)
         self.assertTrue(np.all(c == C[0, :]),
-                        "MAX DIFF: {:.4e}".format(np.abs(b.dot(A) - B.dot(A)[0, :]).max()))
+                        "MAX DIFF: {:.4e}".format(np.abs(c - C[0, :]).max()))
 
     def test_einsum_dot(self):
         # einsum and dot give different results?
