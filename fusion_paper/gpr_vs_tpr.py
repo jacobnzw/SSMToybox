@@ -2,16 +2,16 @@ import numpy as np
 from numpy import newaxis as na
 # import matplotlib.pyplot as plt
 from fusion_paper.figprint import *
-from transforms.bqmodel import GaussianProcess, StudentTProcess
-from utils import multivariate_t
-from transforms.bqkernel import RBF
+from ssmtoybox.bq.bqmod import GaussianProcessModel, StudentTProcessModel
+from ssmtoybox.utils import multivariate_t
+from ssmtoybox.bq.bqkern import RBFGauss
 
 dim = 1
 par_kernel = np.array([[0.8, 0.7]])
 
 # init models
-gp = GaussianProcess(dim, par_kernel)
-tp = StudentTProcess(dim, par_kernel, nu=10.0)
+gp = GaussianProcessModel(dim, par_kernel, kern_str='rbf', point_str='ut')
+tp = StudentTProcessModel(dim, par_kernel, kern_str='rbf', point_str='ut', nu=10.0)
 
 # some nonlinear function
 f = lambda x: np.sin(np.sin(x)*x**2)*np.exp(x)
