@@ -11,6 +11,8 @@ from ssmtoybox.ssinf import CubatureKalman, UnscentedKalman, GaussHermiteKalman,
 from ssmtoybox.ssmod import UNGMTransition, UNGMMeasurement
 from ssmtoybox.utils import bootstrap_var, squared_error, neg_log_likelihood, log_cred_ratio, mse_matrix, GaussRV
 
+np.random.seed(42)  # ensure reproducibility of results
+
 
 def evaluate_performance(x, mean_f, cov_f, mean_s, cov_s, bootstrap_variance=True):
     num_dim, num_step, num_sim, num_alg = mean_f.shape
@@ -76,16 +78,14 @@ def print_table(data, row_labels=None, col_labels=None, latex=False):
         pd.to_latex()
 
 
-def tables():
-    steps, mc = 500, 100
-
+def tables(steps=500, sims=100):
     # setup univariate non-stationary growth model
     x0 = GaussRV(1, cov=np.atleast_2d(5.0))
     q = GaussRV(1, cov=np.atleast_2d(10.0))
     dyn = UNGMTransition(x0, q)  # dynamics
     r = GaussRV(1)
     obs = UNGMMeasurement(r, 1)  # observation model
-    x = dyn.simulate_discrete(steps, mc_sims=mc)  # generate some data
+    x = dyn.simulate_discrete(steps, mc_sims=sims)  # generate some data
     z = obs.simulate_measurements(x)
 
     kern_par_sr = np.array([[1.0, 0.3 * dyn.dim_in]])
@@ -101,24 +101,24 @@ def tables():
         GaussHermiteKalman(dyn, obs),
         GaussHermiteKalman(dyn, obs),
         GaussHermiteKalman(dyn, obs),
-        GaussianProcessKalman(dyn, obs, kern_par_sr, kern_par_sr),
-        GaussianProcessKalman(dyn, obs, kern_par_ut, kern_par_ut),
-        GaussianProcessKalman(dyn, obs, kern_par_sr, kern_par_sr),
-        GaussianProcessKalman(dyn, obs, kern_par_gh, kern_par_gh),
-        GaussianProcessKalman(dyn, obs, kern_par_gh, kern_par_gh),
-        GaussianProcessKalman(dyn, obs, kern_par_gh, kern_par_gh),
-        GaussianProcessKalman(dyn, obs, kern_par_gh, kern_par_gh),
+        GaussianProcessKalman(dyn, obs, kern_par_sr, kern_par_sr, points='sr'),
+        GaussianProcessKalman(dyn, obs, kern_par_ut, kern_par_ut, points='ut'),
+        GaussianProcessKalman(dyn, obs, kern_par_sr, kern_par_sr, points='gh', point_hyp={'degree': 5}),
+        GaussianProcessKalman(dyn, obs, kern_par_gh, kern_par_gh, points='gh', point_hyp={'degree': 7}),
+        GaussianProcessKalman(dyn, obs, kern_par_gh, kern_par_gh, points='gh', point_hyp={'degree': 10}),
+        GaussianProcessKalman(dyn, obs, kern_par_gh, kern_par_gh, points='gh', point_hyp={'degree': 15}),
+        GaussianProcessKalman(dyn, obs, kern_par_gh, kern_par_gh, points='gh', point_hyp={'degree': 20}),
     )
     num_algs = len(algorithms)
 
     # space for estimates
-    mean_f, cov_f = np.zeros((dyn.dim_in, steps, mc, num_algs)), np.zeros((dyn.dim_in, dyn.dim_in, steps, mc, num_algs))
-    mean_s, cov_s = np.zeros((dyn.dim_in, steps, mc, num_algs)), np.zeros((dyn.dim_in, dyn.dim_in, steps, mc, num_algs))
+    mean_f, cov_f = np.zeros((dyn.dim_in, steps, sims, num_algs)), np.zeros((dyn.dim_in, dyn.dim_in, steps, sims, num_algs))
+    mean_s, cov_s = np.zeros((dyn.dim_in, steps, sims, num_algs)), np.zeros((dyn.dim_in, dyn.dim_in, steps, sims, num_algs))
     # do filtering/smoothing
     t0 = time.time()  # measure execution time
     print('Running filters/smoothers ...', flush=True)
     for a, alg in enumerate(algorithms):
-        for sim in trange(mc, desc='{:25}'.format(alg.__class__.__name__), file=sys.stdout):
+        for sim in trange(sims, desc='{:25}'.format(alg.__class__.__name__), file=sys.stdout):
             mean_f[..., sim, a], cov_f[..., sim, a] = alg.forward_pass(z[..., sim])
             mean_s[..., sim, a], cov_s[..., sim, a] = alg.backward_pass()
             alg.reset()
@@ -164,11 +164,14 @@ def tables():
 
 
 def hypers_demo(lscale=None):
+
+    print(f"Seed = {np.random.get_state()[1][0]}")
+
     # set default lengthscales if unspecified
     if lscale is None:
-        lscale = [1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1, 3, 1e1, 3e1]
+        lscale = [1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1, 1, 3, 1e1, 3e1, 1e2, ]
 
-    steps, mc = 500, 20
+    steps, mc = 500, 100
 
     # setup univariate non-stationary growth model
     x0 = GaussRV(1, cov=np.atleast_2d(5.0))
@@ -187,7 +190,7 @@ def hypers_demo(lscale=None):
         ker_par = np.array([[1.0, el * dyn.dim_in]])
 
         # initialize BHKF with current lenghtscale
-        f = GaussianProcessKalman(dyn, obs, ker_par, ker_par)
+        f = GaussianProcessKalman(dyn, obs, ker_par, ker_par, points='ut', point_hyp={'kappa': 0.0})
         # filtering
         for s in range(mc):
             mean_f[..., s, iel], cov_f[..., s, iel] = f.forward_pass(z[..., s])
@@ -222,5 +225,5 @@ def hypers_demo(lscale=None):
 
 
 if __name__ == '__main__':
-    # tables_dict = tables()
-    plot_data = hypers_demo()
+    tables_dict = tables(steps=500, sims=100)
+    # plot_data = hypers_demo()
