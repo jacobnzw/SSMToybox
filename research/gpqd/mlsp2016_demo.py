@@ -3,13 +3,18 @@ import numpy.linalg as la
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+
 from matplotlib import cm
 from matplotlib.lines import Line2D
 from numpy import newaxis as na
+
 from ssmtoybox.mtran import LinearizationTransform, TaylorGPQDTransform, MonteCarloTransform, UnscentedTransform, \
     GaussHermiteTransform, SphericalRadialTransform
-from ssmtoybox.bq.bqmtran import GaussianProcessTransform
+from ssmtoybox.bq.bqmtran import BQTransform, GaussianProcessTransform
+from ssmtoybox.bq.bqmod import GaussianProcessModel
+from ssmtoybox.bq.bqkern import RBFGauss
 from ssmtoybox.ssmod import UNGMTransition, UNGMMeasurement
+
 from scipy.stats import norm
 from scipy.linalg import cho_factor, cho_solve
 
@@ -31,6 +36,163 @@ from bayesquad import GPQuadDerRBF  # TODO: port the GPQ+D for any point-set fro
 # Create RBFGaussDer(RBFGauss)
 #   - extend with the corresponding kernel expectations
 #   - expectations can be found in Aalto Notes or the bayesquad.py
+
+
+class GaussianProcessDerTransform(BQTransform):
+
+    def __init__(self, dim_in, dim_out, kern_par,
+                       point_str='ut', point_par=None, estimate_par=False, which_der=None):
+        self.model = GaussianProcessDerModel(dim_in, kern_par, point_str, point_par, estimate_par, which_der)
+        self.I_out = np.eye(dim_out)  # pre-allocation for later computations
+        # BQ transform weights for the mean, covariance and cross-covariance
+        self.wm, self.Wc, self.Wcc = self.weights(kern_par)
+
+    def _fcn_eval(self, fcn, x, fcn_par):
+        """
+        Evaluations of the integrand, which can comprise function observations as well as derivative observations.
+
+        Parameters
+        ----------
+        fcn : func
+            Integrand as a function handle, which is expected to behave certain way.
+
+        x : ndarray
+            Argument (input) of the integrand.
+
+        fcn_par :
+            Parameters of the integrand.
+
+        Returns
+        -------
+        : ndarray
+            Function evaluations of shape (out_dim, num_pts).
+
+        Notes
+        -----
+        Methods in derived subclasses decides whether to return derivatives also
+        """
+        # should return as many columns as output dims, one column includes function and derivative evaluations
+        # for every sigma-point, thus it is (n + n*d,); n = # sigma-points, d = sigma-point dimensionality
+        # returned array should be (n + n*d, e); e = output dimensionality
+        # evaluate function at sigmas (e, n)
+        fx = np.apply_along_axis(fcn, 0, x, fcn_par)
+        # Jacobians evaluated only at sigmas specified by which_der array (e * d, n)
+        dfx = np.apply_along_axis(fcn, 0, x[:, self.model.which_der], fcn_par, dx=True)
+        # stack function values and derivative values into one column
+        return np.vstack((fx.T, dfx.T.reshape(self.model.dim_in * len(self.model.which_der), -1))).T
+
+
+class GaussianProcessDerModel(GaussianProcessModel):
+    """Gaussian Process Model with Derivative Observations"""
+
+    def __init__(self, dim, kern_par, point_str, point_par=None, estimate_par=False, which_der=None):
+        super(GaussianProcessModel, self).__init__(dim, kern_par, 'rbf-d', point_str, point_par, estimate_par)
+        # assume derivatives evaluated at all sigmas if unspecified
+        self.which_der = which_der if which_der is not None else np.arange(self.num_pts)
+
+    def bq_weights(self, par, *args):
+        par = self.kernel.get_parameters(par)
+        x = self.points
+
+        # inverse kernel matrix
+        iK = self.kernel.eval_inv_dot(par, x, scaling=False)
+
+        # kernel expectations
+        q = self.kernel.exp_x_kx(par, x)
+        Q = self.kernel.exp_x_kxkx(par, par, x)
+        R = self.kernel.exp_x_xkx(par, x)
+
+        # derivative kernel expectations
+        qd = self.kernel.exp_x_dkx(par, x, which_der=self.which_der)
+        Qfd = self.kernel.exp_x_kxdkx(par, par, x)
+        Qdd = self.kernel.exp_x_dkxdkx(par, par, x)
+        Rd = self.kernel.exp_x_xdkx(par, x)
+
+        # form the "joint" (function value and derivative) kernel expectations
+        q_tilde = np.hstack((q.T. qd.T.ravel()))
+        Q_tilde = np.vstack((np.hstack((Q, Qfd)), np.hstack((Qfd.T, Qdd))))
+        R_tilde = np.hstack((R, Rd))
+
+        # BQ weights in terms of kernel expectations
+        w_m = q_tilde.dot(iK)
+        w_c = iK.dot(Q_tilde).dot(iK)
+        w_cc = R_tilde.dot(iK)
+
+        # save the kernel expectations for later
+        self.q, self.Q, self.iK = q_tilde, Q_tilde, iK
+        # expected model variance
+        self.model_var = self.kernel.exp_x_kxx(par) * (1 - np.trace(Q_tilde.dot(iK)))
+        # integral variance
+        self.integral_var = self.kernel.exp_xy_kxy(par) - q_tilde.T.dot(iK).dot(q_tilde)
+
+        # covariance weights should be symmetric
+        if not np.array_equal(w_c, w_c.T):
+            w_c = 0.5 * (w_c + w_c.T)
+
+        return w_m, w_c, w_cc, self.model_var, self.integral_var
+
+    def exp_model_variance(self, par, *args):
+        iK = self.kernel.eval_inv_dot(par, self.points)
+
+        Q = self.kernel.exp_x_kxkx(par, par, self.points)
+        Qfd = self.kernel.exp_x_kxdkx(par, par, self.points)
+        Qdd = self.kernel.exp_x_dkxdkx(par, par, self.points)
+        Q_tilde = np.vstack((np.hstack((Q, Qfd)), np.hstack((Qfd.T, Qdd))))
+
+        return self.kernel.exp_x_kxx(par) * (1 - np.trace(Q_tilde.dot(iK)))
+
+    def integral_variance(self, par, *args):
+        par = self.kernel.get_parameters(par)  # if par None returns default kernel parameters
+
+        q = self.kernel.exp_x_kx(par, self.points)
+        qd = self.kernel.exp_x_dkx(par, self.points)
+        q_tilde = np.hstack((q.T.qd.T.ravel()))
+
+        iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
+        kbar = self.kernel.exp_xy_kxy(par)
+        return kbar - q_tilde.T.dot(iK).dot(q_tilde)
+
+
+class RBFGaussDer(RBFGauss):
+
+    def __init__(self, dim, par, jitter=1e-8):
+        super(RBFGaussDer, self).__init__(dim, par, jitter)
+
+    def eval(self, par, x1, x2=None, diag=False, scaling=True):
+        # TODO: add evaluation of the Kfd and Kdd
+        if x2 is None:
+            x2 = x1.copy()
+
+        alpha, sqrt_inv_lam = RBFGauss._unpack_parameters(par)
+        alpha = 1.0 if not scaling else alpha
+
+        x1 = sqrt_inv_lam.dot(x1)
+        x2 = sqrt_inv_lam.dot(x2)
+        if diag:  # only diagonal of kernel matrix
+            assert x1.shape == x2.shape
+            dx = x1 - x2
+            return np.exp(2 * np.log(alpha) - 0.5 * np.sum(dx * dx, axis=0))
+        else:
+            return np.exp(2 * np.log(alpha) - 0.5 * maha(x1.T, x2.T))
+
+    def exp_x_dkx(self, par, x, scaling=False, which_der=None):
+        pass
+
+    def exp_x_kxdkx(self, par_0, par_1, x, scaling=False, which_der=None):
+        alpha, sqrt_inv_lam = RBFGauss._unpack_parameters(par_0)
+        alpha_1, sqrt_inv_lam_1 = RBFGauss._unpack_parameters(par_1)
+        alpha, alpha_1 = (1.0, 1.0) if not scaling else (alpha, alpha_1)
+        inv_lam = sqrt_inv_lam ** 2
+        inv_lam_1 = sqrt_inv_lam_1 ** 2
+        # TODO: evaluation of the E[k_ff(x_n, x) k_fd(x, x_m)]
+
+    def exp_x_dkxdkx(self, par_0, par_1, x, scaling=False, which_der=None):
+        alpha, sqrt_inv_lam = RBFGauss._unpack_parameters(par_0)
+        alpha_1, sqrt_inv_lam_1 = RBFGauss._unpack_parameters(par_1)
+        alpha, alpha_1 = (1.0, 1.0) if not scaling else (alpha, alpha_1)
+        inv_lam = sqrt_inv_lam ** 2
+        inv_lam_1 = sqrt_inv_lam_1 ** 2
+        # TODO: evaluation of the E[k_df(x_n, x) k_fd(x, x_m)]
 
 
 def sos(x, pars, dx=False):
