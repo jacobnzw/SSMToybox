@@ -87,6 +87,7 @@ class GaussianProcessDerModel(GaussianProcessModel):
 
     def __init__(self, dim, kern_par, point_str, point_par=None, estimate_par=False, which_der=None):
         super(GaussianProcessModel, self).__init__(dim, kern_par, 'rbf-d', point_str, point_par, estimate_par)
+        self.kernel = RBFGaussDer(dim, kern_par)
         # assume derivatives evaluated at all sigmas if unspecified
         self.which_der = which_der if which_der is not None else np.arange(self.num_pts)
 
@@ -104,12 +105,12 @@ class GaussianProcessDerModel(GaussianProcessModel):
 
         # derivative kernel expectations
         qd = self.kernel.exp_x_dkx(par, x, which_der=self.which_der)
-        Qfd = self.kernel.exp_x_kxdkx(par, par, x)
-        Qdd = self.kernel.exp_x_dkxdkx(par, par, x)
+        Qfd = self.kernel.exp_x_kxdkx(par, x)
+        Qdd = self.kernel.exp_x_dkxdkx(par, x)
         Rd = self.kernel.exp_x_xdkx(par, x)
 
         # form the "joint" (function value and derivative) kernel expectations
-        q_tilde = np.hstack((q.T. qd.T.ravel()))
+        q_tilde = np.hstack((q.T, qd.T.ravel()))
         Q_tilde = np.vstack((np.hstack((Q, Qfd)), np.hstack((Qfd.T, Qdd))))
         R_tilde = np.hstack((R, Rd))
 

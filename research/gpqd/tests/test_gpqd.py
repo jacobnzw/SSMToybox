@@ -1,9 +1,12 @@
 import numpy as np
-import scipy as sp
 
+from scipy.linalg import cho_factor, cho_solve, solve
+from numpy.linalg import det
 from numpy import newaxis as na
+
 from unittest import TestCase
-from research.gpqd.mlsp2016_demo import RBFGaussDer
+
+from research.gpqd.mlsp2016_demo import RBFGaussDer, GaussianProcessDerModel
 from ssmtoybox.utils import maha
 from ssmtoybox.mtran import UnscentedTransform
 
@@ -58,11 +61,11 @@ class RBFGaussDerKernelTest(TestCase):
         iiLam = np.diag(el ** -2)  # Lambda^-1
         inn = iLam.dot(x)  # (x-m)^T*iLam  # (N, D)
         B = iiLam + eye_d  # P*Lambda^-1+I, (P+Lam)^-1 = Lam^-1*(P*Lam^-1+I)^-1 # (D, D)
-        cho_B = sp.linalg.cho_factor(B)
-        t = sp.linalg.cho_solve(cho_B, inn)  # dot(inn, inv(B)) # (x-m)^T*iLam*(P+Lambda)^-1  # (D, N)
+        cho_B = cho_factor(B)
+        t = cho_solve(cho_B, inn)  # dot(inn, inv(B)) # (x-m)^T*iLam*(P+Lambda)^-1  # (D, N)
         l = np.exp(-0.5 * np.sum(inn * t, 0))  # (N, 1)
-        q = (alpha ** 2 / np.sqrt(np.linalg.det(B))) * l  # (N, 1)
-        Sig_q = sp.linalg.cho_solve(cho_B, eye_d)  # B^-1*I
+        q = (alpha ** 2 / np.sqrt(det(B))) * l  # (N, 1)
+        Sig_q = cho_solve(cho_B, eye_d)  # B^-1*I
         eta = Sig_q.dot(x)  # (D,N) Sig_q*x
         mu_q = iiLam.dot(eta)  # (D,N)
         r = q[na, which_der] * iiLam.dot(mu_q[:, which_der] - x[:, which_der])  # -t.dot(iLam) * q  # (D, N)
@@ -76,17 +79,16 @@ class RBFGaussDerKernelTest(TestCase):
         num_der = len(which_der)
         el = np.asarray(dim * [el])
         eye_d = np.eye(dim)
-        Lam = np.diag(el ** 2)
         iLam = np.diag(el ** -1)  # sqrt(Lambda^-1)
         iiLam = np.diag(el ** -2)  # Lambda^-1
 
         inn = iLam.dot(x)  # (x-m)^T*iLam  # (N, D)
         B = iiLam + eye_d
-        cho_B = sp.linalg.cho_factor(B)
-        t = sp.linalg.cho_solve(cho_B, inn)
+        cho_B = cho_factor(B)
+        t = cho_solve(cho_B, inn)
         l = np.exp(-0.5 * np.sum(inn * t, 0))  # (N, 1)
         q = (alpha ** 2 / np.sqrt(np.linalg.det(B))) * l  # (N, 1)
-        Sig_q = sp.linalg.cho_solve(cho_B, eye_d)  # B^-1*I
+        Sig_q = cho_solve(cho_B, eye_d)  # B^-1*I
         eta = Sig_q.dot(x)  # (D,N) Sig_q*x
         mu_q = iiLam.dot(eta)  # (D,N)
         r = q[na, which_der] * iiLam.dot(mu_q[:, which_der] - x[:, which_der])  # -t.dot(iLam) * q  # (D, N)
@@ -113,17 +115,17 @@ class RBFGaussDerKernelTest(TestCase):
 
         inn = iLam.dot(x)  # (x-m)^T*iLam  # (N, D)
         B = iiLam + eye_d  # P*Lambda^-1+I, (P+Lam)^-1 = Lam^-1*(P*Lam^-1+I)^-1 # (D, D)
-        cho_B = sp.linalg.cho_factor(B)
-        Sig_q = sp.linalg.cho_solve(cho_B, eye_d)  # B^-1*I
+        cho_B = cho_factor(B)
+        Sig_q = cho_solve(cho_B, eye_d)  # B^-1*I
         eta = Sig_q.dot(x)  # (D,N) Sig_q*x
         # quantities for covariance weights
         zet = 2 * np.log(alpha) - 0.5 * np.sum(inn * inn, 0)  # (D,N) 2log(alpha) - 0.5*(x-m)^T*Lambda^-1*(x-m)
         inn = iiLam.dot(x)  # inp / el[:, na]**2
         R = 2 * iiLam + eye_d  # 2P*Lambda^-1 + I
-        Q = (1.0 / np.sqrt(np.linalg.det(R))) * np.exp((zet[:, na] + zet[:, na].T) +
-                                                       maha(inn.T, -inn.T, V=0.5 * sp.linalg.solve(R, eye_d)))  # (N,N)
-        cho_LamSig = sp.linalg.cho_factor(Lam + Sig_q)
-        eta_tilde = iiLam.dot(sp.linalg.cho_solve(cho_LamSig, eta))  # Lambda^-1(Lambda+Sig_q)^-1*eta
+        Q = (1.0 / np.sqrt(det(R))) * np.exp((zet[:, na] + zet[:, na].T) +
+                                             maha(inn.T, -inn.T, V=0.5 * solve(R, eye_d)))  # (N,N)
+        cho_LamSig = cho_factor(Lam + Sig_q)
+        eta_tilde = iiLam.dot(cho_solve(cho_LamSig, eta))  # Lambda^-1(Lambda+Sig_q)^-1*eta
         mu_Q = eta_tilde[..., na] + eta_tilde[:, na, :]  # (D,N_der,N) pairwise sum of pre-multiplied eta's
 
         E_dfff = np.empty((num_der * dim, num_pts))
@@ -148,18 +150,18 @@ class RBFGaussDerKernelTest(TestCase):
 
         inn = iLam.dot(x)  # (x-m)^T*iLam  # (N, D)
         B = iiLam + eye_d  # P*Lambda^-1+I, (P+Lam)^-1 = Lam^-1*(P*Lam^-1+I)^-1 # (D, D)
-        cho_B = sp.linalg.cho_factor(B)
-        Sig_q = sp.linalg.cho_solve(cho_B, eye_d)  # B^-1*I
+        cho_B = cho_factor(B)
+        Sig_q = cho_solve(cho_B, eye_d)  # B^-1*I
         eta = Sig_q.dot(x)  # (D,N) Sig_q*x
         # quantities for covariance weights
         zet = 2 * np.log(alpha) - 0.5 * np.sum(inn * inn, 0)  # (D,N) 2log(alpha) - 0.5*(x-m)^T*Lambda^-1*(x-m)
         inn = iiLam.dot(x)  # inp / el[:, na]**2
         R = 2 * iiLam + eye_d  # 2P*Lambda^-1 + I
-        Q = (1.0 / np.sqrt(np.linalg.det(R))) * np.exp((zet[:, na] + zet[:, na].T) +
-                                             maha(inn.T, -inn.T, V=0.5 * sp.linalg.solve(R, eye_d)))  # (N,N)
-        cho_LamSig = sp.linalg.cho_factor(Lam + Sig_q)
-        Sig_Q = sp.linalg.cho_solve(cho_LamSig, Sig_q).dot(iiLam)  # (D,D) Lambda^-1 (Lambda*(Lambda+Sig_q)^-1*Sig_q) Lambda^-1
-        eta_tilde = iiLam.dot(sp.linalg.cho_solve(cho_LamSig, eta))  # Lambda^-1(Lambda+Sig_q)^-1*eta
+        Q = (1.0 / np.sqrt(det(R))) * np.exp((zet[:, na] + zet[:, na].T) +
+                                             maha(inn.T, -inn.T, V=0.5 * solve(R, eye_d)))  # (N,N)
+        cho_LamSig = cho_factor(Lam + Sig_q)
+        Sig_Q = cho_solve(cho_LamSig, Sig_q).dot(iiLam)  # (D,D) Lambda^-1 (Lambda*(Lambda+Sig_q)^-1*Sig_q) Lambda^-1
+        eta_tilde = iiLam.dot(cho_solve(cho_LamSig, eta))  # Lambda^-1(Lambda+Sig_q)^-1*eta
         mu_Q = eta_tilde[..., na] + eta_tilde[:, na, :]  # (D,N_der,N) pairwise sum of pre-multiplied eta's
 
         E_dffd = np.empty((num_der * dim, num_der * dim))
@@ -223,3 +225,103 @@ class RBFGaussDerKernelTest(TestCase):
 
         self.assertEqual(out.shape, exp.shape)
         self.assertTrue(np.allclose(out, exp))
+
+
+class GaussianProcessDerModelTest(TestCase):
+
+    @staticmethod
+    def weights_rbf_der(unit_sp, alpha=1.0, el=1.0, which_der=None):
+        d, n = unit_sp.shape
+        which_der = which_der if which_der is not None else np.arange(n)
+
+        el = np.asarray(d * [el])
+        assert len(el) == d
+        i_der = which_der  # shorthand for indexes of points with derivatives
+        n_der = len(i_der)  # # points w/ derivatives
+        assert n_der <= n  # # points w/ derivatives must be <= # points
+        # pre-allocation for convenience
+        eye_d, eye_n, eye_y = np.eye(d), np.eye(n), np.eye(n + d * n_der)
+
+        K = RBFGaussDerKernelTest.expected_eval(unit_sp, unit_sp, alpha=alpha, el=el, which_der=i_der)
+        iK = cho_solve(cho_factor(K + 1e-8 * eye_y), eye_y)  # invert kernel matrix BOTTLENECK
+        Lam = np.diag(el ** 2)
+        iLam = np.diag(el ** -1)  # sqrt(Lambda^-1)
+        iiLam = np.diag(el ** -2)  # Lambda^-1
+        inn = iLam.dot(unit_sp)  # (x-m)^T*iLam  # (N, D)
+        B = iiLam + eye_d  # P*Lambda^-1+I, (P+Lam)^-1 = Lam^-1*(P*Lam^-1+I)^-1 # (D, D)
+        cho_B = cho_factor(B)
+        t = cho_solve(cho_B, inn)  # dot(inn, inv(B)) # (x-m)^T*iLam*(P+Lambda)^-1  # (D, N)
+        l = np.exp(-0.5 * np.sum(inn * t, 0))  # (N, 1)
+        q = (alpha ** 2 / np.sqrt(np.linalg.det(B))) * l  # (N, 1)
+        Sig_q = cho_solve(cho_B, eye_d)  # B^-1*I
+        eta = Sig_q.dot(unit_sp)  # (D,N) Sig_q*x
+        mu_q = iiLam.dot(eta)  # (D,N)
+        r = q[na, i_der] * iiLam.dot(mu_q[:, i_der] - unit_sp[:, i_der])  # -t.dot(iLam) * q  # (D, N)
+        q_tilde = np.hstack((q.T, r.T.ravel()))  # (1, N + n_der*D)
+
+        # weights for mean
+        wm = q_tilde.dot(iK)
+
+        #  quantities for cross-covariance "weights"
+        iLamSig = iiLam.dot(Sig_q)  # (D,D)
+        r_tilde = np.empty((d, n_der * d))
+        for i in range(n_der):
+            i_d = i_der[i]
+            r_tilde[:, i * d:i * d + d] = q[i_d] * iLamSig + np.outer(mu_q[:, i_d], r[:, i].T)
+        R_tilde = np.hstack((q[na, :] * mu_q, r_tilde))  # (D, N+N*D)
+
+        # input-output covariance (cross-covariance) "weights"
+        Wcc = R_tilde.dot(iK)  # (D, N+N*D)
+
+        # quantities for covariance weights
+        zet = 2 * np.log(alpha) - 0.5 * np.sum(inn * inn, 0)  # (D,N) 2log(alpha) - 0.5*(x-m)^T*Lambda^-1*(x-m)
+        inn = iiLam.dot(unit_sp)  # inp / el[:, na]**2
+        R = 2 * iiLam + eye_d  # 2P*Lambda^-1 + I
+        Q = (1.0 / np.sqrt(det(R))) * np.exp((zet[:, na] + zet[:, na].T) +
+                                             maha(inn.T, -inn.T, V=0.5 * solve(R, eye_d)))  # (N,N)
+        cho_LamSig = cho_factor(Lam + Sig_q)
+        Sig_Q = cho_solve(cho_LamSig, Sig_q).dot(iiLam)  # (D,D) Lambda^-1 (Lambda*(Lambda+Sig_q)^-1*Sig_q) Lambda^-1
+        eta_tilde = iiLam.dot(cho_solve(cho_LamSig, eta))  # Lambda^-1(Lambda+Sig_q)^-1*eta
+        mu_Q = eta_tilde[..., na] + eta_tilde[:, na, :]  # (D,N_der,N) pairwise sum of pre-multiplied eta's
+
+        E_dfff = np.empty((n_der * d, n))
+        for i in range(n_der):
+            for j in range(n):
+                istart, iend = i * d, i * d + d
+                i_d = i_der[i]
+                E_dfff[istart:iend, j] = Q[i_d, j] * (mu_Q[:, i_d, j] - inn[:, i_d])
+
+        E_dffd = np.empty((n_der * d, n_der * d))
+        for i in range(n_der):
+            for j in range(n_der):
+                istart, iend = i * d, i * d + d
+                jstart, jend = j * d, j * d + d
+                i_d, j_d = i_der[i], i_der[j]
+                T = np.outer((inn[:, i_d] - mu_Q[:, i_d, j_d]), (inn[:, j_d] - mu_Q[:, i_d, j_d]).T) + Sig_Q
+                E_dffd[istart:iend, jstart:jend] = Q[i_d, j_d] * T
+        Q_tilde = np.vstack((np.hstack((Q, E_dfff.T)), np.hstack((E_dfff, E_dffd))))  # (N + N_der*D, N + N_der*D)
+
+        # weights for covariance
+        iKQ = iK.dot(Q_tilde)
+        Wc = iKQ.dot(iK)
+
+        return wm, Wc, Wcc
+
+    def test_weights(self):
+        dim = 2
+        kernel_par = np.array([[1.0] + dim*[2.0]])
+        model = GaussianProcessDerModel(dim, kernel_par, 'ut')
+
+        out_wm, out_wc, out_wcc, _, _ = model.bq_weights(kernel_par)
+        exp_wm, exp_wc, exp_wcc = GaussianProcessDerModelTest.weights_rbf_der(model.points,
+                                                                              alpha=kernel_par[0, 0],
+                                                                              el=kernel_par[0, 1])
+        # check shapes
+        self.assertEqual(out_wm.shape, exp_wm.shape)
+        self.assertEqual(out_wc.shape, exp_wc.shape)
+        self.assertEqual(out_wcc.shape, exp_wcc.shape)
+
+        # check values
+        self.assertTrue(np.allclose(out_wm, out_wm))
+        self.assertTrue(np.allclose(out_wc, out_wc))
+        self.assertTrue(np.allclose(out_wcc, out_wcc))
