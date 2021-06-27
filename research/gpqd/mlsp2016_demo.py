@@ -11,9 +11,10 @@ from numpy import newaxis as na
 from ssmtoybox.mtran import LinearizationTransform, TaylorGPQDTransform, MonteCarloTransform, UnscentedTransform, \
     GaussHermiteTransform, SphericalRadialTransform
 from ssmtoybox.bq.bqmtran import BQTransform, GaussianProcessTransform
-from ssmtoybox.bq.bqmod import GaussianProcessModel
+from ssmtoybox.bq.bqmod import GaussianProcessModel, Model
 from ssmtoybox.bq.bqkern import RBFGauss, Kernel
 from ssmtoybox.ssmod import UNGMTransition, UNGMMeasurement
+from ssmtoybox.utils import GaussRV
 
 from scipy.stats import norm
 from scipy.linalg import cho_factor, cho_solve
@@ -85,8 +86,10 @@ class GaussianProcessDerTransform(BQTransform):
 class GaussianProcessDerModel(GaussianProcessModel):
     """Gaussian Process Model with Derivative Observations"""
 
+    _supported_kernels_ = ['rbf-d']
+
     def __init__(self, dim, kern_par, point_str, point_par=None, estimate_par=False, which_der=None):
-        super(GaussianProcessModel, self).__init__(dim, kern_par, 'rbf-d', point_str, point_par, estimate_par)
+        super(GaussianProcessDerModel, self).__init__(dim, kern_par, 'rbf-d', point_str, point_par, estimate_par)
         self.kernel = RBFGaussDer(dim, kern_par)
         # assume derivatives evaluated at all sigmas if unspecified
         self.which_der = which_der if which_der is not None else np.arange(self.num_pts)
@@ -536,30 +539,30 @@ def taylor_gpqd_demo(f):
 def gpq_int_var_demo():
     """Compares integral variances of GPQ and GPQ+D by plotting."""
     d = 1
-    ut_pts = Unscented.unit_sigma_points(d)
-    f = UNGM().dyn_eval
+    f = UNGMTransition(GaussRV(d), GaussRV(d)).dyn_eval
     mean = np.zeros(d)
     cov = np.eye(d)
-    gpq = GPQuad(d, unit_sp=ut_pts, hypers={'sig_var': 10.0, 'lengthscale': 0.7 * np.ones(d), 'noise_var': 1e-8})
-    gpqd = GPQuadDerRBF(d, unit_sp=ut_pts, hypers={'sig_var': 10.0, 'lengthscale': 0.7 * np.ones(d), 'noise_var': 1e-8},
-                        which_der=np.arange(ut_pts.shape[1]))
-    mct = MonteCarlo(d, n=1e4)
+    kpar = np.array([[10.0] + d * [0.7]])
+    gpq = GaussianProcessTransform(d, 1, kern_par=kpar, kern_str='rbf', point_str='ut', point_par={'kappa': 0.0})
+    gpqd = GaussianProcessDerTransform(d, 1, kern_par=kpar, point_str='ut', point_par={'kappa': 0.0})
+    mct = MonteCarloTransform(d, n=1e4)
     mean_gpq, cov_gpq, cc_gpq = gpq.apply(f, mean, cov, np.atleast_1d(1.0))
     mean_gpqd, cov_gpqd, cc_gpqd = gpqd.apply(f, mean, cov, np.atleast_1d(1.0))
     mean_mc, cov_mc, cc_mc = mct.apply(f, mean, cov, np.atleast_1d(1.0))
 
-    xmin_gpq = norm.ppf(0.0001, loc=mean_gpq, scale=gpq.integral_var)
-    xmax_gpq = norm.ppf(0.9999, loc=mean_gpq, scale=gpq.integral_var)
-    xmin_gpqd = norm.ppf(0.0001, loc=mean_gpqd, scale=gpqd.integral_var)
-    xmax_gpqd = norm.ppf(0.9999, loc=mean_gpqd, scale=gpqd.integral_var)
+    xmin_gpq = norm.ppf(0.0001, loc=mean_gpq, scale=gpq.model.integral_var)
+    xmax_gpq = norm.ppf(0.9999, loc=mean_gpq, scale=gpq.model.integral_var)
+    xmin_gpqd = norm.ppf(0.0001, loc=mean_gpqd, scale=gpqd.model.integral_var)
+    xmax_gpqd = norm.ppf(0.9999, loc=mean_gpqd, scale=gpqd.model.integral_var)
     xgpq = np.linspace(xmin_gpq, xmax_gpq, 500)
-    ygpq = norm.pdf(xgpq, loc=mean_gpq, scale=gpq.integral_var)
+    ygpq = norm.pdf(xgpq, loc=mean_gpq, scale=gpq.model.integral_var)
     xgpqd = np.linspace(xmin_gpqd, xmax_gpqd, 500)
-    ygpqd = norm.pdf(xgpqd, loc=mean_gpqd, scale=gpqd.integral_var)
+    ygpqd = norm.pdf(xgpqd, loc=mean_gpqd, scale=gpqd.model.integral_var)
     plt.figure()
-    plt.plot(xgpq, ygpq, lw=2)
-    plt.plot(xgpqd, ygpqd, lw=2)
+    plt.plot(xgpq, ygpq, lw=2, label='gpq')
+    plt.plot(xgpqd, ygpqd, lw=2, label='gpq+d')
     plt.gca().add_line(Line2D([mean_mc, mean_mc], [0, 150], linewidth=2, color='k'))
+    plt.legend()
     plt.show()
 
 
@@ -574,11 +577,11 @@ def gpq_kl_demo():
     dmask = np.arange(pts.shape[1])
     # RBF kernel hyper-parameters
     hyp = {
-        'sos': {'sig_var': 10.0, 'lengthscale': 6.0 * np.ones(d), 'noise_var': 1e-8},
-        'rss': {'sig_var': 10.0, 'lengthscale': 0.2 * np.ones(d), 'noise_var': 1e-8},  # el=0.2, d=2
-        'toa': {'sig_var': 10.0, 'lengthscale': 3.0 * np.ones(d), 'noise_var': 1e-8},
-        'doa': {'sig_var': 1.0, 'lengthscale': 2.0 * np.ones(d), 'noise_var': 1e-8},  # al=2, np.array([2, 2])
-        'rdr': {'sig_var': 1.0, 'lengthscale': 5.0 * np.ones(d), 'noise_var': 1e-8},
+        'sos': np.array([[10.0] + d*[6.0]]),
+        'rss': np.array([[10.0] + d*[0.2]]),
+        'toa': np.array([[10.0] + d*[3.0]]),
+        'doa': np.array([[1.0] + d*[2.0]]),
+        'rdr': np.array([[10.0] + d*[5.0]]),
     }
     # baseline: Monte Carlo transform w/ 20,000 samples
     mc_baseline = MonteCarloTransform(d, n=2e4)
@@ -619,11 +622,11 @@ def gpq_kl_demo():
             jitter = 1e-8 * np.eye(2) if f.__name__ == 'rdr' else 1e-8 * np.eye(1)
             # baseline moments using Monte Carlo
             mean_mc, cov_mc, cc = mc_baseline.apply(f, mean, cov, None)
-            # tested moment trasforms
+            # tested moment transforms
             transforms = (
                 SphericalRadialTransform(d),
-                GaussianProcessTransform(d, pts, hyp[f.__name__]),
-                GPQuadDerRBF(d, pts, hyp[f.__name__], dmask),
+                GaussianProcessTransform(d, kern_par=hyp[f.__name__], point_str='sr'),
+                GaussianProcessDerTransform(d, kern_par=hyp[f.__name__], point_str='sr', which_der=dmask),
             )
             for idt, t in enumerate(transforms):
                 # apply transform
@@ -651,7 +654,7 @@ def gpq_hypers_demo():
     # input dimension, we can only plot d = 1
     d = 1
     # unit sigma-points
-    pts = SphericalRadial.unit_sigma_points(d)
+    pts = SphericalRadialTransform.unit_sigma_points(d)
     # pts = Unscented.unit_sigma_points(d)
     # pts = GaussHermite.unit_sigma_points(d, degree=5)
     # shift the points away from the singularity
@@ -662,23 +665,23 @@ def gpq_hypers_demo():
     test_functions = (sos, toa, rss,)
     # RBF kernel hyper-parameters
     hyp = {
-        'sos': {'sig_var': 10.0, 'lengthscale': 6.0 * np.ones(d), 'noise_var': 1e-8},
-        'rss': {'sig_var': 10.0, 'lengthscale': 1.0 * np.ones(d), 'noise_var': 1e-8},
-        'toa': {'sig_var': 10.0, 'lengthscale': 1.0 * np.ones(d), 'noise_var': 1e-8},
+        'sos': np.array([[10.0] + d*[6.0]]),
+        'rss': np.array([[10.0] + d*[1.0]]),
+        'toa': np.array([[10.0] + d*[1.0]]),
     }
     hypd = {
-        'sos': {'sig_var': 10.0, 'lengthscale': 6.0 * np.ones(d), 'noise_var': 1e-8},
-        'rss': {'sig_var': 10.0, 'lengthscale': 1.0 * np.ones(d), 'noise_var': 1e-8},
-        'toa': {'sig_var': 10.0, 'lengthscale': 1.0 * np.ones(d), 'noise_var': 1e-8},
+        'sos': np.array([[10.0] + d*[6.0]]),
+        'rss': np.array([[10.0] + d*[1.0]]),
+        'toa': np.array([[10.0] + d*[1.0]]),
     }
     # GP plots
     # for f in test_functions:
-    #     # TODO: plot_gp_model can be made static
-    #     GPQuad(d, pts, hyp[f.__name__]).plot_gp_model(f, pts, None)
-    # GP plots with derivatives
-    for f in test_functions:
-        # TODO: plot_gp_model can be made static
-        GPQuadDerRBF(d, pts, hypd[f.__name__], dmask).plot_gp_model(f, pts, None)
+    #     mt = GaussianProcessTransform(d, kern_par=hyp[f.__name__], point_str='sr')
+    #     mt.model.plot_model(test_data, fcn_obs, par=None, fcn_true=None, in_dim=0)
+    # # GP plots with derivatives
+    # for f in test_functions:
+    #     mt = GaussianProcessDerTransform(d, kern_par=hypd[f.__name__], point_str='sr', which_der=dmask)
+    #     mt.model.plot_model(test_data, fcn_obs, par=None, fcn_true=None, in_dim=0)
 
 
 def gpq_sos_demo():
@@ -697,16 +700,16 @@ def gpq_sos_demo():
         dmask = np.arange(pts.shape[1])
         # RBF kernel hyper-parameters
         hyp = {
-            'gpq': {'sig_var': 1.0, 'lengthscale': 10.0 * np.ones(d), 'noise_var': 1e-8},
-            'gpqd': {'sig_var': 1.0, 'lengthscale': 10.0 * np.ones(d), 'noise_var': 1e-8},
+            'gpq': np.array([[1.0] + d*[10.0]]),
+            'gpqd': np.array([[1.0] + d*[10.0]]),
         }
         transforms = (
             SphericalRadialTransform(d),
-            GaussianProcessTransform(d, pts, hyp['gpq']),
-            GPQuadDerRBF(d, pts, hyp['gpqd'], dmask),
+            GaussianProcessTransform(d, 1, kern_par=hyp['gpq'], point_str='sr'),
+            GaussianProcessDerTransform(d, 1, kern_par=hyp['gpqd'], point_str='sr', which_der=dmask),
         )
-        ivar_data[1, di] = transforms[1].integral_var
-        ivar_data[2, di] = transforms[2].integral_var
+        ivar_data[1, di] = transforms[1].model.integral_var
+        ivar_data[2, di] = transforms[2].model.integral_var
         mean_true, cov_true = d, 2 * d
         # print "{:<15}:\t {:.4f} \t{:.4f}".format("True moments", mean_true, cov_true)
         for ti, t in enumerate(transforms):
