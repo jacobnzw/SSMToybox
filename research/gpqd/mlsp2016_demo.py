@@ -146,7 +146,7 @@ class GaussianProcessDerModel(GaussianProcessModel):
 
         q = self.kernel.exp_x_kx(par, self.points)
         qd = self.kernel.exp_x_dkx(par, self.points)
-        q_tilde = np.hstack((q.T.qd.T.ravel()))
+        q_tilde = np.hstack((q.T, qd.T.ravel()))
 
         iK = self.kernel.eval_inv_dot(par, self.points, scaling=False)
         kbar = self.kernel.exp_xy_kxy(par)
@@ -292,10 +292,10 @@ class RBFGaussDer(RBFGauss):
         mu_q = inv_lam.dot(eta)  # (D,N)
         r = q[na, which_der] * inv_lam.dot(mu_q[:, which_der] - x[:, which_der])  # -t.dot(iLam) * q  # (D, N)
 
-        return np.hstack((q.T, r.T.ravel()))  # q_tilde (1, N + n_der*D)
+        return r.T.ravel()  # (1, n_der*D)
 
-    def exp_x_kxdkx(self, par, x, scaling=False, which_der=None):
-        """Expectation E_x[k_ff(x_n, x) k_fd(x, x_m)]"""
+    def exp_x_xdkx(self, par, x, scaling=False, which_der=None):
+        """Expectation E_x[x k_fd(x, x_m)]"""
         dim, num_pts = x.shape
         which_der = np.arange(num_pts) if which_der is None else which_der
         num_der = len(which_der)
@@ -317,7 +317,37 @@ class RBFGaussDer(RBFGauss):
             i_d = which_der[i]
             r_tilde[:, i * dim:i * dim + dim] = q[i_d] * iLamSig + np.outer(mu_q[:, i_d], r[:, i].T)
 
-        return np.hstack((q[na, :] * mu_q, r_tilde))  # R_tilde (D, N+N*D)
+        return r_tilde  # (dim, num_pts*dim)
+
+    def exp_x_kxdkx(self, par, x, scaling=False, which_der=None):
+        """Expectation E_x[k_ff(x_n, x) k_fd(x, x_m)]"""
+        dim, num_pts = x.shape
+        which_der = np.arange(num_pts) if which_der is None else which_der
+        num_der = len(which_der)
+
+        _, sqrt_inv_lam = RBFGauss._unpack_parameters(par)
+        inv_lam = sqrt_inv_lam ** 2
+        lam = np.diag(inv_lam.diagonal() ** -1)
+        eye_d = np.eye(dim)
+
+        # quantities for covariance weights
+        Sig_q = cho_solve(cho_factor(inv_lam + eye_d), eye_d)  # B^-1*I
+        eta = Sig_q.dot(x)  # (D,N) Sig_q*x
+        inn = inv_lam.dot(x)  # inp / el[:, na]**2
+        Q = self.exp_x_kxkx(par, par, x, scaling)  # (N,N)
+
+        cho_LamSig = cho_factor(lam + Sig_q)
+        eta_tilde = inv_lam.dot(cho_solve(cho_LamSig, eta))  # Lambda^-1(Lambda+Sig_q)^-1*eta
+        mu_Q = eta_tilde[..., na] + eta_tilde[:, na, :]  # (D,N_der,N) pairwise sum of pre-multiplied eta's
+
+        E_dfff = np.empty((num_der * dim, num_pts))
+        for i in range(num_der):
+            for j in range(num_pts):
+                istart, iend = i * dim, i * dim + dim
+                i_d = which_der[i]
+                E_dfff[istart:iend, j] = Q[i_d, j] * (mu_Q[:, i_d, j] - inn[:, i_d])
+
+        return E_dfff.T  # (num_pts, num_der*dim)
 
     def exp_x_dkxdkx(self, par, x, scaling=False, which_der=None):
         """Expectation E_x[k_df(x_n, x) k_fd(x, x_m)]"""
@@ -341,13 +371,6 @@ class RBFGaussDer(RBFGauss):
         eta_tilde = inv_lam.dot(cho_solve(cho_LamSig, eta))  # Lambda^-1(Lambda+Sig_q)^-1*eta
         mu_Q = eta_tilde[..., na] + eta_tilde[:, na, :]  # (D,N_der,N) pairwise sum of pre-multiplied eta's
 
-        E_dfff = np.empty((num_der * dim, num_pts))
-        for i in range(num_der):
-            for j in range(num_pts):
-                istart, iend = i * dim, i * dim + dim
-                i_d = which_der[i]
-                E_dfff[istart:iend, j] = Q[i_d, j] * (mu_Q[:, i_d, j] - inn[:, i_d])
-
         E_dffd = np.empty((num_der * dim, num_der * dim))
         for i in range(num_der):
             for j in range(num_der):
@@ -357,7 +380,7 @@ class RBFGaussDer(RBFGauss):
                 T = np.outer((inn[:, i_d] - mu_Q[:, i_d, j_d]), (inn[:, j_d] - mu_Q[:, i_d, j_d]).T) + Sig_Q
                 E_dffd[istart:iend, jstart:jend] = Q[i_d, j_d] * T
 
-        return np.vstack((np.hstack((Q, E_dfff.T)), np.hstack((E_dfff, E_dffd))))  # Q_tilde (N + N_der*D, N + N_der*D)
+        return E_dffd  # (num_der*dim, num_der*dim)
 
 
 def sos(x, pars, dx=False):

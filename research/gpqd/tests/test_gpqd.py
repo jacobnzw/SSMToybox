@@ -43,7 +43,7 @@ class RBFGaussDerKernelTest(TestCase):
                 jstart, jend = j * D, j * D + D
                 i_d, j_d = which_der[i], which_der[j]  # indices of points with derivatives
                 Kdd[istart:iend, jstart:jend] = Kff[i_d, j_d] * (iiLam - np.outer(XmX[:, i_d, j_d], XmX[:, i_d, j_d]))
-        if Ns == N:  # TODO: xs should be kwarg just like in GPy to properly recognize if test points are used
+        if Ns == N:
             return np.vstack((np.hstack((Kff, Kfd)), np.hstack((Kfd.T, Kdd))))
         else:
             return np.hstack((Kff, Kfd))
@@ -67,22 +67,23 @@ class RBFGaussDerKernelTest(TestCase):
         mu_q = iiLam.dot(eta)  # (D,N)
         r = q[na, which_der] * iiLam.dot(mu_q[:, which_der] - x[:, which_der])  # -t.dot(iLam) * q  # (D, N)
 
-        return np.hstack((q.T, r.T.ravel()))  # q_tilde (1, N + n_der*D)
+        return r.T.ravel()  # (1, num_der*dim)
 
     @staticmethod
-    def expected_exp_x_kxdkx(x, alpha=1.0, el=1.0, which_der=None):
+    def expected_exp_x_xdkx(x, alpha=1.0, el=1.0, which_der=None):
         dim, num_pts = x.shape
-        which_der = which_der if which_der is not None else np.arange(num_pts)
+        which_der = np.arange(num_pts) if which_der is None else which_der
         num_der = len(which_der)
-        eye_d = np.eye(dim)
         el = np.asarray(dim * [el])
+        eye_d = np.eye(dim)
+        Lam = np.diag(el ** 2)
         iLam = np.diag(el ** -1)  # sqrt(Lambda^-1)
         iiLam = np.diag(el ** -2)  # Lambda^-1
 
         inn = iLam.dot(x)  # (x-m)^T*iLam  # (N, D)
-        B = iiLam + eye_d  # P*Lambda^-1+I, (P+Lam)^-1 = Lam^-1*(P*Lam^-1+I)^-1 # (D, D)
+        B = iiLam + eye_d
         cho_B = sp.linalg.cho_factor(B)
-        t = sp.linalg.cho_solve(cho_B, inn)  # dot(inn, inv(B)) # (x-m)^T*iLam*(P+Lambda)^-1  # (D, N)
+        t = sp.linalg.cho_solve(cho_B, inn)
         l = np.exp(-0.5 * np.sum(inn * t, 0))  # (N, 1)
         q = (alpha ** 2 / np.sqrt(np.linalg.det(B))) * l  # (N, 1)
         Sig_q = sp.linalg.cho_solve(cho_B, eye_d)  # B^-1*I
@@ -97,7 +98,42 @@ class RBFGaussDerKernelTest(TestCase):
             i_d = which_der[i]
             r_tilde[:, i * dim:i * dim + dim] = q[i_d] * iLamSig + np.outer(mu_q[:, i_d], r[:, i].T)
 
-        return np.hstack((q[na, :] * mu_q, r_tilde))  # R_tilde (D, N+N*D)
+        return r_tilde  # (dim, num_der*dim)
+
+    @staticmethod
+    def expected_exp_x_kxdkx(x, alpha=1.0, el=1.0, which_der=None):
+        dim, num_pts = x.shape
+        which_der = which_der if which_der is not None else np.arange(num_pts)
+        num_der = len(which_der)
+        eye_d = np.eye(dim)
+        el = np.asarray(dim * [el])
+        Lam = np.diag(el ** 2)
+        iLam = np.diag(el ** -1)  # sqrt(Lambda^-1)
+        iiLam = np.diag(el ** -2)  # Lambda^-1
+
+        inn = iLam.dot(x)  # (x-m)^T*iLam  # (N, D)
+        B = iiLam + eye_d  # P*Lambda^-1+I, (P+Lam)^-1 = Lam^-1*(P*Lam^-1+I)^-1 # (D, D)
+        cho_B = sp.linalg.cho_factor(B)
+        Sig_q = sp.linalg.cho_solve(cho_B, eye_d)  # B^-1*I
+        eta = Sig_q.dot(x)  # (D,N) Sig_q*x
+        # quantities for covariance weights
+        zet = 2 * np.log(alpha) - 0.5 * np.sum(inn * inn, 0)  # (D,N) 2log(alpha) - 0.5*(x-m)^T*Lambda^-1*(x-m)
+        inn = iiLam.dot(x)  # inp / el[:, na]**2
+        R = 2 * iiLam + eye_d  # 2P*Lambda^-1 + I
+        Q = (1.0 / np.sqrt(np.linalg.det(R))) * np.exp((zet[:, na] + zet[:, na].T) +
+                                                       maha(inn.T, -inn.T, V=0.5 * sp.linalg.solve(R, eye_d)))  # (N,N)
+        cho_LamSig = sp.linalg.cho_factor(Lam + Sig_q)
+        eta_tilde = iiLam.dot(sp.linalg.cho_solve(cho_LamSig, eta))  # Lambda^-1(Lambda+Sig_q)^-1*eta
+        mu_Q = eta_tilde[..., na] + eta_tilde[:, na, :]  # (D,N_der,N) pairwise sum of pre-multiplied eta's
+
+        E_dfff = np.empty((num_der * dim, num_pts))
+        for i in range(num_der):
+            for j in range(num_pts):
+                istart, iend = i * dim, i * dim + dim
+                i_d = which_der[i]
+                E_dfff[istart:iend, j] = Q[i_d, j] * (mu_Q[:, i_d, j] - inn[:, i_d])
+
+        return E_dfff.T  # (num_der*dim, num_pts)
 
     @staticmethod
     def expected_exp_x_dkxdkx(x, alpha=1.0, el=1.0, which_der=None):
@@ -126,13 +162,6 @@ class RBFGaussDerKernelTest(TestCase):
         eta_tilde = iiLam.dot(sp.linalg.cho_solve(cho_LamSig, eta))  # Lambda^-1(Lambda+Sig_q)^-1*eta
         mu_Q = eta_tilde[..., na] + eta_tilde[:, na, :]  # (D,N_der,N) pairwise sum of pre-multiplied eta's
 
-        E_dfff = np.empty((num_der * dim, num_pts))
-        for i in range(num_der):
-            for j in range(num_pts):
-                istart, iend = i * dim, i * dim + dim
-                i_d = which_der[i]
-                E_dfff[istart:iend, j] = Q[i_d, j] * (mu_Q[:, i_d, j] - inn[:, i_d])
-
         E_dffd = np.empty((num_der * dim, num_der * dim))
         for i in range(num_der):
             for j in range(num_der):
@@ -142,7 +171,7 @@ class RBFGaussDerKernelTest(TestCase):
                 T = np.outer((inn[:, i_d] - mu_Q[:, i_d, j_d]), (inn[:, j_d] - mu_Q[:, i_d, j_d]).T) + Sig_Q
                 E_dffd[istart:iend, jstart:jend] = Q[i_d, j_d] * T
 
-        return np.vstack((np.hstack((Q, E_dfff.T)), np.hstack((E_dfff, E_dffd))))  # Q_tilde (N + N_der*D, N + N_der*D)
+        return E_dffd  # (num_der*dim, num_der*dim)
 
     def setUp(self) -> None:
         self.dim = 2
@@ -164,6 +193,15 @@ class RBFGaussDerKernelTest(TestCase):
 
         out = kernel.exp_x_dkx(kernel_par, x)
         exp = RBFGaussDerKernelTest.expected_exp_x_dkx(x, alpha=kernel_par[0, 0], el=kernel_par[0, 1])
+
+        self.assertEqual(out.shape, exp.shape)
+        self.assertTrue(np.allclose(out, exp))
+
+    def test_exp_x_xdkx(self):
+        kernel, kernel_par, x = self.kernel, self.kernel_par, self.x
+
+        out = kernel.exp_x_xdkx(kernel_par, x)
+        exp = RBFGaussDerKernelTest.expected_exp_x_xdkx(x, alpha=kernel_par[0, 0], el=kernel_par[0, 1])
 
         self.assertEqual(out.shape, exp.shape)
         self.assertTrue(np.allclose(out, exp))
