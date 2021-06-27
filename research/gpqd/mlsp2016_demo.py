@@ -929,41 +929,43 @@ def gp_fit_demo(f, pars, xrng=(-1, 1, 50), save_figs=False, alpha=1.0, el=1.0):
 
 if __name__ == '__main__':
 
-    # # TABLE 1: SUM OF SQUARES: transformed mean and variance, SR vs. GPQ vs. GPQ+D
-    print('Table 1: Comparison of transformed mean and variance for increasing dimension D '
-          'computed by the SR, GPQ and GPQ+D moment transforms.')
-    sos_table, ivar_table, ivar = gpq_sos_demo()
-    pd.set_option('display.float_format', '{:.2e}'.format)
-    save_table(sos_table, 'sum_of_squares.tex')
-    print('Saved in {}'.format('sum_of_squares.tex'))
-    print()
+    # # # TABLE 1: SUM OF SQUARES: transformed mean and variance, SR vs. GPQ vs. GPQ+D
+    # print('Table 1: Comparison of transformed mean and variance for increasing dimension D '
+    #       'computed by the SR, GPQ and GPQ+D moment transforms.')
+    # sos_table, ivar_table, ivar = gpq_sos_demo()
+    # pd.set_option('display.float_format', '{:.2e}'.format)
+    # save_table(sos_table, 'sum_of_squares.tex')
+    # print('Saved in {}'.format('sum_of_squares.tex'))
+    # print()
+    #
+    # # # TABLE 2: Comparison of variance of the mean integral for GPQ and GPQ+D
+    # print('Table 2: Comparison of variance of the mean integral for GPQ and GPQ+D.')
+    # save_table(ivar_table, 'sos_gpq_int_var.tex')
+    # print('Saved in {}'.format('sos_gpq_int_var.tex'))
+    # print()
+    #
+    # # FIGURE 2: (a) Approximation used by GPQ, (b) Approximation used by GPQ+D
+    # print('Figure 2: (a) Approximation used by the GPQ, (b) Approximation used by the GPQ+D.')
+    # # gp_fit_demo(UNGM().dyn_eval, [1], xrng=(-3, 3, 50), alpha=10.0, el=0.7)
+    # gp_fit_demo(sos, None, xrng=(-3, 3, 50), alpha=1.0, el=10.0, save_figs=True)
+    # # gpq_int_var_demo()
+    # print('Figures saved in {}, {}'.format('sos_gpr_fcn_obs_small.pdf', 'sos_gpr_grad_obs_small.pdf'))
+    # print()
+    #
+    # # fig = plot_func(rss, 2, n=100)
+    #
+    # # TABLE 4: Comparison of the SR, GPQ and GPQ+D moment transforms in terms of symmetrized KL-divergence.
+    # print('Table 4: Comparison of the SR, GPQ and GPQ+D moment transforms in terms of symmetrized KL-divergence.')
+    # kl_tab, re_mean_tab, re_cov_tab = gpq_kl_demo()
+    # pd.set_option('display.float_format', '{:.2e}'.format)
+    # print("\nSymmetrized KL-divergence")
+    # print(kl_tab.T)
+    # # print("\nRelative error in the mean")
+    # # print(re_mean_tab)
+    # # print("\nRelative error in the covariance")
+    # # print(re_cov_tab)
+    # with open('kl_div_table.tex', 'w') as fo:
+    #     kl_tab.T.to_latex(fo)
+    # print('Saved in {}'.format('kl_div_table.tex'))
 
-    # # TABLE 2: Comparison of variance of the mean integral for GPQ and GPQ+D
-    print('Table 2: Comparison of variance of the mean integral for GPQ and GPQ+D.')
-    save_table(ivar_table, 'sos_gpq_int_var.tex')
-    print('Saved in {}'.format('sos_gpq_int_var.tex'))
-    print()
-
-    # FIGURE 2: (a) Approximation used by GPQ, (b) Approximation used by GPQ+D
-    print('Figure 2: (a) Approximation used by the GPQ, (b) Approximation used by the GPQ+D.')
-    # gp_fit_demo(UNGM().dyn_eval, [1], xrng=(-3, 3, 50), alpha=10.0, el=0.7)
-    gp_fit_demo(sos, None, xrng=(-3, 3, 50), alpha=1.0, el=10.0, save_figs=True)
-    # gpq_int_var_demo()
-    print('Figures saved in {}, {}'.format('sos_gpr_fcn_obs_small.pdf', 'sos_gpr_grad_obs_small.pdf'))
-    print()
-
-    # fig = plot_func(rss, 2, n=100)
-
-    # TABLE 4: Comparison of the SR, GPQ and GPQ+D moment transforms in terms of symmetrized KL-divergence.
-    print('Table 4: Comparison of the SR, GPQ and GPQ+D moment transforms in terms of symmetrized KL-divergence.')
-    kl_tab, re_mean_tab, re_cov_tab = gpq_kl_demo()
-    pd.set_option('display.float_format', '{:.2e}'.format)
-    print("\nSymmetrized KL-divergence")
-    print(kl_tab.T)
-    # print("\nRelative error in the mean")
-    # print(re_mean_tab)
-    # print("\nRelative error in the covariance")
-    # print(re_cov_tab)
-    with open('kl_div_table.tex', 'w') as fo:
-        kl_tab.T.to_latex(fo)
-    print('Saved in {}'.format('kl_div_table.tex'))
+    gpq_int_var_demo()
