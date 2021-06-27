@@ -3,6 +3,7 @@ import numpy.linalg as la
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from tqdm import trange
 
 from matplotlib import cm
 from matplotlib.lines import Line2D
@@ -89,7 +90,7 @@ class GaussianProcessDerModel(GaussianProcessModel):
     _supported_kernels_ = ['rbf-d']
 
     def __init__(self, dim, kern_par, point_str, point_par=None, estimate_par=False, which_der=None):
-        super(GaussianProcessDerModel, self).__init__(dim, kern_par, 'rbf-d', point_str, point_par, estimate_par)
+        super(GaussianProcessDerModel, self).__init__(dim, kern_par, 'rbf', point_str, point_par, estimate_par)
         self.kernel = RBFGaussDer(dim, kern_par)
         # assume derivatives evaluated at all sigmas if unspecified
         self.which_der = which_der if which_der is not None else np.arange(self.num_pts)
@@ -609,7 +610,7 @@ def gpq_kl_demo():
     re_data_mean = np.zeros((3, len(test_functions), cov_samples))
     re_data_cov = np.zeros((3, len(test_functions), cov_samples))
     print('Calculating symmetrized KL-divergences using {:d} covariance samples...'.format(cov_samples))
-    for i in range(cov_samples):
+    for i in trange(cov_samples):
         # random PD matrix
         a = np.random.randn(d, d)
         cov = a.dot(a.T)
@@ -625,8 +626,8 @@ def gpq_kl_demo():
             # tested moment transforms
             transforms = (
                 SphericalRadialTransform(d),
-                GaussianProcessTransform(d, kern_par=hyp[f.__name__], point_str='sr'),
-                GaussianProcessDerTransform(d, kern_par=hyp[f.__name__], point_str='sr', which_der=dmask),
+                GaussianProcessTransform(d, 1, kern_par=hyp[f.__name__], point_str='sr'),
+                GaussianProcessDerTransform(d, 1, kern_par=hyp[f.__name__], point_str='sr', which_der=dmask),
             )
             for idt, t in enumerate(transforms):
                 # apply transform
