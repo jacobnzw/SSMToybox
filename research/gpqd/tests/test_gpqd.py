@@ -6,7 +6,7 @@ from numpy import newaxis as na
 
 from unittest import TestCase
 
-from research.gpqd.mlsp2016_demo import RBFGaussDer, GaussianProcessDerModel
+from research.gpqd.gpqd_base import GaussianProcessDerModel, RBFGaussDer
 from ssmtoybox.utils import maha
 from ssmtoybox.mtran import UnscentedTransform
 
