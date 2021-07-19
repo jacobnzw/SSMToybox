@@ -20,25 +20,6 @@ from ssmtoybox.utils import GaussRV
 from scipy.stats import norm
 from scipy.linalg import cho_factor, cho_solve
 
-# from research.gpqd.bayesquad import GPQuadDerRBF  # TODO: port the GPQ+D for any point-set from GPQuadDerRBF
-
-# Plan to port GPQuadDerRBF GP Quadrature moment transform with derivative observations
-# =====================================================================================
-# Create the following subclasses in this file, because trying to incorporate MTs with derivatives into the SSMToybox
-# would likely open a can of worms!!!
-#
-# Create BQTransformDer(BQTransform)
-#   - overwrite the _apply() mechanism: add evaluations of the function derivatives
-#   - the _mean, _covariance, _cross_covariance() mechanisms stay in place
-#   - the main issue is implementation of self.model.bq_weights()
-#
-# Create GaussianProcessDer(GaussianProcess)
-#   - overwrite/hijack the bq_weights() and extend with weights for derivatives
-#
-# Create RBFGaussDer(RBFGauss)
-#   - extend with the corresponding kernel expectations
-#   - expectations can be found in Aalto Notes or the bayesquad.py
-
 
 class GaussianProcessDerTransform(BQTransform):
 
@@ -516,16 +497,16 @@ def save_table(table, filename):
 def taylor_gpqd_demo(f):
     """Compares performance of GPQ+D-RBF transform w/ finite lengthscale and Linear transform."""
     d = 2  # dimension
-    ut_pts = UnscentedTransform.unit_sigma_points(d)
-    gh_pts = GaussHermiteTransform.unit_sigma_points(d, 5)
+
+    ker_par_gpqd_taylor = np.array([[1.0, 1.0]])  # alpha = 1.0, ell_1 = 1.0
+    ker_par_gpq = np.array([[1.0] + d*[1.0]])
     # function to test on
-    # f = toa  # sum_of_squares
+    f = toa  # sum_of_squares
     transforms = (
         LinearizationTransform(d),
-        TaylorGPQDTransform(d, alpha=1.0, el=1.0),
-        GaussianProcessTransform(d, unit_sp=ut_pts, hypers={'sig_var': 1.0, 'lengthscale': 1.0 * np.ones(d), 'noise_var': 1e-8}),
-        # GPQuadDerRBF(d, unit_sp=ut_pts, hypers={'sig_var': 1.0, 'lengthscale': 1.0 * np.ones(d), 'noise_var': 1e-8},
-        #              which_der=np.arange(ut_pts.shape[1])),
+        TaylorGPQDTransform(d, ker_par_gpqd_taylor),
+        GaussianProcessTransform(d, 1, point_str='ut', kern_par=ker_par_gpq),
+        GaussianProcessDerTransform(d, point_str='ut', kern_par=ker_par_gpq),
         UnscentedTransform(d, kappa=0.0),
         # MonteCarlo(d, n=int(1e4)),
     )
