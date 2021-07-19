@@ -140,6 +140,7 @@ class GaussianProcessDerModel(GaussianProcessModel):
 
 
 class RBFGaussDer(RBFGauss):
+    """RBF kernel "with derivatives". Kernel expectations are w.r.t. Gaussian density."""
 
     def __init__(self, dim, par, jitter=1e-8):
         super(RBFGaussDer, self).__init__(dim, par, jitter)
