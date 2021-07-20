@@ -52,7 +52,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
     # list of supported models for the integrand
     _supported_models_ = ['gp', 'gp-mo', 'tp', 'tp-mo', 'bs']
 
-    def __init__(self, dim_in, dim_out, kern_par, model, kern_str, point_str, point_par, estimate_par, **kwargs):
+    def __init__(self, dim_in, dim_out, model, kern_str, kern_par, point_str, point_par, estimate_par, **kwargs):
         self.model = BQTransform._get_model(dim_in, dim_out, model, kern_str, point_str, kern_par, point_par,
                                             estimate_par, **kwargs)
         self.I_out = np.eye(dim_out)
@@ -304,7 +304,7 @@ class GaussianProcessTransform(BQTransform):
         Sigma-point set parameters.
     """
     def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None, estimate_par=False):
-        super(GaussianProcessTransform, self).__init__(dim_in, dim_out, kern_par, 'gp', kern_str, point_str, point_par,
+        super(GaussianProcessTransform, self).__init__(dim_in, dim_out, 'gp', kern_str, kern_par, point_str, point_par,
                                                        estimate_par)
         # BQ transform weights for the mean, covariance and cross-covariance
         self.wm, self.Wc, self.Wcc = self.weights(kern_par)
@@ -332,7 +332,7 @@ class BayesSardTransform(BQTransform):
         Sigma-point set parameters.
     """
     def __init__(self, dim_in, dim_out, kern_par, multi_ind=2, point_str='ut', point_par=None, estimate_par=False):
-        super(BayesSardTransform, self).__init__(dim_in, dim_out, kern_par, 'bs', 'rbf', point_str, point_par,
+        super(BayesSardTransform, self).__init__(dim_in, dim_out, 'bs', 'rbf', kern_par, point_str, point_par,
                                                  estimate_par, multi_ind=multi_ind)
         # BQ transform weights for the mean, covariance and cross-covariance
         self.wm, self.Wc, self.Wcc = self.weights(kern_par, multi_ind)
@@ -386,7 +386,7 @@ class StudentTProcessTransform(BQTransform):
     """
     def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None, estimate_par=False,
                  nu=3.0):
-        super(StudentTProcessTransform, self).__init__(dim_in, dim_out, kern_par, 'tp', kern_str, point_str, point_par,
+        super(StudentTProcessTransform, self).__init__(dim_in, dim_out, 'tp', kern_str, kern_par, point_str, point_par,
                                                        estimate_par, nu=nu)
         # BQ transform weights for the mean, covariance and cross-covariance
         self.wm, self.Wc, self.Wcc = self.weights(kern_par)
@@ -449,7 +449,7 @@ class MultiOutputGaussianProcessTransform(BQTransform):
         when provided with the same parameters.
 
         """
-        super(MultiOutputGaussianProcessTransform, self).__init__(dim_in, dim_out, kern_par, 'gp-mo', kern_str,
+        super(MultiOutputGaussianProcessTransform, self).__init__(dim_in, dim_out, 'gp-mo', kern_str, kern_par,
                                                                   point_str, point_par, estimate_par)
 
         # output dimension (number of outputs)
@@ -528,7 +528,7 @@ class MultiOutputStudentTProcessTransform(BQTransform):
     def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None, estimate_par=False,
                  nu=3.0):
 
-        super(MultiOutputStudentTProcessTransform, self).__init__(dim_in, dim_out, kern_par, 'tp-mo', kern_str,
+        super(MultiOutputStudentTProcessTransform, self).__init__(dim_in, dim_out, 'tp-mo', kern_str, kern_par,
                                                                   point_str, point_par, estimate_par, nu=nu)
 
         # output dimension (number of outputs)
