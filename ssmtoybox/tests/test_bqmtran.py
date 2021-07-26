@@ -18,46 +18,46 @@ class GPQuadTest(TestCase):
         cls.models = []
         cls.models.append(UNGMTransition(GaussRV(1), GaussRV(1)))
         cls.models.append(Pendulum2DTransition(GaussRV(2), GaussRV(2)))
+        cls.rbf_kernel = {'name': 'rbf', 'params': np.array([[1.0, 1.0]])}
+        cls.ut_points = {'name': 'ut', 'params': {'kappa': 0.0, 'alpha': 1.0}}
 
     def test_weights_rbf(self):
         dim = 1
-        khyp = np.array([[1, 3]], dtype=np.float)
-        phyp = {'kappa': 0.0, 'alpha': 1.0}
-        tf = GaussianProcessTransform(dim, 1, khyp, point_par=phyp)
+        self.rbf_kernel['params'] = np.array([[1, ] + dim*[3, ]], dtype=np.float)
+        tf = GaussianProcessTransform(dim, 1, self.rbf_kernel, self.ut_points)
         wm, wc, wcc = tf.wm, tf.Wc, tf.Wcc
         print('wm = \n{}\nwc = \n{}\nwcc = \n{}'.format(wm, wc, wcc))
         self.assertTrue(np.allclose(wc, wc.T), "Covariance weight matrix not symmetric.")
         # print 'GP model variance: {}'.format(tf.model.exp_model_variance())
 
         dim = 2
-        khyp = np.array([[1, 3, 3]], dtype=np.float)
-        phyp = {'kappa': 0.0, 'alpha': 1.0}
-        tf = GaussianProcessTransform(dim, 1, khyp, point_par=phyp)
+        self.rbf_kernel['params'] = np.array([[1, ] + dim*[3, ]], dtype=np.float)
+        tf = GaussianProcessTransform(dim, 1, self.rbf_kernel, self.ut_points)
         wm, wc, wcc = tf.wm, tf.Wc, tf.Wcc
         print('wm = \n{}\nwc = \n{}\nwcc = \n{}'.format(wm, wc, wcc))
         self.assertTrue(np.allclose(wc, wc.T), "Covariance weight matrix not symmetric.")
 
     def test_rbf_scaling_invariance(self):
         dim = 5
-        ker_par = np.array([[1, 3, 3, 3, 3, 3]], dtype=np.float)
-        tf = GaussianProcessTransform(dim, 1, ker_par)
+        self.rbf_kernel['params'] = np.array([[1, ] + dim*[3, ]], dtype=np.float)
+        tf = GaussianProcessTransform(dim, 1, self.rbf_kernel, self.ut_points)
         w0 = tf.weights([1] + dim * [1000])
         w1 = tf.weights([358.0] + dim * [1000.0])
         self.assertTrue(np.alltrue([np.array_equal(a, b) for a, b in zip(w0, w1)]))
 
     def test_expected_model_variance(self):
         dim = 2
-        ker_par = np.array([[1, 3, 3]], dtype=np.float)
-        tf = GaussianProcessTransform(dim, 1, ker_par, point_str='sr')
-        emv0 = tf.model.exp_model_variance(ker_par)
-        emv1 = tf.model.exp_model_variance(ker_par)
+        self.rbf_kernel['params'] = np.array([[1, ] + dim*[3, ]], dtype=np.float)
+        tf = GaussianProcessTransform(dim, 1, self.rbf_kernel)
+        emv0 = tf.model.exp_model_variance(self.rbf_kernel['params'])
+        emv1 = tf.model.exp_model_variance(self.rbf_kernel['params'])
         # expected model variance must be positive even for numerically unpleasant settings
         self.assertTrue(np.alltrue(np.array([emv0, emv1]) >= 0))
 
     def test_integral_variance(self):
         dim = 2
-        ker_par = np.array([[1, 3, 3]], dtype=np.float)
-        tf = GaussianProcessTransform(dim, 1, ker_par, point_str='sr')
+        self.rbf_kernel['params'] = np.array([[1, ] + dim*[3, ]], dtype=np.float)
+        tf = GaussianProcessTransform(dim, 1, self.rbf_kernel, self.ut_points)
         ivar0 = tf.model.integral_variance([1, 600, 6])
         ivar1 = tf.model.integral_variance([1.1, 600, 6])
         # expected model variance must be positive even for numerically unpleasant settings
@@ -67,8 +67,8 @@ class GPQuadTest(TestCase):
         for mod in self.models:
             f = mod.dyn_eval
             dim = mod.dim_in
-            ker_par = np.hstack((np.ones((1, 1)), 3*np.ones((1, dim))))
-            tf = GaussianProcessTransform(dim, dim, ker_par)
+            self.rbf_kernel['params'] = np.array([[1, ] + dim*[3, ]], dtype=np.float)
+            tf = GaussianProcessTransform(dim, dim, self.rbf_kernel, self.ut_points)
             mean, cov = np.zeros(dim, ), np.eye(dim)
             tmean, tcov, tccov = tf.apply(f, mean, cov, np.atleast_1d(1.0))
             print("Transformed moments\nmean: {}\ncov: {}\nccov: {}".format(tmean, tcov, tccov))
@@ -94,8 +94,8 @@ class BSQTransformTest(TestCase):
         cov_in = np.diag([0.05 ** 2, (np.pi / 10) ** 2])
         alpha_ut = np.array([[0, 1, 0, 2, 0],
                              [0, 0, 1, 0, 2]])
-        par = np.array([[1.0, 1, 1]])
-        mt = BayesSardTransform(2, 2, par, multi_ind=alpha_ut, point_str='ut')
+        kernel = {'name': 'rbf', 'params': np.array([[1.0, 1, 1]])}
+        mt = BayesSardTransform(2, 2, kernel, point_spec={'name': 'ut', 'params': None}, multi_ind=alpha_ut)
         mean_out, cov_out, cc = mt.apply(polar2cartesian, mean_in, cov_in, np.atleast_1d(0))
         self.assertTrue(mt.I_out.shape == (2, 2))
         try:
@@ -112,22 +112,22 @@ class GPQMOTest(TestCase):
         cls.models = []
         cls.models.append(UNGMTransition(GaussRV(1), GaussRV(1)))
         cls.models.append(Pendulum2DTransition(GaussRV(2), GaussRV(2)))
+        cls.rbf_kernel = {'name': 'rbf', 'params': np.array([[1.0, 1.0]])}
+        cls.ut_points = {'name': 'ut', 'params': {'kappa': 0.0, 'alpha': 1.0}}
 
     def test_weights_rbf(self):
         dim_in, dim_out = 1, 1
-        khyp = np.array([[1, 3]])
-        phyp = {'kappa': 0.0, 'alpha': 1.0}
-        tf = MultiOutputGaussianProcessTransform(dim_in, dim_out, khyp, point_par=phyp)
+        self.rbf_kernel['params'] = np.array([[1, ] + dim_in*[3, ]], dtype=np.float)
+        tf = MultiOutputGaussianProcessTransform(dim_in, dim_out, self.rbf_kernel, self.ut_points)
         wm, wc, wcc = tf.wm, tf.Wc, tf.Wcc
         self.assertTrue(np.allclose(wc, wc.swapaxes(0, 1).swapaxes(2, 3)), "Covariance weight matrix not symmetric.")
 
         dim_in, dim_out = 4, 4
-        khyp = np.array([[1, 3, 3, 3, 3],
-                         [1, 1, 1, 1, 1],
-                         [1, 2, 2, 2, 2],
-                         [1, 3, 3, 3, 3]])
-        phyp = {'kappa': 0.0, 'alpha': 1.0}
-        tf = MultiOutputGaussianProcessTransform(dim_in, dim_out, khyp, point_par=phyp)
+        self.rbf_kernel['params'] = np.array([[1, 3, 3, 3, 3],
+                                              [1, 1, 1, 1, 1],
+                                              [1, 2, 2, 2, 2],
+                                              [1, 3, 3, 3, 3]])
+        tf = MultiOutputGaussianProcessTransform(dim_in, dim_out, self.rbf_kernel, self.ut_points)
         wm, wc, wcc = tf.wm, tf.Wc, tf.Wcc
         self.assertTrue(np.allclose(wc, wc.swapaxes(0, 1).swapaxes(2, 3)), "Covariance weight matrix not symmetric.")
 
@@ -135,8 +135,8 @@ class GPQMOTest(TestCase):
         dyn = Pendulum2DTransition(GaussRV(2), GaussRV(2))
         f = dyn.dyn_eval
         dim_in, dim_out = dyn.dim_in, dyn.dim_state
-        ker_par = np.hstack((np.ones((dim_out, 1)), 3*np.ones((dim_out, dim_in))))
-        tf = MultiOutputGaussianProcessTransform(dim_in, dim_out, ker_par)
+        self.rbf_kernel['params'] = np.hstack((np.ones((dim_out, 1)), 3*np.ones((dim_out, dim_in))))
+        tf = MultiOutputGaussianProcessTransform(dim_in, dim_out, self.rbf_kernel, self.ut_points)
         mean, cov = np.zeros(dim_in, ), np.eye(dim_in)
         tmean, tcov, tccov = tf.apply(f, mean, cov, np.atleast_1d(1.0))
         print("Transformed moments\nmean: {}\ncov: {}\nccov: {}".format(tmean, tcov, tccov))
@@ -164,12 +164,12 @@ class GPQMOTest(TestCase):
         mean_in, cov_in = m0, P0
 
         # single-output GPQ
-        ker_par_so = np.hstack((np.ones((1, 1)), 25 * np.ones((1, dim_in))))
-        tf_so = GaussianProcessTransform(dim_in, dim_out, ker_par_so)
+        self.rbf_kernel['params'] = np.hstack((np.ones((1, 1)), 25 * np.ones((1, dim_in))))
+        tf_so = GaussianProcessTransform(dim_in, dim_out, self.rbf_kernel, self.ut_points)
 
         # multi-output GPQ
-        ker_par_mo = np.hstack((np.ones((dim_out, 1)), 25 * np.ones((dim_out, dim_in))))
-        tf_mo = MultiOutputGaussianProcessTransform(dim_in, dim_out, ker_par_mo)
+        self.rbf_kernel['params'] = np.hstack((np.ones((dim_out, 1)), 25 * np.ones((dim_out, dim_in))))
+        tf_mo = MultiOutputGaussianProcessTransform(dim_in, dim_out, self.rbf_kernel, self.ut_points)
 
         # transformed moments
         # FIXME: transformed covariances different
@@ -195,7 +195,8 @@ class GPQMOTest(TestCase):
         dim_in, dim_out = dyn.dim_in, dyn.dim_state
 
         par0 = 1 + np.random.rand(dim_out, dim_in + 1)
-        tf = MultiOutputGaussianProcessTransform(dim_in, dim_out, par0)
+        self.rbf_kernel['params'] = par0
+        tf = MultiOutputGaussianProcessTransform(dim_in, dim_out, self.rbf_kernel, self.ut_points)
 
         # use sampled system state trajectory to create training data
         fy = np.zeros((dim_out, steps))
@@ -225,7 +226,8 @@ class GPQMOTest(TestCase):
 
         # par0 = np.hstack((np.ones((dim_out, 1)), 5*np.ones((dim_out, dim_in+1))))
         par0 = 10*np.ones((dim_out, dim_in+1))
-        tf = MultiOutputGaussianProcessTransform(dim_in, dim_out, par0)
+        self.rbf_kernel['params'] = par0
+        tf = MultiOutputGaussianProcessTransform(dim_in, dim_out, self.rbf_kernel, self.ut_points)
 
         # use sampled system state trajectory to create training data
         fy = np.zeros((dim_out, steps))

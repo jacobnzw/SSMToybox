@@ -52,9 +52,8 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
     # list of supported models for the integrand
     _supported_models_ = ['gp', 'gp-mo', 'tp', 'tp-mo', 'bs']
 
-    def __init__(self, dim_in, dim_out, model, kern_str, kern_par, point_str, point_par, estimate_par, **kwargs):
-        self.model = BQTransform._get_model(dim_in, dim_out, model, kern_str, point_str, kern_par, point_par,
-                                            estimate_par, **kwargs)
+    def __init__(self, dim_in, dim_out, model, kernel_spec, point_spec, estimate_par, **kwargs):
+        self.model = BQTransform._get_model(dim_in, dim_out, model, kernel_spec, point_spec, estimate_par, **kwargs)
         self.I_out = np.eye(dim_out)
 
     def apply(self, f, mean, cov, fcn_par, kern_par=None):
@@ -224,7 +223,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         # return np.einsum('en, dn, dj -> ej', fcn_evals, weights, chol_cov_in)
 
     @staticmethod
-    def _get_model(dim_in, dim_out, model, kern_str, point_str, kern_par, point_par, estimate_par, **kwargs):
+    def _get_model(dim_in, dim_out, model, kernel_spec, point_spec, estimate_par, **kwargs):
         """
         Initialize chosen model with supplied parameters.
 
@@ -239,17 +238,11 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
         model : str
             Model of the integrand. See `BQTransform._supported_models_`.
 
-        kern_str : str
+        kernel_spec : dict
             Kernel of the model. See `Model._supported_kernels_`.
 
-        point_str : str
+        point_spec : dict
             Point-set to use for the integration. See `Model._supported_points_`.
-
-        kern_par : ndarray
-            Kernel parameters.
-
-        point_par : dict
-            Parameters of the point-set scheme.
 
         kwargs : dict
             Additional kwargs passed to the model.
@@ -267,16 +260,15 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
         # initialize chosen model
         if model == 'gp':
-            return GaussianProcessModel(dim_in, kern_par, kern_str, point_str, point_par, estimate_par)
+            return GaussianProcessModel(dim_in, kernel_spec, point_spec, estimate_par)
         elif model == 'tp':
-            return StudentTProcessModel(dim_in, kern_par, kern_str, point_str, point_par, estimate_par)
+            return StudentTProcessModel(dim_in, kernel_spec, point_spec, estimate_par, **kwargs)
         elif model == 'bs':
-            return BayesSardModel(dim_in, kern_par, point_str=point_str, point_par=point_par,
-                                  estimate_par=estimate_par, **kwargs)
+            return BayesSardModel(dim_in, kernel_spec, point_spec, estimate_par=estimate_par, **kwargs)
         elif model == 'gp-mo':
-            return GaussianProcessMO(dim_in, dim_out, kern_par, kern_str, point_str, point_par)
+            return GaussianProcessMO(dim_in, dim_out, point_spec)
         elif model == 'tp-mo':
-            return StudentTProcessMO(dim_in, dim_out, kern_par, kern_str, point_str, point_par, **kwargs)
+            return StudentTProcessMO(dim_in, dim_out, point_spec, **kwargs)
 
     def __str__(self):
         return '{}\n{}'.format(self.__class__.__name__, self.model)
@@ -303,11 +295,17 @@ class GaussianProcessTransform(BQTransform):
     point_par : dict
         Sigma-point set parameters.
     """
-    def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None, estimate_par=False):
-        super(GaussianProcessTransform, self).__init__(dim_in, dim_out, 'gp', kern_str, kern_par, point_str, point_par,
-                                                       estimate_par)
+    def __init__(self, dim_in, dim_out, kernel_spec=None, point_spec=None, estimate_par=False):
+        # choose default kernel
+        if kernel_spec is None:
+            kernel_spec = {'name': 'rbf', 'params': np.ones((1, dim_in + 1))}
+        # choose default point-set
+        if point_spec is None:
+            point_spec = {'name': 'ut', 'params': None}
+
+        super(GaussianProcessTransform, self).__init__(dim_in, dim_out, 'gp', kernel_spec, point_spec, estimate_par)
         # BQ transform weights for the mean, covariance and cross-covariance
-        self.wm, self.Wc, self.Wcc = self.weights(kern_par)
+        self.wm, self.Wc, self.Wcc = self.weights(kernel_spec['params'])
 
 
 class BayesSardTransform(BQTransform):
@@ -319,23 +317,28 @@ class BayesSardTransform(BQTransform):
     dim_in : int
         Dimensionality of the input.
 
-    kern_par : ndarray
+    kernel_spec : dict
         Kernel parameters.
 
     multi_ind : int or ndarray, optional
         Multi-index.
 
-    point_str : str {'ut', 'sr', 'gh', 'fs'}, optional
+    point_spec : dict
         Sigma-point set for representing the input probability density.
 
-    point_par : dict, optional
-        Sigma-point set parameters.
     """
-    def __init__(self, dim_in, dim_out, kern_par, multi_ind=2, point_str='ut', point_par=None, estimate_par=False):
-        super(BayesSardTransform, self).__init__(dim_in, dim_out, 'bs', 'rbf', kern_par, point_str, point_par,
+    def __init__(self, dim_in, dim_out, kernel_spec=None, point_spec=None, multi_ind=2, estimate_par=False):
+        # choose default kernel
+        if kernel_spec is None:
+            kernel_spec = {'name': 'rbf', 'params': np.ones((1, dim_in + 1))}
+        # choose default point-set
+        if point_spec is None:
+            point_spec = {'name': 'ut', 'params': None}
+
+        super(BayesSardTransform, self).__init__(dim_in, dim_out, 'bs', kernel_spec, point_spec,
                                                  estimate_par, multi_ind=multi_ind)
         # BQ transform weights for the mean, covariance and cross-covariance
-        self.wm, self.Wc, self.Wcc = self.weights(kern_par, multi_ind)
+        self.wm, self.Wc, self.Wcc = self.weights(kernel_spec['params'], multi_ind)
 
     def weights(self, par, *args):
         """
@@ -369,27 +372,26 @@ class StudentTProcessTransform(BQTransform):
     dim_in : int
         Dimensionality of the input.
 
-    kern_par : ndarray
-        Kernel parameters.
-
-    kern_str : str {'rbf'}, optional
+    kernel_spec : dict, optional
         Kernel of the integrand model.
 
-    point_str : str {'ut', 'sr', 'gh', 'fs'}, optional
+    point_spec : dict, optional
         Sigma-point set for representing the input probability density.
-
-    point_par : None or dict, optional
-        Sigma-point set parameters.
 
     nu : float
         Degrees of freedom parameter of the t-process regression model.
     """
-    def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None, estimate_par=False,
-                 nu=3.0):
-        super(StudentTProcessTransform, self).__init__(dim_in, dim_out, 'tp', kern_str, kern_par, point_str, point_par,
-                                                       estimate_par, nu=nu)
+    def __init__(self, dim_in, dim_out, kernel_spec=None, point_spec=None, estimate_par=False, nu=3.0):
+        # choose default kernel
+        if kernel_spec is None:
+            kernel_spec = {'name': 'rbf', 'params': np.ones((1, dim_in + 1))}
+        # choose default point-set
+        if point_spec is None:
+            point_spec = {'name': 'ut', 'params': None}
+
+        super(StudentTProcessTransform, self).__init__(dim_in, dim_out, 'tp', kernel_spec, point_spec, estimate_par, nu=nu)
         # BQ transform weights for the mean, covariance and cross-covariance
-        self.wm, self.Wc, self.Wcc = self.weights(kern_par)
+        self.wm, self.Wc, self.Wcc = self.weights(kernel_spec['params'])
 
     def _covariance(self, weights, fcn_evals, mean_out):
         """
@@ -423,17 +425,15 @@ Moment transforms based on Bayesian quadrature with multi-output GP/TP integrand
 
 
 class MultiOutputGaussianProcessTransform(BQTransform):
-    def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None, estimate_par=False):
+    def __init__(self, dim_in, dim_out, kernel_spec=None, point_spec=None, estimate_par=False):
         """
 
         Parameters
         ----------
         dim_in
         dim_out
-        kern_par
-        kern_str
-        point_str
-        point_par
+        kernel_spec
+        point_spec
 
         Notes
         -----
@@ -449,8 +449,15 @@ class MultiOutputGaussianProcessTransform(BQTransform):
         when provided with the same parameters.
 
         """
-        super(MultiOutputGaussianProcessTransform, self).__init__(dim_in, dim_out, 'gp-mo', kern_str, kern_par,
-                                                                  point_str, point_par, estimate_par)
+        # choose default kernel
+        if kernel_spec is None:
+            kernel_spec = {'name': 'rbf', 'params': np.ones((dim_out, dim_in + 1))}
+        # choose default point-set
+        if point_spec is None:
+            point_spec = {'name': 'ut', 'params': None}
+
+        super(MultiOutputGaussianProcessTransform, self).__init__(dim_in, dim_out, 'gp-mo', kernel_spec, point_spec,
+                                                                  estimate_par)
 
         # output dimension (number of outputs)
         self.e = dim_out
@@ -525,11 +532,16 @@ class MultiOutputGaussianProcessTransform(BQTransform):
 
 class MultiOutputStudentTProcessTransform(BQTransform):
 
-    def __init__(self, dim_in, dim_out, kern_par, kern_str='rbf', point_str='ut', point_par=None, estimate_par=False,
-                 nu=3.0):
+    def __init__(self, dim_in, dim_out, kernel_spec=None, point_spec=None, estimate_par=False, nu=3.0):
+        # choose default kernel
+        if kernel_spec is None:
+            kernel_spec = {'name': 'rbf', 'params': np.ones((dim_out, dim_in + 1))}
+        # choose default point-set
+        if point_spec is None:
+            point_spec = {'name': 'ut', 'params': None}
 
-        super(MultiOutputStudentTProcessTransform, self).__init__(dim_in, dim_out, 'tp-mo', kern_str, kern_par,
-                                                                  point_str, point_par, estimate_par, nu=nu)
+        super(MultiOutputStudentTProcessTransform, self).__init__(dim_in, dim_out, 'tp-mo', kernel_spec, point_spec,
+                                                                  estimate_par, nu=nu)
 
         # output dimension (number of outputs)
         self.e = dim_out

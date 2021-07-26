@@ -446,8 +446,15 @@ class GaussianProcessKalman(GaussianInference):
     """
 
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None):
-        t_dyn = GaussianProcessTransform(dyn.dim_in, dyn.dim_state, kern_par_dyn, kernel, points, point_hyp)
-        t_obs = GaussianProcessTransform(obs.dim_in, obs.dim_out, kern_par_obs, kernel, points, point_hyp)
+        # specification of the moment transform for the transition model
+        kernel_dyn = {'name': kernel, 'params': kern_par_dyn}
+        points_dyn = {'name': points, 'params': point_hyp}
+        t_dyn = GaussianProcessTransform(dyn.dim_in, dyn.dim_state, kernel_dyn, points_dyn)
+        # specification of the moment transform for the measurement model
+        kernel_obs = {'name': kernel, 'params': kern_par_obs}
+        points_obs = {'name': points, 'params': point_hyp}
+        t_obs = GaussianProcessTransform(obs.dim_in, obs.dim_out, kernel_obs, points_obs)
+
         super(GaussianProcessKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
 
@@ -495,8 +502,15 @@ class BayesSardKalman(GaussianInference):
     """
 
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, mulind_dyn=2, mulind_obs=2, points='ut', point_hyp=None):
-        t_dyn = BayesSardTransform(dyn.dim_in, dyn.dim_state, kern_par_dyn, mulind_dyn, points, point_hyp)
-        t_obs = BayesSardTransform(obs.dim_in, obs.dim_out, kern_par_obs, mulind_obs, points, point_hyp)
+        # specification of the moment transform for the transition model
+        kernel_dyn = {'name': 'rbf', 'params': kern_par_dyn}
+        points_dyn = {'name': points, 'params': point_hyp}
+        t_dyn = BayesSardTransform(dyn.dim_in, dyn.dim_state, kernel_dyn, points_dyn, mulind_dyn)
+        # specification of the moment transform for the measurement model
+        kernel_obs = {'name': 'rbf', 'params': kern_par_obs}
+        points_obs = {'name': points, 'params': point_hyp}
+        t_obs = BayesSardTransform(obs.dim_in, obs.dim_out, kernel_obs, points_obs, mulind_obs)
+
         super(BayesSardKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
 
@@ -547,8 +561,15 @@ class StudentProcessKalman(GaussianInference):
     """
 
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None, nu=3.0):
-        t_dyn = StudentTProcessTransform(dyn.dim_in, 1, kern_par_dyn, kernel, points, point_hyp, nu=nu)
-        t_obs = StudentTProcessTransform(obs.dim_in, 1, kern_par_obs, kernel, points, point_hyp, nu=nu)
+        # specification of the moment transform for the transition model
+        kernel_dyn = {'name': kernel, 'params': kern_par_dyn}
+        points_dyn = {'name': points, 'params': point_hyp}
+        t_dyn = StudentTProcessTransform(dyn.dim_in, 1, kernel_dyn, points_dyn, nu=nu)
+        # specification of the moment transform for the measurement model
+        kernel_obs = {'name': kernel, 'params': kern_par_obs}
+        points_obs = {'name': points, 'params': point_hyp}
+        t_obs = StudentTProcessTransform(obs.dim_in, 1, kernel_obs, points_obs, nu=nu)
+
         super(StudentProcessKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
 
@@ -828,8 +849,15 @@ class StudentProcessStudent(StudentianInference):
         point_par_obs.update({'dof': r_dof})
         # TODO: why is q_dof parameter for unit-points of the dynamics?
 
-        t_dyn = StudentTProcessTransform(dyn.dim_in, 1, kern_par_dyn, 'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
-        t_obs = StudentTProcessTransform(obs.dim_in, 1, kern_par_obs, 'rbf-student', 'fs', point_par_obs, nu=dof_tp)
+        # specification of the moment transform for the transition model
+        kernel_dyn = {'name': 'rbf-student', 'params': kern_par_dyn}
+        points_dyn = {'name': 'fs', 'params': point_par_dyn}
+        t_dyn = StudentTProcessTransform(dyn.dim_in, 1, kernel_dyn, points_dyn, nu=dof_tp)
+        # specification of the moment transform for the measurement model
+        kernel_obs = {'name': 'rbf-student', 'params': kern_par_obs}
+        points_obs = {'name': 'fs', 'params': point_par_obs}
+        t_obs = StudentTProcessTransform(obs.dim_in, 1, kernel_obs, points_obs, nu=dof_tp)
+
         super(StudentProcessStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
 
 
@@ -956,8 +984,15 @@ class MultiOutputGaussianProcessKalman(GaussianInference):
     """
 
     def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, kernel='rbf', points='ut', point_hyp=None):
-        t_dyn = MultiOutputGaussianProcessTransform(dyn.dim_in, dyn.dim_state, kern_par_dyn, kernel, points, point_hyp)
-        t_obs = MultiOutputGaussianProcessTransform(obs.dim_in, obs.dim_out, kern_par_obs, kernel, points, point_hyp)
+        # specification of the moment transform for the transition model
+        kernel_dyn = {'name': kernel, 'params': kern_par_dyn}
+        points_dyn = {'name': points, 'params': point_hyp}
+        t_dyn = MultiOutputGaussianProcessTransform(dyn.dim_in, dyn.dim_state, kernel_dyn, points_dyn)
+        # specification of the moment transform for the measurement model
+        kernel_obs = {'name': kernel, 'params': kern_par_obs}
+        points_obs = {'name': points, 'params': point_hyp}
+        t_obs = MultiOutputGaussianProcessTransform(obs.dim_in, obs.dim_out, kernel_obs, points_obs)
+
         super(MultiOutputGaussianProcessKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
 
@@ -1017,10 +1052,15 @@ class MultiOutputStudentProcessStudent(StudentianInference):
         point_par_dyn.update({'dof': q_dof})
         point_par_obs.update({'dof': r_dof})
 
-        t_dyn = MultiOutputStudentTProcessTransform(dyn.dim_in, dyn.dim_state, kern_par_dyn,
-                                                    'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
-        t_obs = MultiOutputStudentTProcessTransform(obs.dim_in, obs.dim_out, kern_par_obs,
-                                                    'rbf-student', 'fs', point_par_obs, nu=dof_tp)
+        # specification of the moment transform for the transition model
+        kernel_dyn = {'name': 'rbf-student', 'params': kern_par_dyn}
+        points_dyn = {'name': 'fs', 'params': point_par_dyn}
+        t_dyn = MultiOutputStudentTProcessTransform(dyn.dim_in, dyn.dim_state, kernel_dyn, points_dyn, nu=dof_tp)
+        # specification of the moment transform for the measurement model
+        kernel_obs = {'name': 'rbf-student', 'params': kern_par_obs}
+        points_obs = {'name': 'fs', 'params': point_par_obs}
+        t_obs = MultiOutputStudentTProcessTransform(obs.dim_in, obs.dim_out, kernel_obs, points_obs, nu=dof_tp)
+
         super(MultiOutputStudentProcessStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
 
 
@@ -1287,8 +1327,15 @@ class MarginalizedGaussianProcessKalman(MarginalInference):
         kpar_dyn = np.ones((1, dyn.dim_in + 1))
         kpar_obs = np.ones((1, obs.dim_state + 1))
 
-        t_dyn = GaussianProcessTransform(dyn.dim_in, 1, kpar_dyn, kernel, points, point_hyp)
-        t_obs = GaussianProcessTransform(obs.dim_state, 1, kpar_obs, kernel, points, point_hyp)
+        # specification of the moment transform for the transition model
+        kernel_dyn = {'name': kernel, 'params': kpar_dyn}
+        points_dyn = {'name': points, 'params': point_hyp}
+        t_dyn = GaussianProcessTransform(dyn.dim_in, 1, kernel_dyn, points_dyn)
+        # specification of the moment transform for the measurement model
+        kernel_obs = {'name': kernel, 'params': kpar_obs}
+        points_obs = {'name': points, 'params': point_hyp}
+        t_obs = GaussianProcessTransform(obs.dim_state, 1, kernel_obs, points_obs)
+
         super(MarginalizedGaussianProcessKalman, self).__init__(dyn, obs, t_dyn, t_obs, par_mean, par_cov)
 
 

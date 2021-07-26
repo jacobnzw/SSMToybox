@@ -28,27 +28,27 @@ class GPModelTest(TestCase):
         cls.pt_par_ut = {'alpha': 1.0}
 
     def test_init(self):
-        GaussianProcessModel(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
-        GaussianProcessModel(5, self.ker_par_5d, 'rbf', 'ut', self.pt_par_ut)
+        GaussianProcessModel(1)
+        GaussianProcessModel(5)
 
     def test_plotting(self):
-        model = GaussianProcessModel(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
+        model = GaussianProcessModel(1)
         xtest = np.linspace(-5, 5, 50)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
         model.plot_model(xtest, y, fcn_true=f)
 
     def test_exp_model_variance(self):
-        model = GaussianProcessModel(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
+        model = GaussianProcessModel(1)
         model.bq_weights(self.ker_par_1d)
         self.assertTrue(model.exp_model_variance(self.ker_par_1d) >= 0)
 
     def test_integral_variance(self):
-        model = GaussianProcessModel(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
+        model = GaussianProcessModel(1)
         self.assertTrue(model.integral_variance(self.ker_par_1d) >= 0)
 
     def test_log_marginal_likelihood(self):
-        model = GaussianProcessModel(1, self.ker_par_1d, 'rbf', 'ut', self.pt_par_ut)
+        model = GaussianProcessModel(1)
         y = fcn(model.points)
         lhyp = np.log([1.0, 3.0])
         f, df = model.neg_log_marginal_likelihood(lhyp, y.T, model.points, 1e-8*np.eye(model.num_pts))
@@ -86,7 +86,7 @@ class GPModelTest(TestCase):
         return 0.5 * np.trace((iKdK - a_out_a.dot(dK_dTheta)))  # (num_par, )
 
     def test_nlml_gradient(self):
-        model = GaussianProcessModel(5, self.ker_par_5d, 'rbf', 'ut', self.pt_par_ut)
+        model = GaussianProcessModel(5)
         y = fcn(model.points)
         lhyp = np.log([1.0] + 5*[3.0])
 
@@ -158,7 +158,7 @@ class GPModelTest(TestCase):
         self.assertTrue(err <= 1e-5, 'Gradient error: {:.4f}'.format(err))
 
     def test_hypers_optim(self):
-        model = GaussianProcessModel(1, self.ker_par_1d, 'rbf', 'gh', point_par={'degree': 15})
+        model = GaussianProcessModel(1, point_spec={'name': 'gh', 'params': None})
         xtest = np.linspace(-7, 7, 100)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
@@ -208,7 +208,7 @@ class GPModelTest(TestCase):
         func = dyn.dyn_eval
         dim_in, dim_out = dyn.dim_in, dyn.dim_state
 
-        model = GaussianProcessModel(dim_in, self.ker_par_5d, 'rbf', 'sr')  # , point_hyp={'degree': 10})
+        model = GaussianProcessModel(dim_in, point_spec={'name': 'sr', 'params': None})  # , point_hyp={'degree': 10})
         x = m0[:, na] + model.points  # ssm.get_pars('x0_cov')[0].dot(model.points)
         y = np.apply_along_axis(func, 0, x, None)  # (d_out, n**2)
 
@@ -234,11 +234,17 @@ class BayesSardModelTest(TestCase):
         cls.data_2d = np.hstack((np.zeros((2, 1)), np.eye(2), -np.eye(2)))
         cls.pt_par_ut = {'alpha': 1.0}
 
+        cls.rbf_kernel_1d = {'name': 'rbf', 'params': cls.ker_par_1d}
+        cls.rbf_kernel_2d = {'name': 'rbf', 'params': cls.ker_par_2d}
+        cls.rbf_kernel_5d = {'name': 'rbf', 'params': cls.ker_par_5d}
+        cls.ut_points = {'name': 'ut', 'params': None}
+        cls.gh_points = {'name': 'gh', 'params': None}
+
     def test_init(self):
-        BayesSardModel(1, self.ker_par_1d, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
+        BayesSardModel(1, self.rbf_kernel_1d, self.ut_points, multi_ind=2)
 
     def test_prediction(self):
-        model = BayesSardModel(1, self.ker_par_1d, multi_ind=2, point_str='gh', point_par={'degree': 5})
+        model = BayesSardModel(1, self.rbf_kernel_1d, self.gh_points, multi_ind=2)
         xtest = np.linspace(-5, 5, 100)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
@@ -260,13 +266,13 @@ class BayesSardModelTest(TestCase):
         plt.show()
 
     def test_x_px(self):
-        model = BayesSardModel(1, self.ker_par_1d, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
+        model = BayesSardModel(1, self.rbf_kernel_1d, self.ut_points, multi_ind=2)
         mi_1d = np.array([[0, 1, 2]])
         ke = model._exp_x_px(mi_1d)
         self.assertTrue(ke.shape == (mi_1d.shape[1], ))
         self.assertTrue(np.array_equal(ke, np.array([1, 0, 1])))
 
-        model = BayesSardModel(2, self.ker_par_2d, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
+        model = BayesSardModel(2, self.rbf_kernel_2d, self.ut_points, multi_ind=2)
         mi_2d = np.array([[0, 1, 0, 1, 0, 2],
                           [0, 0, 1, 1, 2, 0]])
         ke = model._exp_x_px(mi_2d)
@@ -275,13 +281,13 @@ class BayesSardModelTest(TestCase):
         self.assertTrue(np.array_equal(ke, ke_true))
 
     def test_exp_x_xpx(self):
-        model = BayesSardModel(1, self.ker_par_1d, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
+        model = BayesSardModel(1, self.rbf_kernel_1d, self.ut_points, multi_ind=2)
         mi_1d = np.array([[0, 1, 2]])
         ke = model._exp_x_xpx(mi_1d)
         self.assertTrue(ke.shape == mi_1d.shape)
         self.assertTrue(np.array_equal(ke, np.array([[0, 1, 0]])))
 
-        model = BayesSardModel(2, self.ker_par_2d, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
+        model = BayesSardModel(2, self.rbf_kernel_2d, self.ut_points, multi_ind=2)
         mi_2d = np.array([[0, 1, 0, 1, 0, 2],
                           [0, 0, 1, 1, 2, 0]])
         ke_true = np.array([[0, 1, 0, 0, 0, 0],
@@ -291,7 +297,7 @@ class BayesSardModelTest(TestCase):
         self.assertTrue(np.array_equal(ke, ke_true))
 
     def test_exp_x_pxpx(self):
-        model = BayesSardModel(1, self.ker_par_1d, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
+        model = BayesSardModel(1, self.rbf_kernel_1d, self.ut_points, multi_ind=2)
         mi_1d = np.array([[0, 1, 2]])
         ke = model._exp_x_pxpx(mi_1d)
         ke_true = np.array([[1, 0, 1],
@@ -300,7 +306,7 @@ class BayesSardModelTest(TestCase):
         self.assertTrue(ke.shape == (mi_1d.shape[1], mi_1d.shape[1]))
         self.assertTrue(np.array_equal(ke, ke_true))
 
-        model = BayesSardModel(2, self.ker_par_2d, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
+        model = BayesSardModel(2, self.rbf_kernel_2d, self.ut_points, multi_ind=2)
         mi_2d = np.array([[0, 1, 0, 1, 0, 2],
                           [0, 0, 1, 1, 2, 0]])
         ke_true = np.array([[1, 0, 0, 0, 1, 1],
@@ -314,7 +320,7 @@ class BayesSardModelTest(TestCase):
         self.assertTrue(np.array_equal(ke, ke_true))
 
     def test_exp_x_kxpx(self):
-        model = BayesSardModel(1, self.ker_par_1d, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
+        model = BayesSardModel(1, self.rbf_kernel_1d, self.ut_points, multi_ind=2)
         mi_1d = np.array([[0, 1, 2]])
         par_1d = np.array([[1.0, 1.0]])
         data = np.array([[0, 1, -1]], dtype=np.float)
@@ -329,7 +335,8 @@ class BayesSardModelTest(TestCase):
         dim = 1
         alpha = np.array([[0, 1, 2]])
         par = np.array([[1.0, 1]])
-        model = BayesSardModel(1, par, multi_ind=2, point_str='ut', point_par=self.pt_par_ut)
+        rbf_kernel = {'name': 'rbf', 'params': par}
+        model = BayesSardModel(1, rbf_kernel, self.ut_points, multi_ind=2)
         px = model._exp_x_px(alpha)
         xpx = model._exp_x_xpx(alpha)
         pxpx = model._exp_x_pxpx(alpha)
@@ -367,7 +374,7 @@ class BayesSardModelTest(TestCase):
 
     def test_weights_ut_1d(self):
         # UT weights in 1D
-        model = BayesSardModel(1, self.ker_par_1d, point_str='ut', point_par=self.pt_par_ut)
+        model = BayesSardModel(1, self.rbf_kernel_1d, self.ut_points)
         alpha = np.array([[0, 1, 2]])
         w, wc, wcc, emv, ivar = model.bq_weights(self.ker_par_1d, alpha)
         # UT weights in 1D reproduced?
@@ -381,7 +388,7 @@ class BayesSardModelTest(TestCase):
             self.fail("Weights not positive definite. Min eigval: {}".format(la.eigvalsh(wc).min()))
 
         # UT weights in 1D, different kappa and alpha
-        model = BayesSardModel(1, self.ker_par_1d, point_str='ut', point_par={'kappa': 2, 'alpha': 1})
+        model = BayesSardModel(1, self.rbf_kernel_1d, self.ut_points)
         alpha = np.array([[0, 1, 2]])
         w, wc, wcc, emv, ivar = model.bq_weights(self.ker_par_1d, alpha)
         # UT weights in 1D reproduced?
@@ -396,7 +403,9 @@ class BayesSardModelTest(TestCase):
 
     def test_weights_sr_1d(self):
         # SR weights == UT weights for kappa=0 and alpha=1
-        model = BayesSardModel(1, self.ker_par_1d, point_str='ut', point_par={'kappa': 0, 'alpha': 1})
+        sr_points = self.ut_points.copy()
+        sr_points['params'] = {'kappa': 0.0, 'alpha': 1.0}
+        model = BayesSardModel(1, self.rbf_kernel_1d, sr_points)
         alpha = np.array([[0, 1, 2]])
         w, wc, wcc, emv, ivar = model.bq_weights(self.ker_par_1d, alpha)
         # UT weights in 1D reproduced?
@@ -411,7 +420,9 @@ class BayesSardModelTest(TestCase):
 
     def test_weights_gh5_1d(self):
         # GH-5 weights in 1D
-        model = BayesSardModel(1, self.ker_par_1d, point_str='gh', point_par={'degree': 5})
+        gh5_points = self.gh_points.copy()
+        gh5_points['params'] = {'degree': 5, }
+        model = BayesSardModel(1, self.rbf_kernel_1d, gh5_points)
         alpha = np.array([[0, 1, 2, 3, 4]])
         w, wc, wcc, emv, ivar = model.bq_weights(self.ker_par_1d, alpha)
         # GH-5 weights in 1D reproduced?
@@ -429,7 +440,8 @@ class BayesSardModelTest(TestCase):
         par = np.array([[1.0, 1.0, 1]])
         alpha = np.array([[0, 1, 0, 2, 0],
                           [0, 0, 1, 0, 2]])
-        model = BayesSardModel(2, par, point_str='ut', point_par=self.pt_par_ut)
+        rbf_kernel = {'name': 'rbf', 'params': par}
+        model = BayesSardModel(2, rbf_kernel, self.ut_points)
         w, wc, wcc, emv, ivar = model.bq_weights(par, alpha)
         # UT weights reproduced in 2D?
         self.assertTrue(np.allclose(w, UnscentedTransform.weights(2)[0]))
@@ -444,7 +456,7 @@ class BayesSardModelTest(TestCase):
     def test_weights_gh3_2d(self):
         # GH-3 weights in 2D
         # there are 6 multivariate polynomials in 2D, UT has only 5 points in 2D
-        model = BayesSardModel(2, self.ker_par_2d, point_str='gh', point_par={'degree': 3})
+        model = BayesSardModel(2, self.rbf_kernel_2d, self.gh_points)
         alpha = np.array([[0, 1, 0, 1, 2, 0, 1, 2, 2],
                           [0, 0, 1, 1, 0, 2, 2, 1, 2]])
         par = np.array([[1.0, 1, 1]])
@@ -460,9 +472,10 @@ class BayesSardModelTest(TestCase):
 
     @unittest.expectedFailure
     def test_weights_ut_5d(self):
-        model = BayesSardModel(5, np.array([[1.0, 25, 25, 25, 25, 25]]), point_str='ut')
-        alpha = np.hstack((np.zeros((5, 1)), np.eye(5), 2 * np.eye(5))).astype(np.int)
         par = np.array([[1.0, 25, 25, 25, 25, 25]])
+        rbf_kernel = {'name': 'rbf', 'params': par}
+        model = BayesSardModel(5, rbf_kernel, self.ut_points)
+        alpha = np.hstack((np.zeros((5, 1)), np.eye(5), 2 * np.eye(5))).astype(np.int)
         w, wc, wcc, emv, ivar = model.bq_weights(par, alpha)
         # self.assertTrue(np.allclose(w, UnscentedTransform.weights(5, beta=0)[0]))
         self.assertGreaterEqual(emv, 0)
@@ -483,11 +496,11 @@ class TPModelTest(TestCase):
         cls.pt_par_ut = {'alpha': 1.0}
 
     def test_init(self):
-        StudentTProcessModel(1, self.ker_par_1d, 'rbf', 'ut')
-        StudentTProcessModel(5, self.ker_par_5d, 'rbf', 'ut')
+        StudentTProcessModel(1)
+        StudentTProcessModel(5)
 
     def test_predict(self):
-        model = StudentTProcessModel(1, self.ker_par_1d, 'rbf', 'ut')
+        model = StudentTProcessModel(1)
 
         # training inputs == sigma-points
         xtest = np.linspace(-5, 5, 50)[na, :]
@@ -501,20 +514,20 @@ class TPModelTest(TestCase):
         mean, var = model.predict(xtest, y, xtrain)
 
     def test_plotting(self):
-        model = StudentTProcessModel(1, self.ker_par_1d, 'rbf', 'ut')
+        model = StudentTProcessModel(1)
         xtest = np.linspace(-5, 5, 50)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
         model.plot_model(xtest, y, fcn_true=f)
 
     def test_exp_model_variance(self):
-        model = StudentTProcessModel(1, self.ker_par_1d, 'rbf', 'ut')
+        model = StudentTProcessModel(1)
         model.bq_weights(self.ker_par_1d)
         y = fcn(model.points)
         self.assertTrue(model.exp_model_variance(self.ker_par_1d, y) >= 0)
 
     def test_integral_variance(self):
-        model = StudentTProcessModel(1, self.ker_par_1d, 'rbf', 'ut')
+        model = StudentTProcessModel(1)
         model.bq_weights(self.ker_par_1d)
         y = fcn(model.points)
         self.assertTrue(model.integral_variance(self.ker_par_1d, y) >= 0)
@@ -560,7 +573,7 @@ class TPModelTest(TestCase):
         return 0.5 * np.trace((num_out * iKdK - a_out_a.dot(dK_dTheta)))  # (num_par, )
 
     def test_nlml_gradient(self):
-        model = StudentTProcessModel(5, self.ker_par_5d, 'rbf', 'ut', self.pt_par_ut)
+        model = StudentTProcessModel(5)
         y = fcn(model.points)
         lhyp = np.log([1.0] + 5 * [3.0])
         jitter = 1e-8 * np.eye(model.num_pts)
@@ -572,7 +585,7 @@ class TPModelTest(TestCase):
         self.assertTrue(err <= 1e-5, 'Gradient error: {:.4f}'.format(err))
 
     def test_hypers_optim(self):
-        model = StudentTProcessModel(1, self.ker_par_1d, 'rbf', 'gh', point_par={'degree': 10})
+        model = StudentTProcessModel(1)
         xtest = np.linspace(-7, 7, 100)[na, :]
         y = fcn(model.points)
         f = fcn(xtest)
@@ -605,7 +618,7 @@ class TPModelTest(TestCase):
         func = dyn.dyn_eval
         dim_in, dim_out = dyn.dim_in, dyn.dim_state
 
-        model = StudentTProcessModel(dim_in, self.ker_par_5d, 'rbf', 'ut')  # , point_hyp={'degree': 10})
+        model = StudentTProcessModel(dim_in)  # , point_hyp={'degree': 10})
         x = m0[:, na] + model.points  # ssm.get_pars('x0_cov')[0].dot(model.points)
         y = np.apply_along_axis(func, 0, x, None)  # (d_out, n**2)
 

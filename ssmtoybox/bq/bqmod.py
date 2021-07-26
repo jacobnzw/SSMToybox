@@ -24,17 +24,11 @@ class Model(object, metaclass=ABCMeta):
     dim : int
         Dimension of the points (integration domain).
 
-    kern_par : ndarray
-        Kernel parameters in a vector.
-
-    kern_str : str
+    kernel_spec : dict
         String abbreviation for the kernel.
 
-    point_str : str
+    point_spec : dict
         String abbreviation for the point-set.
-
-    point_par : dict
-        Any parameters for constructing desired point-set.
 
     estimate_par : bool
         Set to `True` if you wanna re-compute kernel expectations based on changing parameters, like in
@@ -82,17 +76,17 @@ class Model(object, metaclass=ABCMeta):
     _supported_points_ = ['sr', 'ut', 'gh', 'fs']
     _supported_kernels_ = ['rbf', 'rq', 'rbf-student']
 
-    def __init__(self, dim, kern_par, kern_str, point_str, point_par, estimate_par):
+    def __init__(self, dim, kernel_spec, point_spec, estimate_par):
         # init kernel and sigma-points
-        self.kernel = Model.get_kernel(dim, kern_str, kern_par)
-        self.points = Model.get_points(dim, point_str, point_par)
+        self.kernel = Model.get_kernel(dim, kernel_spec)
+        self.points = Model.get_points(dim, point_spec)
 
         # turn on/off re-computation of kernel expectations
         self.estimate_par = estimate_par
 
         # save for printing
-        self.str_pts = point_str
-        self.str_pts_par = str(point_par)
+        self.str_pts = point_spec['name']
+        self.str_pts_par = str(point_spec['params'])
 
         # may no longer be necessary now that jitter is in kernel
         self.dim_in, self.num_pts = self.points.shape
@@ -338,7 +332,7 @@ class Model(object, metaclass=ABCMeta):
         plt.show()
 
     @staticmethod
-    def get_points(dim, points, point_par):
+    def get_points(dim, point_spec):
         """
         Construct desired point-set for integration. Calls methods of classical quadrature classes.
 
@@ -346,11 +340,8 @@ class Model(object, metaclass=ABCMeta):
         ----------
         dim : int
 
-        points : string
-            String abbreviation for the point-set.
-
-        point_par : dict
-            Parameters for constructing desired point-set.
+        point_spec : dict
+            Specification of the point-set.
 
         Returns
         -------
@@ -362,27 +353,27 @@ class Model(object, metaclass=ABCMeta):
         List of supported points is kept in ``_supported_points_`` class variable.
         """
 
-        points = points.lower()
+        point_spec['name'] = point_spec['name'].lower()
 
         # make sure points is supported
-        if points not in Model._supported_points_:
-            print('Points {} not supported. Supported points are {}.'.format(points, Model._supported_points_))
+        if point_spec['name'] not in Model._supported_points_:
+            print('Points {} not supported. Supported points are {}.'.format(point_spec, Model._supported_points_))
             return None
-        if point_par is None:
-            point_par = {}
+        if point_spec['params'] is None:
+            point_spec['params'] = {}
 
         # create chosen points
-        if points == 'sr':
+        if point_spec['name'] == 'sr':
             return SphericalRadialTransform.unit_sigma_points(dim)
-        elif points == 'ut':
-            return UnscentedTransform.unit_sigma_points(dim, **point_par)
-        elif points == 'gh':
-            return GaussHermiteTransform.unit_sigma_points(dim, **point_par)
-        elif points == 'fs':
-            return FullySymmetricStudentTransform.unit_sigma_points(dim, **point_par)
+        elif point_spec['name'] == 'ut':
+            return UnscentedTransform.unit_sigma_points(dim, **point_spec['params'])
+        elif point_spec['name'] == 'gh':
+            return GaussHermiteTransform.unit_sigma_points(dim, **point_spec['params'])
+        elif point_spec['name'] == 'fs':
+            return FullySymmetricStudentTransform.unit_sigma_points(dim, **point_spec['params'])
 
     @staticmethod
-    def get_kernel(dim, kernel, par):
+    def get_kernel(dim, kernel_spec):
         """
         Initializes desired kernel.
 
@@ -391,11 +382,8 @@ class Model(object, metaclass=ABCMeta):
         dim : int
             Dimension of input (integration domain).
 
-        kernel : str
+        kernel_spec : dict
             String abbreviation of the kernel.
-
-        par : ndarray
-            Parameters of the kernel.
 
         Returns
         -------
@@ -407,20 +395,20 @@ class Model(object, metaclass=ABCMeta):
         List of supported kernels is kept in ``_supported_kernels_`` class variable.
         """
 
-        kernel = kernel.lower()
+        kernel_spec['name'] = kernel_spec['name'].lower()
 
         # make sure kernel is supported
-        if kernel not in Model._supported_kernels_:
-            print('Kernel {} not supported. Supported kernels are {}.'.format(kernel, Model._supported_kernels_))
+        if kernel_spec['name'] not in Model._supported_kernels_:
+            print('Kernel {} not supported. Supported kernels are {}.'.format(kernel_spec, Model._supported_kernels_))
             return None
 
         # initialize the chosen kernel
-        if kernel == 'rbf':
-            return RBFGauss(dim, par)
-        elif kernel == 'rbf-student':
-            return RBFStudent(dim, par)
-        elif kernel == 'rq':
-            return RQ(dim, par)
+        if kernel_spec['name'] == 'rbf':
+            return RBFGauss(dim, kernel_spec['params'])
+        elif kernel_spec['name'] == 'rbf-student':
+            return RBFStudent(dim, kernel_spec['params'])
+        elif kernel_spec['name'] == 'rq':
+            return RQ(dim, kernel_spec['params'])
 
 
 class GaussianProcessModel(Model):
@@ -432,24 +420,25 @@ class GaussianProcessModel(Model):
     dim : int
         Number of input dimensions.
 
-    kern_par : ndarray
-        Kernel parameters in matrix.
-
-    kern_str : str
+    kernel_spec : dict
         Acronym of the covariance function of the Gaussian process model.
 
-    point_str : str
+    point_spec : dict
         Acronym for the sigma-point set to use in BQ.
-
-    point_par : dict
-        Parameters of the sigma-point set.
 
     estimate_par : bool, optional
         If `True`, kernel parameters will be estimated. Applies only under `MarginalInference`.
     """
 
-    def __init__(self, dim, kern_par, kern_str, point_str, point_par=None, estimate_par=False):
-        super(GaussianProcessModel, self).__init__(dim, kern_par, kern_str, point_str, point_par, estimate_par)
+    def __init__(self, dim, kernel_spec=None, point_spec=None, estimate_par=False):
+        # default to RBF kernel with unit lengthscales and scaling
+        if kernel_spec is None:
+            kernel_spec = {'name': 'rbf', 'params': np.ones((1, dim + 1))}
+        # default point-set
+        if point_spec is None:
+            point_spec = {'name': 'ut', 'params': None}
+
+        super(GaussianProcessModel, self).__init__(dim, kernel_spec, point_spec, estimate_par)
 
     def predict(self, test_data, fcn_obs, x_obs=None, par=None):
         """
@@ -605,21 +594,28 @@ class BayesSardModel(Model):
     dim : int
         Dimension of the points (integration domain).
 
-    kern_par : ndarray
+    kernel_spec : dict, optional
         Kernel parameters in a vector.
 
-    tdeg : int, optional
-        Total degree of the multivariate polynomial GP prior mean.
-
-    points : str, optional
+    point_spec: dict, optional
         String abbreviation for the point-set.
 
-    point_par : dict, optional
-        Any parameters for constructing desired point-set.
+    multi_ind : int, optional
+        Total degree of the multivariate polynomial GP prior mean.
     """
 
-    def __init__(self, dim, kern_par, multi_ind=2, point_str='ut', point_par=None, estimate_par=False):
-        super(BayesSardModel, self).__init__(dim, kern_par, 'rbf', point_str, point_par, estimate_par)
+    def __init__(self, dim, kernel_spec=None, point_spec=None, multi_ind=2, estimate_par=False):
+        # default to RBF kernel with unit lengthscales and scaling
+        if kernel_spec is None:
+            kernel_spec = {'name': 'rbf', 'params': np.ones((1, dim+1))}
+        # only RBF kernel is coded for the BS model
+        if kernel_spec['name'] != 'rbf':
+            kernel_spec['name'] = 'rbf'
+        # default point-set
+        if point_spec is None:
+            point_spec = {'name': 'ut', 'params': None}
+
+        super(BayesSardModel, self).__init__(dim, kernel_spec, point_spec, estimate_par)
 
         if type(multi_ind) is int:
             # multi-index: monomials of total degree <= multi_ind
@@ -1066,24 +1062,25 @@ class StudentTProcessModel(GaussianProcessModel):
     dim : int
         Number of input dimensions.
 
-    kern_par : ndarray
-        Kernel parameters in matrix.
-
-    kern_str : str
+    kernel_spec : dict
         Acronym of the covariance function of the Gaussian process model.
 
-    point_str : str
+    point_spec : dict
         Acronym for the sigma-point set to use in BQ.
-
-    point_par : dict
-        Parameters of the sigma-point set.
 
     estimate_par : bool, optional
         If `True`, kernel parameters will be estimated. Applies only under `MarginalInference`.
     """
 
-    def __init__(self, dim, kern_par, kern_str, point_str, point_par=None, estimate_par=False, nu=4.0):
-        super(StudentTProcessModel, self).__init__(dim, kern_par, kern_str, point_str, point_par, estimate_par)
+    def __init__(self, dim, kernel_spec=None, point_spec=None, estimate_par=False, nu=4.0):
+        # default to RBF kernel with unit lengthscales and scaling
+        if kernel_spec is None:
+            kernel_spec = {'name': 'rbf', 'params': np.ones((1, dim + 1))}
+        # default point-set
+        if point_spec is None:
+            point_spec = {'name': 'ut', 'params': None}
+
+        super(StudentTProcessModel, self).__init__(dim, kernel_spec, point_spec, estimate_par)
         nu = 3.0 if nu < 2 else nu  # nu > 2
         self.nu = nu
 
@@ -1247,8 +1244,8 @@ class StudentTProcessModel(GaussianProcessModel):
 
 class MultiOutputModel(Model):
 
-    def __init__(self, dim_in, dim_out, kern_par, kern_str, point_str, point_par=None, estimate_par=False):
-        super(MultiOutputModel, self).__init__(dim_in, kern_par, kern_str, point_str, point_par, estimate_par)
+    def __init__(self, dim_in, dim_out, kernel_spec, point_spec, estimate_par=False):
+        super(MultiOutputModel, self).__init__(dim_in, kernel_spec, point_spec, estimate_par)
         self.dim_out = dim_out
 
     def bq_weights(self, par):
@@ -1493,18 +1490,25 @@ class GaussianProcessMO(MultiOutputModel):  # TODO: Multiple inheritance could b
     kern_par : numpy.ndarray
         Kernel parameters in matrix.
 
-    kern_str : string
+    kernel_spec : string
         Acronym of the covariance function of the Gaussian process model.
 
-    point_str : string
+    point_spec : string
         Acronym for the sigma-point set to use in BQ.
 
     point_par : dict
         Parameters of the sigma-point set.
     """
 
-    def __init__(self, dim_in, dim_out, kern_par, kern_str, point_str, point_par=None):
-        super(GaussianProcessMO, self).__init__(dim_in, dim_out, kern_par, kern_str, point_str, point_par)
+    def __init__(self, dim_in, dim_out, kernel_spec=None, point_spec=None):
+        # default to RBF kernel with unit lengthscales and scaling
+        if kernel_spec is None:
+            kernel_spec = {'name': 'rbf', 'params': np.ones((dim_out, dim_in + 1))}
+        # default point-set
+        if point_spec is None:
+            point_spec = {'name': 'ut', 'params': None}
+
+        super(GaussianProcessMO, self).__init__(dim_in, dim_out, kernel_spec, point_spec)
 
     def predict(self, test_data, fcn_obs, par=None):
         """
@@ -1623,18 +1627,25 @@ class StudentTProcessMO(MultiOutputModel):
     kern_par : ndarray
         Kernel parameters in matrix.
 
-    kern_str : str
+    kernel_spec : str
         Acronym of the covariance function of the Gaussian process model.
 
-    point_str : str
+    point_spec : str
         Acronym for the sigma-point set to use in BQ.
 
     point_par : dict
         Parameters of the sigma-point set.
     """
 
-    def __init__(self, dim_in, dim_out, kern_par, kern_str, point_str, point_par=None, nu=3.0):
-        super(StudentTProcessMO, self).__init__(dim_in, dim_out, kern_par, kern_str, point_str, point_par)
+    def __init__(self, dim_in, dim_out, kernel_spec=None, point_spec=None, nu=3.0):
+        # default to RBF kernel with unit lengthscales and scaling
+        if kernel_spec is None:
+            kernel_spec = {'name': 'rbf', 'params': np.ones((dim_out, dim_in + 1))}
+        # default point-set
+        if point_spec is None:
+            point_spec = {'name': 'ut', 'params': None}
+
+        super(StudentTProcessMO, self).__init__(dim_in, dim_out, kernel_spec, point_spec)
         self.nu = nu
 
     def predict(self, test_data, fcn_obs, par=None):

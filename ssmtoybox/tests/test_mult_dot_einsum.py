@@ -44,8 +44,8 @@ class MultTest(TestCase):
         # einsum and dot give different results?
 
         dim_in, dim_out = 2, 1
-        ker_par_mo = np.hstack((np.ones((dim_out, 1)), 1 * np.ones((dim_out, dim_in))))
-        tf_mo = GaussianProcessTransform(dim_in, dim_out, ker_par_mo, point_str='sr')
+        rbf_kernel = {'name': 'rbf', 'params': np.hstack((np.ones((dim_out, 1)), 1 * np.ones((dim_out, dim_in))))}
+        tf_mo = GaussianProcessTransform(dim_in, dim_out, rbf_kernel)
         iK, Q = tf_mo.model.iK, tf_mo.model.Q
 
         C1 = iK.dot(Q).dot(iK)
@@ -66,7 +66,8 @@ class MultTest(TestCase):
 
         # transform
         ker_par_mo = np.hstack((np.ones((dim_out, 1)), 25 * np.ones((dim_out, dim_in))))
-        tf_so = GaussianProcessTransform(dim_in, dim_out, ker_par_mo, point_str='sr')
+        rbf_kernel = {'name': 'rbf', 'params': ker_par_mo}
+        tf_so = GaussianProcessTransform(dim_in, dim_out, rbf_kernel)
 
         # Monte-Carlo for ground truth
         # tf_ut = UnscentedTransform(dim_in)
