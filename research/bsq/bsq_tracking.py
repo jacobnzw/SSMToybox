@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
 from collections import OrderedDict
-from sklearn.externals import joblib
+import joblib
 import time
 import os
 
@@ -220,13 +220,13 @@ np.set_printoptions(precision=4)
 #     print('Average RMSE: {}'.format(np.sqrt(error2.sum(axis=0)).mean(axis=(0, 1))))
 
 
-def reentry_demo(dur=200, mc_sims=100, outfile=None):
+def reentry_demo(dur=200, mc_sims=100, outfile=None, regenerate=False):
     # use default filename if unspecified
     if outfile is None:
         outfile = 'reentry_demo_results.dat'
-    outfile = os.path.join('..', outfile)
+    outfile = os.path.join(outfile)
 
-    if not os.path.exists(outfile) or True:
+    if not os.path.exists(outfile) or regenerate:
         tau = 0.05
         disc_tau = 0.1
 
@@ -376,20 +376,21 @@ def reentry_demo_results(data_dict):
             ax[0].plot(time_sec, data_dict[state_label.lower()]['rmse'][:, i], label=f_str.upper(), lw=2)
 
         # decide which units based on state components
+        # TODO: Can be avoided by using OrderedDict for state_labels
         if state_label == 'Position':
-            units = ' [$\si{km}$]'
+            units = r' [$\si{km}$]'
         elif state_label == 'Velocity':
-            units = ' [$\si{km.s^{-1}}$]'
+            units = r' [$\si{km.s^{-1}}$]'
         else:
-            units = ' [-]'
+            units = r' [-]'
 
         ax[0].set_ylabel('RMSE' + units)
         ax[0].legend()
         for i, f_str in enumerate(alg_str):
             ax[1].plot(time_sec, data_dict[state_label.lower()]['inc'][:, i], label=f_str.upper(), lw=2)
-        ax[1].add_line(Line2D([0, steps], [0, 0], linewidth=2, color='k', ls='--'))
+        ax[1].add_line(Line2D([0, time_sec[-1]], [0, 0], linewidth=2, color='k', ls='--'))
         ax[1].set_ylabel('INC [-]')
-        ax[1].set_xlabel('time [\si{s}]')
+        ax[1].set_xlabel(r'time [$\si{s}$]')
         plt.tight_layout(pad=0)
     plt.show()
 
@@ -627,7 +628,11 @@ class LinearBayesSardKalman(GaussianInference):
     """
     def __init__(self, dyn, obs, kern_par_obs, mulind_obs=2, points='ut', point_hyp=None):
         t_dyn = LinearizationTransform(dyn.dim_in)
-        t_obs = BayesSardTransform(obs.dim_in, obs.dim_out, kern_par_obs, mulind_obs, points, point_hyp)
+
+        rbf_kernel = {'name': 'rbf', 'params': kern_par_obs}
+        point_spec = {'name': points, 'params': point_hyp}
+        t_obs = BayesSardTransform(obs.dim_in, obs.dim_out, rbf_kernel, point_spec, mulind_obs)
+
         super(LinearBayesSardKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
 

@@ -33,11 +33,9 @@ class FigurePrint:
             #                     '#F17CB0', '#B2912F', '#B276B2',
             #                     '#DECF3F', '#F15854', '#4D4D4D'],
             "figure.figsize": self.figsize(),  # default fig size
-            "pgf.preamble": [  # plots will be generated using this preamble
-                r"\usepackage[utf8]{inputenc}",  # use utf8 fonts
-                r"\usepackage[T1]{fontenc}",
-                r"\usepackage{siunitx}",
-            ]
+            "pgf.preamble": r"\usepackage[utf8]{inputenc}\DeclareUnicodeCharacter{2212}{-}"
+                            r"\usepackage[T1]{fontenc}"
+                            r"\usepackage{siunitx}",
         }
         mpl.rcParams.update(pgf_with_latex)
 

@@ -79,11 +79,13 @@ def sum_of_squares_demo(plot_fit=False):
 
     sos_mean_data = np.zeros((2, len(dims)))
     sos_var_data = sos_mean_data.copy()
+    ut_points = {'name': 'ut', 'params': None}
     for d, dim_in in enumerate(dims):
         alpha_ut = np.hstack((np.zeros((dim_in, 1)), np.eye(dim_in), 2*np.eye(dim_in))).astype(np.int)
         kpar = np.array([[1.0] + dim_in*[2.0]])
+        rbf_kernel = {'name': 'rbf', 'params': kpar}
         tforms = OrderedDict({
-            'bsq': BayesSardTransform(dim_in, 1, kpar, alpha_ut, point_str='ut', point_par={'kappa': 0.0}),
+            'bsq': BayesSardTransform(dim_in, 1, rbf_kernel, ut_points, multi_ind=alpha_ut),
             'ut': UnscentedTransform(dim_in, kappa=0.0, beta=0.0)
         })
 
@@ -109,7 +111,8 @@ def sum_of_squares_demo(plot_fit=False):
     print(table_var)
 
     if plot_fit:
-        bsqmt = BayesSardTransform(1, 1, np.array([[1.0, 3.0]]), np.array([[0, 1, 2]], dtype=np.int), point_str='ut')
+        rbf_kernel = {'name': 'rbf', 'params': np.array([[1.0, 3.0]])}
+        bsqmt = BayesSardTransform(1, 1, rbf_kernel, ut_points, multi_ind=np.array([[0, 1, 2]], dtype=np.int))
         xtest = np.linspace(-5, 5, 50)
         ytrue = np.zeros((len(xtest)))
         for i in range(len(xtest)):
@@ -148,9 +151,11 @@ def polar2cartesian_skl_demo():
     # COMPARE moment transforms
     ker_par = np.array([[1.0, 60, 6]])
     mul_ind = np.hstack((np.zeros((dim, 1)), np.eye(dim), 2*np.eye(dim))).astype(np.int)
+    rbf_kernel = {'name': 'rbf', 'params': ker_par}
+    ut_points = {'name': 'ut', 'params': None}
     tforms = OrderedDict([
-        ('bsq-ut', BayesSardTransform(dim, dim, ker_par, mul_ind, point_str='ut', point_par={'kappa': 2, 'alpha': 1})),
-        ('gpq-ut', GaussianProcessTransform(dim, dim, ker_par, point_str='ut', point_par={'kappa': 2, 'alpha': 1})),
+        ('bsq-ut', BayesSardTransform(dim, dim, rbf_kernel, ut_points, multi_ind=mul_ind)),
+        ('gpq-ut', GaussianProcessTransform(dim, dim, rbf_kernel, ut_points)),
         ('ut', UnscentedTransform(dim, kappa=2, alpha=1, beta=0)),
     ])
     baseline_mtf = MonteCarloTransform(dim, n=10000)
