@@ -35,7 +35,7 @@ def gpq_polar2cartesian_demo():
     # Initialize transforms
     # high el[0], because the function is linear given x[1]
     kpar = np.array([[1.0, 600, 6]])
-    tf_gpq = GaussianProcessTransform(dim, 1, kpar, kern_str='rbf', point_str='sr')
+    tf_gpq = GaussianProcessTransform(dim, 1, kpar)
     tf_sr = SphericalRadialTransform(dim)
     tf_mc = MonteCarloTransform(dim, n=1e4)  # 10k samples
 
@@ -118,8 +118,10 @@ def polar2cartesian_skl_demo():
 
     # COMPARE moment transforms
     ker_par = np.array([[1.0, 60, 6]])
+    rbf_kernel = {'name': 'rbf', 'params': ker_par}
+    sr_points = {'name': 'sr', 'params': None}
     moment_tforms = OrderedDict([
-        ('gpq-sr', GaussianProcessTransform(num_dim, 1, ker_par, kern_str='rbf', point_str='sr')),
+        ('gpq-sr', GaussianProcessTransform(num_dim, 1, rbf_kernel, sr_points)),
         ('sr', SphericalRadialTransform(num_dim)),
     ])
     baseline_mtf = MonteCarloTransform(num_dim, n=10000)

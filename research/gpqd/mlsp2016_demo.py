@@ -151,13 +151,15 @@ def taylor_gpqd_demo(f):
 
     ker_par_gpqd_taylor = np.array([[1.0, 1.0]])  # alpha = 1.0, ell_1 = 1.0
     ker_par_gpq = np.array([[1.0] + d*[1.0]])
+    rbf_kernel = {'name': 'rbf', 'params': ker_par_gpq}
+    ut_points = {'name': 'ut', 'params': None}
     # function to test on
     f = toa  # sum_of_squares
     transforms = (
         LinearizationTransform(d),
         TaylorGPQDTransform(d, ker_par_gpqd_taylor),
-        GaussianProcessTransform(d, 1, point_str='ut', kern_par=ker_par_gpq),
-        GaussianProcessDerTransform(d, point_str='ut', kern_par=ker_par_gpq),
+        GaussianProcessTransform(d, 1, rbf_kernel, ut_points),
+        GaussianProcessDerTransform(d, 1, rbf_kernel, ut_points),
         UnscentedTransform(d, kappa=0.0),
         # MonteCarlo(d, n=int(1e4)),
     )
@@ -175,10 +177,14 @@ def gpq_int_var_demo():
     f = UNGMTransition(GaussRV(d), GaussRV(d)).dyn_eval
     mean = np.zeros(d)
     cov = np.eye(d)
+
     kpar = np.array([[10.0] + d * [0.7]])
-    gpq = GaussianProcessTransform(d, 1, kern_par=kpar, kern_str='rbf', point_str='ut', point_par={'kappa': 0.0})
-    gpqd = GaussianProcessDerTransform(d, 1, kern_par=kpar, point_str='ut', point_par={'kappa': 0.0})
+    rbf_kernel = {'name': 'rbf', 'params': kpar}
+    ut_points = {'name': 'ut', 'params': {'kappa': 0.0}}
+    gpq = GaussianProcessTransform(d, 1, rbf_kernel, ut_points)
+    gpqd = GaussianProcessDerTransform(d, 1, rbf_kernel, ut_points)
     mct = MonteCarloTransform(d, n=1e4)
+
     mean_gpq, cov_gpq, cc_gpq = gpq.apply(f, mean, cov, np.atleast_1d(1.0))
     mean_gpqd, cov_gpqd, cc_gpqd = gpqd.apply(f, mean, cov, np.atleast_1d(1.0))
     mean_mc, cov_mc, cc_mc = mct.apply(f, mean, cov, np.atleast_1d(1.0))
@@ -241,7 +247,11 @@ def gpq_kl_demo():
     kl_data = np.zeros((3, len(test_functions), cov_samples))
     re_data_mean = np.zeros((3, len(test_functions), cov_samples))
     re_data_cov = np.zeros((3, len(test_functions), cov_samples))
+
     print('Calculating symmetrized KL-divergences using {:d} covariance samples...'.format(cov_samples))
+
+    rbf_kernel = {'name': 'rbf', 'params': None}
+    sr_points = {'name': 'sr', 'params': None}
     for i in trange(cov_samples):
         # random PD matrix
         a = np.random.randn(d, d)
@@ -256,10 +266,11 @@ def gpq_kl_demo():
             # baseline moments using Monte Carlo
             mean_mc, cov_mc, cc = mc_baseline.apply(f, mean, cov, None)
             # tested moment transforms
+            rbf_kernel['params'] = hyp[f.__name__]  # use kernel parameters for the current non-linearity
             transforms = (
                 SphericalRadialTransform(d),
-                GaussianProcessTransform(d, 1, kern_par=hyp[f.__name__], point_str='sr'),
-                GaussianProcessDerTransform(d, 1, kern_par=hyp[f.__name__], point_str='sr', which_der=dmask),
+                GaussianProcessTransform(d, 1, rbf_kernel, sr_points),
+                GaussianProcessDerTransform(d, 1, rbf_kernel, sr_points, which_der=dmask),
             )
             for idt, t in enumerate(transforms):
                 # apply transform
@@ -336,10 +347,12 @@ def gpq_sos_demo():
             'gpq': np.array([[1.0] + d*[10.0]]),
             'gpqd': np.array([[1.0] + d*[10.0]]),
         }
+        sr_points = {'name': 'sr', 'params': None}
         transforms = (
             SphericalRadialTransform(d),
-            GaussianProcessTransform(d, 1, kern_par=hyp['gpq'], point_str='sr'),
-            GaussianProcessDerTransform(d, 1, kern_par=hyp['gpqd'], point_str='sr', which_der=dmask),
+            GaussianProcessTransform(d, 1, kernel_spec={'name': 'rbf', 'params': hyp['gpq']}, point_spec=sr_points),
+            GaussianProcessDerTransform(d, 1, kernel_spec={'name': 'rbf', 'params': hyp['gpqd']}, point_spec=sr_points,
+                                        which_der=dmask),
         )
         ivar_data[1, di] = transforms[1].model.integral_var
         ivar_data[2, di] = transforms[2].model.integral_var
@@ -426,7 +439,7 @@ def gp_fit_demo(f, pars, xrng=(-1, 1, 50), save_figs=False, alpha=1.0, el=1.0):
     # use tex to render text in the figure
     mpl.rc('text', usetex=True)
     # use lmodern font package which is also used in the paper
-    mpl.rc('text.latex', preamble=[r'\usepackage{lmodern}'])
+    mpl.rc('text.latex', preamble=r'\usepackage{lmodern}')
     # sans serif font for figure, size 10pt
     mpl.rc('font', family='sans-serif', size=10)
     plt.style.use('seaborn-paper')

@@ -10,12 +10,18 @@ from ssmtoybox.utils import maha
 
 class GaussianProcessDerTransform(BQTransform):
 
-    def __init__(self, dim_in, dim_out, kern_par,
-                       point_str='ut', point_par=None, estimate_par=False, which_der=None):
-        self.model = GaussianProcessDerModel(dim_in, kern_par, point_str, point_par, estimate_par, which_der)
-        self.I_out = np.eye(dim_out)  # pre-allocation for later computations
+    def __init__(self, dim_in, dim_out, kernel_spec=None, point_spec=None, estimate_par=False, which_der=None):
+        if kernel_spec is None:
+            kernel_spec = {'name': 'rbf', 'params': np.ones((1, dim_in + 1))}
+        if point_spec is None:
+            point_spec = {'name': 'ut', 'params': None}
+        # tell parent to create some dummy gp model, with dummy kernel and dummy points
+        super(GaussianProcessDerTransform, self).__init__(dim_in, dim_out, 'gp', kernel_spec, point_spec, estimate_par)
+        # NOTE: better solution would be to pass the Model instance directly into the BQTransform
+        # overwrite model created in the BQTransform.__init__()
+        self.model = GaussianProcessDerModel(dim_in, kernel_spec, point_spec, estimate_par, which_der)
         # BQ transform weights for the mean, covariance and cross-covariance
-        self.wm, self.Wc, self.Wcc = self.weights(kern_par)
+        self.wm, self.Wc, self.Wcc = self.weights(kernel_spec['params'])
 
     def _fcn_eval(self, fcn, x, fcn_par):
         """
@@ -57,9 +63,10 @@ class GaussianProcessDerModel(GaussianProcessModel):
 
     _supported_kernels_ = ['rbf-d']
 
-    def __init__(self, dim, kern_par, point_str, point_par=None, estimate_par=False, which_der=None):
-        super(GaussianProcessDerModel, self).__init__(dim, kern_par, 'rbf', point_str, point_par, estimate_par)
-        self.kernel = RBFGaussDer(dim, kern_par)
+    def __init__(self, dim, kernel_spec=None, point_spec=None, estimate_par=False, which_der=None):
+        super(GaussianProcessDerModel, self).__init__(dim, kernel_spec, point_spec, estimate_par)
+        # overwrite default kernel of the GaussianProcessModel
+        self.kernel = RBFGaussDer(dim, kernel_spec['params'])
         # assume derivatives evaluated at all sigmas if unspecified
         self.which_der = which_der if which_der is not None else np.arange(self.num_pts)
 
