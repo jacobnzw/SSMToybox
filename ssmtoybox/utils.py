@@ -266,7 +266,7 @@ def gauss_mixture(means, covs, alphas, size, return_indices=False):
     alphas : 1d ndarray
         Mixing proportions, must have same length as means and covs.
 
-    size : int or tuple of ints  #TODO: tuple of ints not yet handled.
+    size : int or tuple of ints
         Number of samples to draw or shape of the output array containing samples.
 
     return_indices : bool
@@ -304,6 +304,11 @@ def gauss_mixture(means, covs, alphas, size, return_indices=False):
     # shuffle in place, no copies created
     from sklearn.utils import resample
     resample(samples, indexes)
+
+    # reshape to match size if size is tuple
+    if isinstance(size, tuple):
+        samples = samples.reshape(*size, n_dim)
+        indexes = indexes.reshape(*size)
 
     if return_indices:
         return samples, indexes

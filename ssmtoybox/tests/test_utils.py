@@ -55,8 +55,21 @@ class TestGaussMixture(unittest.TestCase):
 
         samples, indexes = gauss_mixture(means, covs, alphas, num_samples, return_indices=True)
 
-        self.assertEqual(samples.shape, (num_samples, dim))
-        self.assertEqual(indexes.shape, (num_samples, ))
+        self.assertEqual((num_samples, dim), samples.shape)
+        self.assertEqual((num_samples, ), indexes.shape)
 
         samples = gauss_mixture(means, covs, alphas, num_samples, return_indices=False)
         self.assertEqual(samples.shape, (num_samples, dim))
+
+    def test_size(self):
+        dim = 2
+        means = ([0, 0], [1, 1], [3, 0], [0, -3])
+        covs = (0.1 * np.eye(dim), 0.2 * np.eye(dim), 0.3 * np.eye(2), 0.1 * np.eye(dim))
+        alphas = (0.15, 0.3, 0.4, 0.15)
+        num_samples = 1000
+        mc_sims = 10
+
+        samples, indexes = gauss_mixture(means, covs, alphas, (num_samples, mc_sims), return_indices=True)
+
+        self.assertEqual((num_samples, mc_sims, dim), samples.shape)
+        self.assertEqual((num_samples, mc_sims), indexes.shape)
