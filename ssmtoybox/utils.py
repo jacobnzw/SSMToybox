@@ -251,7 +251,7 @@ def print_table(data, row_labels=None, col_labels=None, latex=False):
         pd.to_latex()
 
 
-def gauss_mixture(means, covs, alphas, size):
+def gauss_mixture(means, covs, alphas, size, return_indices=False):
     """
     Draw samples from Gaussian mixture.
 
@@ -269,13 +269,18 @@ def gauss_mixture(means, covs, alphas, size):
     size : int or tuple of ints  #TODO: tuple of ints not yet handled.
         Number of samples to draw or shape of the output array containing samples.
 
+    return_indices : bool
+        Returns additional array indicating, where each entry is a mixture component index indicating which
+        mixture component each sample came from.
+
     Returns
     -------
     samples : ndarray
         Samples from the Gaussian mixture.
-
+    or
+    samples : ndarray
     indexes : ndarray
-        Component of indices corresponding to samples in
+        Returned only if `return_indices=True`. Component of indices corresponding to samples in the `samples` array.
     """
     if len(means) != len(covs) or len(covs) != len(alphas):
         raise ValueError('means, covs and alphas need to have the same length.')
@@ -295,8 +300,15 @@ def gauss_mixture(means, covs, alphas, size):
         samples[start:end, :] = np.random.multivariate_normal(means[ind], covs[ind], size=c)
         indexes[start:end] = ind
         start = end
-    from sklearn.utils import shuffle
-    return shuffle(samples, indexes)
+
+    # shuffle in place, no copies created
+    from sklearn.utils import resample
+    resample(samples, indexes)
+
+    if return_indices:
+        return samples, indexes
+    else:
+        return samples
 
 
 def bigauss_mixture(m0, c0, m1, c1, alpha, size):
