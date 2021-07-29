@@ -1,80 +1,81 @@
 import argparse
-parser = argparse.ArgumentParser(description='Generate figure comparing predictions of GP and TP regression models.')
-parser.add_argument('--show-plots', help='Shows plots instead of printing them into PDF/PGF.', action='store_true')
-args = parser.parse_args()
-
-if args.show_plots:
-    import matplotlib.pyplot as plt
-    import numpy as np
-else:
-    from figprint import *
 from numpy import newaxis as na
 from ssmtoybox.bq.bqmod import GaussianProcessModel, StudentTProcessModel
 
-dim = 1
-par_kernel = np.array([[0.8, 0.7]])
 
-# init models
-gp = GaussianProcessModel(dim, par_kernel, kern_str='rbf', point_str='ut')
-tp = StudentTProcessModel(dim, par_kernel, kern_str='rbf', point_str='ut', nu=10.0)
+def main(show_plots=True):
+    dim = 1
+    par_kernel = np.array([[0.8, 0.7]])
+    rbf_kernel = {'name': 'rbf', 'params': par_kernel}
+    ut_points = {'name': 'ut', 'params': None}
+    # init models
+    gp = GaussianProcessModel(dim, rbf_kernel, ut_points)
+    tp = StudentTProcessModel(dim, rbf_kernel, ut_points, nu=10.0)
+    # some nonlinear function
+    f = lambda x: np.sin(np.sin(x) * x ** 2) * np.exp(x)
+    expit = lambda x: 5 / (1 + np.exp(-20 * (x + 1))) + 0.01 + 5 / (1 + np.exp(20 * (x - 2))) + 0.01
+    # setup some test data
+    num_test = 100
+    x_test = np.linspace(-5, 5, num_test)[na, :]
+    # draw from a GP
+    K = gp.kernel.eval(np.array([[0.1, 0.7]]), x_test) + 1e-8 * np.eye(num_test)
+    gp_sample = np.random.multivariate_normal(np.zeros(num_test), K)
+    # amplitude modulation of the gp sample
+    gp_sample *= expit(np.linspace(-5, 5, num_test))
+    gp_sample += expit(np.linspace(-5, 5, num_test))
+    i_train = [10, 20, 40, 52, 55, 80]
+    x_train = x_test[:, i_train]
+    y_train = gp_sample[i_train]  # + multivariate_t(np.zeros((1,)), 0.5*np.eye(1), 3.0, size=len(i_train)).squeeze()
+    # noise = multivariate_t(np.zeros((1,)), np.eye(1), 3.0, size=gp.num_pts).T
+    y_test = gp_sample
+    gp_mean, gp_var = gp.predict(x_test, y_train, x_train, par_kernel)
+    gp_std = np.sqrt(gp_var)
+    tp_mean, tp_var = tp.predict(x_test, y_train, x_train, par_kernel)
+    tp_std = np.sqrt(tp_var)
+    x_test = x_test.squeeze()
+    y_test = y_test.squeeze()
+    x_train = x_train.squeeze()
+    y_train = y_train.squeeze()
 
-# some nonlinear function
-f = lambda x: np.sin(np.sin(x)*x**2)*np.exp(x)
-expit = lambda x: 5/(1+np.exp(-20*(x+1)))+0.01 + 5/(1+np.exp(20*(x-2)))+0.01
+    if not show_plots:
+        fp = FigurePrint()
 
-# setup some test data
-num_test = 100
-x_test = np.linspace(-5, 5, num_test)[na, :]
+    # plt.plot(np.linspace(-5, 5, num_test), expit(np.linspace(-5, 5, num_test)))
+    # plot training data, predictive mean and variance
+    ymin, ymax, ypad = gp_sample.min(), gp_sample.max(), 0.25 * gp_sample.ptp()
+    fig, ax = plt.subplots(2, 1, sharex=True)
+    ax[0].fill_between(x_test, gp_mean - 2 * gp_std, gp_mean + 2 * gp_std, color='0.1', alpha=0.15)
+    ax[0].plot(x_test, gp_mean, color='k', lw=2)
+    ax[0].plot(x_train, y_train, 'ko', ms=6)
+    ax[0].plot(x_test, y_test, lw=2, ls='--', color='tomato')
+    ax[0].set_ylim([ymin - ypad, ymax + ypad])
+    ax[0].set_ylabel('g(x)')
+    ax[1].fill_between(x_test, tp_mean - 2 * tp_std, tp_mean + 2 * tp_std, color='0.1', alpha=0.15)
+    ax[1].plot(x_test, tp_mean, color='k', lw=2)
+    ax[1].plot(x_train, y_train, 'ko', ms=6)
+    ax[1].plot(x_test, y_test, lw=2, ls='--', color='tomato')
+    ax[1].set_ylim([ymin - ypad, ymax + ypad])
+    ax[1].set_ylabel('g(x)')
+    ax[1].set_xlabel('x')
+    plt.tight_layout(pad=0.0)
+    plt.show()
 
-# draw from a GP
-K = gp.kernel.eval(np.array([[0.1, 0.7]]), x_test) + 1e-8*np.eye(num_test)
-gp_sample = np.random.multivariate_normal(np.zeros(num_test), K)
-# amplitude modulation of the gp sample
-gp_sample *= expit(np.linspace(-5, 5, num_test))
-gp_sample += expit(np.linspace(-5, 5, num_test))
+    if not show_plots:
+        fp.savefig('gp_vs_tp')
 
 
-i_train = [10, 20, 40, 52, 55, 80]
-x_train = x_test[:, i_train]
-y_train = gp_sample[i_train]  # + multivariate_t(np.zeros((1,)), 0.5*np.eye(1), 3.0, size=len(i_train)).squeeze()
-# noise = multivariate_t(np.zeros((1,)), np.eye(1), 3.0, size=gp.num_pts).T
-y_test = gp_sample
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='Generate figure comparing predictions of GP and TP regression models.')
+    parser.add_argument('--show-plots', help='Shows plots instead of printing them into PDF/PGF.', action='store_true')
+    args = parser.parse_args()
 
-gp_mean, gp_var = gp.predict(x_test, y_train, x_train, par_kernel)
-gp_std = np.sqrt(gp_var)
-tp_mean, tp_var = tp.predict(x_test, y_train, x_train, par_kernel)
-tp_std = np.sqrt(tp_var)
+    if args.show_plots:
+        import matplotlib.pyplot as plt
+        import numpy as np
+    else:
+        from figprint import *
 
-x_test = x_test.squeeze()
-y_test = y_test.squeeze()
-x_train = x_train.squeeze()
-y_train = y_train.squeeze()
-
-if args.show_plots is None:
-    fp = FigurePrint()
-
-# plt.plot(np.linspace(-5, 5, num_test), expit(np.linspace(-5, 5, num_test)))
-# plot training data, predictive mean and variance
-ymin, ymax, ypad = gp_sample.min(), gp_sample.max(), 0.25*gp_sample.ptp()
-fig, ax = plt.subplots(2, 1, sharex=True)
-
-ax[0].fill_between(x_test, gp_mean - 2 * gp_std, gp_mean + 2 * gp_std, color='0.1', alpha=0.15)
-ax[0].plot(x_test, gp_mean, color='k', lw=2)
-ax[0].plot(x_train, y_train, 'ko', ms=6)
-ax[0].plot(x_test, y_test, lw=2, ls='--', color='tomato')
-ax[0].set_ylim([ymin-ypad, ymax+ypad])
-ax[0].set_ylabel('g(x)')
-
-ax[1].fill_between(x_test, tp_mean - 2 * tp_std, tp_mean + 2 * tp_std, color='0.1', alpha=0.15)
-ax[1].plot(x_test, tp_mean, color='k', lw=2)
-ax[1].plot(x_train, y_train, 'ko', ms=6)
-ax[1].plot(x_test, y_test, lw=2, ls='--', color='tomato')
-ax[1].set_ylim([ymin-ypad, ymax+ypad])
-ax[1].set_ylabel('g(x)')
-ax[1].set_xlabel('x')
-
-plt.tight_layout(pad=0.0)
-plt.show()
-
-if args.show_plots is None:
-    fp.savefig('gp_vs_tp')
+    main(args.show_plots)
+else:
+    main()

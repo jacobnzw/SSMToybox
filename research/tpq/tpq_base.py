@@ -1,12 +1,11 @@
 import numpy as np
 from numpy import newaxis as na
 from ssmtoybox.mtran import LinearizationTransform, FullySymmetricStudentTransform
-from ssmtoybox.bq.bqmtran import GaussianProcessTransform, StudentTProcessTransform, BQTransform
+from ssmtoybox.bq.bqmtran import GaussianProcessTransform
 from ssmtoybox.bq.bqkern import RBFStudent
-from ssmtoybox.ssmod import TransitionModel, MeasurementModel, UNGMTransition, UNGMMeasurement
+from ssmtoybox.ssmod import TransitionModel, MeasurementModel
 from ssmtoybox.ssinf import StudentianInference
-from ssmtoybox.utils import log_cred_ratio, mse_matrix, gauss_mixture, multivariate_t, RandomVariable, GaussRV, \
-    StudentRV
+from ssmtoybox.utils import log_cred_ratio, mse_matrix, gauss_mixture, multivariate_t, RandomVariable
 
 
 # Gaussian mixture random variable
@@ -29,6 +28,9 @@ class GaussianMixtureRV(RandomVariable):
 
     def get_stats(self):
         return self.means, self.covs, self.alphas
+
+    def get_moments(self):
+        pass
 
 
 # Student's t-filters

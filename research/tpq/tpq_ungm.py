@@ -1,7 +1,10 @@
 from tpq_base import *
-from scipy.io import loadmat
+from scipy.io import loadmat, savemat
 from ssmtoybox.ssinf import StudentProcessKalman, StudentProcessStudent, GaussianProcessKalman, UnscentedKalman, \
     CubatureKalman, FullySymmetricStudent
+from ssmtoybox.ssmod import UNGMTransition, UNGMMeasurement
+from ssmtoybox.utils import GaussRV, StudentRV
+from ssmtoybox.bq.bqmtran import BQTransform
 import matplotlib.pyplot as plt
 # from fusion_paper.figprint import *
 
@@ -145,21 +148,21 @@ def ungm_demo(steps=250, mc_sims=100):
         var_lcr_avg[fi] = bootstrap_var(lcr_avg[:, fi], int(1e4))
 
     # save trajectories, measurements and metrics to file for later processing (tables, plots)
-    # data_dict = {
-    #     'x': x,
-    #     'z': z,
-    #     'mf': mf,
-    #     'Pf': Pf,
-    #     'rmse_avg': rmse_avg,
-    #     'lcr_avg': lcr_avg,
-    #     'var_rmse_avg': var_rmse_avg,
-    #     'var_lcr_avg': var_lcr_avg,
-    #     'steps': steps,
-    #     'mc_sims': mc_sims,
-    #     'par_dyn_tp': par_dyn_tp,
-    #     'par_obs_tp': par_obs_tp,
-    # }
-    # savemat('ungm_simdata_{:d}k_{:d}mc'.format(steps, mc_sims), data_dict)
+    data_dict = {
+        'x': x,
+        'z': z,
+        'mf': mf,
+        'Pf': Pf,
+        'rmse_avg': rmse_avg,
+        'lcr_avg': lcr_avg,
+        'var_rmse_avg': var_rmse_avg,
+        'var_lcr_avg': var_lcr_avg,
+        'steps': steps,
+        'mc_sims': mc_sims,
+        'par_dyn_tp': par_dyn_tp,
+        'par_obs_tp': par_obs_tp,
+    }
+    savemat('ungm_simdata_{:d}k_{:d}mc'.format(steps, mc_sims), data_dict)
 
     f_label = [f.__class__.__name__ for f in filters]
     m_label = ['MEAN_RMSE', 'STD(MEAN_RMSE)', 'MEAN_INC', 'STD(MEAN_INC)']
@@ -199,6 +202,7 @@ def ungm_plots_tables(datafile):
         table.to_latex(f)
 
     # plots
+    from figprint import FigurePrint
     fp = FigurePrint()
 
     # RMSE and INC box plots
@@ -248,10 +252,11 @@ def ungm_plots_tables(datafile):
 
 if __name__ == '__main__':
     np.set_printoptions(precision=4)
+    np.random.seed(42)
     # synthetic_demo(mc_sims=50)
     # lotka_volterra_demo()
-    ungm_demo()
-    # ungm_plots_tables('ungm_simdata_250k_500mc.mat')
+    ungm_demo(steps=250, mc_sims=50)
+    # ungm_plots_tables('ungm_simdata_250k_500mc')
     # reentry_tracking_demo()
     # constant_velocity_bot_demo()
     # constant_velocity_radar_demo()
