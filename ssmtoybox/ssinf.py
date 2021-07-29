@@ -236,9 +236,9 @@ class GaussianInference(StateSpaceInference):
         assert isinstance(mod_dyn, TransitionModel) and isinstance(mod_obs, MeasurementModel)
 
         # set initial condition mean and covariance, and noise covariances
-        self.x0_mean, self.x0_cov = mod_dyn.init_rv.get_stats()
-        self.q_mean, self.q_cov = mod_dyn.noise_rv.get_stats()
-        self.r_mean, self.r_cov = mod_obs.noise_rv.get_stats()
+        self.x0_mean, self.x0_cov = mod_dyn.init_rv.get_moments()
+        self.q_mean, self.q_cov = mod_dyn.noise_rv.get_moments()
+        self.r_mean, self.r_cov = mod_obs.noise_rv.get_moments()
 
         self.G = mod_dyn.noise_gain
         # initial moments are taken to be the first filtered estimate
@@ -575,8 +575,9 @@ class StudentProcessKalman(GaussianInference):
 
 class StudentianInference(StateSpaceInference):
     """
-    Base class for state-space inference algorithms, which assume that the state and measurement variables are jointly
-    Student's t-distributed.
+    Base class for the Studentian state-space inference algorithms.
+
+    The assumption is that the state and measurements are jointly Student's t-distributed.
 
     Parameters
     ----------
@@ -619,26 +620,32 @@ class StudentianInference(StateSpaceInference):
             dof = 4.0
             warnings.warn("You supplied invalid DoF (must be > 2). Setting to dof=4.")
 
-        # extract SSM parameters  # TODO get_stats() returns scale mat., convert it to cov. mat.
-        self.x0_mean, self.x0_cov, self.x0_dof = mod_dyn.init_rv.get_stats()
-        # self.x0_cov = (self.x0_dof/(self.x0_dof-2)) * self.x0_cov
+        # extract SSM parameters
+        self.x0_mean, self.x0_smat, self.x0_dof = mod_dyn.init_rv.get_stats()
+        self.x0_cov = (self.x0_dof/(self.x0_dof-2)) * self.x0_smat
+        self.x_cov_fi = self.x0_cov
         # initial filtered statistics are the initial state statistics
-        self.x_mean_fi, self.x_cov_fi, self.dof_fi = self.x0_mean, self.x0_cov, self.x0_dof
+        self.x_mean_fi, self.x_smat_fi, self.dof_fi = self.x0_mean, self.x0_smat, self.x0_dof
 
         # state noise statistics
-        self.q_mean, self.q_cov, self.q_dof = mod_dyn.noise_rv.get_stats()
+        self.q_mean, self.q_smat, self.q_dof = mod_dyn.noise_rv.get_stats()
+        self.q_cov = (self.q_dof / (self.q_dof - 2)) * self.q_smat
         self.q_gain = mod_dyn.noise_gain
 
         # measurement noise statistics
-        self.r_mean, self.r_cov, self.r_dof = mod_obs.noise_rv.get_stats()
+        self.r_mean, self.r_smat, self.r_dof = mod_obs.noise_rv.get_stats()
+        self.r_cov = (self.r_dof / (self.r_dof - 2)) * self.r_smat
 
         # scale matrix variables
-        scale = (dof - 2)/dof
-        self.x_smat_fi = scale * self.x_cov_fi  # turn initial covariance into initial scale matrix
-        self.q_smat = scale * self.q_cov
-        self.r_smat = scale * self.r_cov
+        # scale = (dof - 2)/dof
+        # self.x_smat_fi = scale * self.x_cov_fi  # turn initial covariance into initial scale matrix
+        # self.q_smat = scale * self.q_cov
+        # self.r_smat = scale * self.r_cov
         self.x_smat_pr, self.y_smat_pr, self.xy_smat = None, None, None
 
+        # the user-defined dof, which is used to specify the approximating density for the filtering density
+        # MVT(mean_fi, smat_fi, dof_fi) gets approximated by MVT(mean_fi, smat, dof), where, given the dof, smat is
+        # chosen such that the covariances of both MVT densities match. ==> Preserves heavy-tailedness.
         self.dof = dof
         self.fixed_dof = fixed_dof
 
@@ -646,9 +653,11 @@ class StudentianInference(StateSpaceInference):
 
     def reset(self):
         """Reset internal variables and flags."""
-        self.x_mean_fi, self.x_cov_fi, self.dof_fi = self.x0_mean, self.x0_cov, self.x0_dof
-        scale = (self.dof - 2) / self.dof
-        self.x_smat_fi = scale * self.x_cov_fi
+        self.x_mean_fi, self.x_smat_fi, self.dof_fi = self.x0_mean, self.x0_smat, self.x0_dof
+        self.x_cov_fi = self.x0_cov
+        if self.fixed_dof:
+            self.x_smat_fi = ((self.dof-2)/self.dof) * self.x_cov_fi
+            self.dof_fi = self.dof
         self.x_smat_pr, self.y_smat_pr, self.xy_smat = None, None, None
         super(StudentianInference, self).reset()
 
@@ -668,33 +677,32 @@ class StudentianInference(StateSpaceInference):
             Parameters of the moment transform computing the predictive measurement moments.
         """
 
-        if self.fixed_dof:  # fixed-DOF version
+        # if self.fixed_dof:  # fixed-DOF version
+        #
+        #     # pick the smallest DOF
+        #     dof_pr = np.min((self.dof_fi, self.q_dof, self.r_dof))
+        #
+        #     # rescale filtered scale matrix?
+        #     scale = (dof_pr - 2) / dof_pr
+        #     # self.x_smat_fi = self.x_smat_fi * scale * self.dof_fi / (self.dof_fi - 2)
+        #
+        # else:  # increasing DOF version
+        #     scale = (self.dof - 2) / self.dof
 
-            # pick the smallest DOF
-            dof_pr = np.min((self.dof_fi, self.q_dof, self.r_dof))
-
-            # rescale filtered scale matrix?
-            scale = (dof_pr - 2) / dof_pr
-            # self.x_smat_fi = self.x_smat_fi * scale * self.dof_fi / (self.dof_fi - 2)
-
-        else:  # increasing DOF version
-            scale = (self.dof - 2) / self.dof
-
+        scale = ((self.dof - 2) / self.dof)
         # in non-additive case, augment mean and covariance
         mean = self.x_mean_fi if self.mod_dyn.noise_additive else np.hstack((self.x_mean_fi, self.q_mean))
         smat = self.x_smat_fi if self.mod_dyn.noise_additive else block_diag(self.x_smat_fi, self.q_smat)
         assert mean.ndim == 1 and smat.ndim == 2
 
         # predicted state statistics
-        # TODO: make the moment transforms take covariance matrix (instead of scale)
         self.x_mean_pr, self.x_cov_pr, self.xx_cov = self.tf_dyn.apply(self.mod_dyn.dyn_eval, mean, smat,
                                                                        np.atleast_1d(time), theta_dyn)
-        # predicted covariance -> predicted scale matrix
-        self.x_smat_pr = scale * self.x_cov_pr
-
         if self.mod_dyn.noise_additive:
             self.x_cov_pr += self.q_gain.dot(self.q_cov).dot(self.q_gain.T)
-            self.x_smat_pr += self.q_gain.dot(self.q_smat).dot(self.q_gain.T)
+
+        # predicted state scale matrix corresponding to the DoF in the `scale` variable
+        self.x_smat_pr = scale * self.x_cov_pr
 
         # in non-additive case, augment mean and covariance
         mean = self.x_mean_pr if self.mod_obs.noise_additive else np.hstack((self.x_mean_pr, self.r_mean))
@@ -704,14 +712,13 @@ class StudentianInference(StateSpaceInference):
         # predicted measurement statistics
         self.y_mean_pr, self.y_cov_pr, self.xy_cov = self.tf_obs.apply(self.mod_obs.meas_eval, mean, smat,
                                                                        np.atleast_1d(time), theta_obs)
-        # turn covariance to scale matrix
-        self.y_smat_pr = scale * self.y_cov_pr
-        self.xy_smat = scale * self.xy_cov
-
         # in additive case, noise covariances need to be added
         if self.mod_obs.noise_additive:
             self.y_cov_pr += self.r_cov
-            self.y_smat_pr += self.r_smat
+
+        # predicted measurement scale matrix corresponding to the DoF in the `scale` variable
+        self.y_smat_pr = scale * self.y_cov_pr
+        self.xy_smat = scale * self.xy_cov
 
         # in non-additive case, cross-covariances must be trimmed (has no effect in additive case)
         self.xy_cov = self.xy_cov[:, :self.mod_dyn.dim_in]
@@ -720,8 +727,9 @@ class StudentianInference(StateSpaceInference):
 
     def _measurement_update(self, y, time=None):
         """
-        Measurement update for Studentian filters, which takes predictive state and measurement moments and produces
-        filtered state mean and covariance.
+        Measurement update for Studentian inference.
+
+        Based on predictive state and measurement moments, produces filtered state mean and covariance.
 
         Parameters
         ----------
@@ -733,28 +741,35 @@ class StudentianInference(StateSpaceInference):
 
         Notes
         -----
-        Implements general Studentian filter measurement update.
+        The used expressions are taken from Roth, see _[1] for details and derivations.
+
+        References
+        ----------
+        .. [1] Roth, M., On the Multivariate t Distribution, URL: https://users.isy.liu.se/en/rt/roth/student.pdf
         """
 
-        # scale the covariance matrices
-        # scale = (self.dof - 2) / self.dof
-        # self.y_cov_pr *= scale
-        # self.xy_cov *= scale
-
-        # Kalman update
+        # update mean
         gain = cho_solve(cho_factor(self.y_smat_pr), self.xy_smat).T
         self.x_mean_fi = self.x_mean_pr + gain.dot(y - self.y_mean_pr)
-        # FIXME: this isn't covariance (shouldn't be saved in x_cov_fi)
-        self.x_cov_fi = self.x_smat_pr - gain.dot(self.y_smat_pr).dot(gain.T)
 
-        # filtered covariance to filtered scale matrix
-        # delta = cho_solve(cho_factor(self.y_smat_pr), y - self.y_mean_pr)
+        # update scale matrix
         delta = la.solve(la.cholesky(self.y_smat_pr), y - self.y_mean_pr)
-        scale = (self.dof + delta.T.dot(delta)) / (self.dof + self.mod_obs.dim_out)
-        self.x_smat_fi = scale * self.x_cov_fi
+        scale = (self.dof_fi + delta.T.dot(delta)) / (self.dof_fi + self.mod_obs.dim_out)
+        self.x_smat_fi = scale * (self.x_smat_pr - gain.dot(self.y_smat_pr).dot(gain.T))
 
         # update degrees of freedom
         self.dof_fi += self.mod_obs.dim_out
+
+        # filtered covariance
+        self.x_cov_fi = (self.dof_fi/(self.dof_fi-2))*self.x_smat_fi
+
+        # approximation with user-defined dof
+        if self.fixed_dof:  # fixed-DOF version
+            # moment matching approximation of the filtered density (mean_fi, smat_fi, dof_fi)
+            # the re-scaled x_smat_fi belongs to a filtered density (mean_fi, new_smat_fi, dof), aim: dof < dof_fi
+            self.x_smat_fi = ((self.dof-2)/self.dof) * self.x_cov_fi
+            # self.dof_fi = self.dof
+            # TODO: non-add case: x_smat_fi, q_smat, r_smat must tie to the same dof -> must be scaled the same way
 
     def _smoothing_update(self):
         # Student smoother has not been developed yet.
@@ -789,10 +804,10 @@ class FullySymmetricStudent(StudentianInference):
     """
 
     def __init__(self, dyn, obs, degree=3, kappa=None, dof=4.0, fixed_dof=True):
-        dyn_dof = np.min((dyn.init_rv.dof, dyn.noise_rv.dof))
+        dyn_dof = np.min((dyn.init_rv.dof, dyn.noise_rv.dof))  # FIXME: if fixed_dof, need to pass in dof, no heuristics
         obs_dof = np.min((dyn_dof, obs.noise_rv.dof))
-        t_dyn = FullySymmetricStudentTransform(dyn.dim_in, degree, kappa, dyn_dof)
-        t_obs = FullySymmetricStudentTransform(obs.dim_in, degree, kappa, obs_dof)
+        t_dyn = FullySymmetricStudentTransform(dyn.dim_in, degree, kappa, dof)
+        t_obs = FullySymmetricStudentTransform(obs.dim_in, degree, kappa, dof)
         super(FullySymmetricStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
 
 
