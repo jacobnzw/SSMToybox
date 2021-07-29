@@ -593,6 +593,10 @@ class RandomVariable(metaclass=ABCMeta):
     def get_stats(self):
         pass
 
+    @abstractmethod
+    def get_moments(self):
+        pass
+
 
 class GaussRV(RandomVariable):
     """
@@ -637,6 +641,9 @@ class GaussRV(RandomVariable):
 
     def get_stats(self):
         return self.mean, self.cov
+
+    def get_moments(self):
+        return self.get_stats()
 
 
 class StudentRV(RandomVariable):
@@ -689,3 +696,6 @@ class StudentRV(RandomVariable):
 
     def get_stats(self):
         return self.mean, self.scale, self.dof
+
+    def get_moments(self):
+        return self.mean, (self.dof/(self.dof - 2))*self.scale
