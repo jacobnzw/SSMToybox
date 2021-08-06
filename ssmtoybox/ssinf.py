@@ -597,18 +597,13 @@ class StudentianInference(StateSpaceInference):
     dof : float, optional
         Degree of freedom parameter of the filtered density.
 
-    fixed_dof : bool, optional
-        If `True`, DOF will be fixed for all time steps, which preserves the heavy-tailed behaviour of the filter.
-        If `False`, DOF will be increasing after each measurement update, which means the heavy-tailed behaviour is
-        not preserved and therefore converges to a Gaussian filter.
-
     Notes
     -----
     Even though Student's t distribution is not parametrized by the covariance matrix like the Gaussian,
     the filter still produces mean and covariance of the state.
     """
 
-    def __init__(self, mod_dyn, mod_obs, tf_dyn, tf_obs, dof=4.0, fixed_dof=True):
+    def __init__(self, mod_dyn, mod_obs, tf_dyn, tf_obs, dof=4.0):
         # make sure initial state and noises are Student RVs
         if not isinstance(mod_dyn.init_rv, StudentRV):
             ValueError("Initial state is not Student RV.")
@@ -619,6 +614,11 @@ class StudentianInference(StateSpaceInference):
         if dof <= 2.0:
             dof = 4.0
             warnings.warn("You supplied invalid DoF (must be > 2). Setting to dof=4.")
+
+        # the user-defined dof, which is used to specify the approximating density for the filtering density
+        # MVT(mean_fi, smat_fi, dof_fi) gets approximated by MVT(mean_fi, smat, dof), where, given the dof, smat is
+        # chosen such that the covariances of both MVT densities match. ==> Preserves heavy-tailedness.
+        self.dof = dof
 
         # extract SSM parameters
         self.x0_mean, self.x0_smat, self.x0_dof = mod_dyn.init_rv.get_stats()
@@ -637,17 +637,11 @@ class StudentianInference(StateSpaceInference):
         self.r_cov = (self.r_dof / (self.r_dof - 2)) * self.r_smat
 
         # scale matrix variables
-        # scale = (dof - 2)/dof
-        # self.x_smat_fi = scale * self.x_cov_fi  # turn initial covariance into initial scale matrix
-        # self.q_smat = scale * self.q_cov
-        # self.r_smat = scale * self.r_cov
+        scale = (dof - 2)/dof
+        self.x_smat_fi = scale * self.x_cov_fi  # turn initial covariance into initial scale matrix
+        self.q_smat = scale * self.q_cov
+        self.r_smat = scale * self.r_cov
         self.x_smat_pr, self.y_smat_pr, self.xy_smat = None, None, None
-
-        # the user-defined dof, which is used to specify the approximating density for the filtering density
-        # MVT(mean_fi, smat_fi, dof_fi) gets approximated by MVT(mean_fi, smat, dof), where, given the dof, smat is
-        # chosen such that the covariances of both MVT densities match. ==> Preserves heavy-tailedness.
-        self.dof = dof
-        self.fixed_dof = fixed_dof
 
         super(StudentianInference, self).__init__(mod_dyn, mod_obs, tf_dyn, tf_obs)
 
@@ -655,9 +649,15 @@ class StudentianInference(StateSpaceInference):
         """Reset internal variables and flags."""
         self.x_mean_fi, self.x_smat_fi, self.dof_fi = self.x0_mean, self.x0_smat, self.x0_dof
         self.x_cov_fi = self.x0_cov
-        if self.fixed_dof:
-            self.x_smat_fi = ((self.dof-2)/self.dof) * self.x_cov_fi
-            self.dof_fi = self.dof
+        self.x_smat_fi = ((self.dof-2)/self.dof) * self.x_cov_fi
+        self.dof_fi = self.dof
+
+        # scale matrix variables
+        scale = (self.dof - 2)/self.dof
+        self.x_smat_fi = scale * self.x_cov_fi  # turn initial covariance into initial scale matrix
+        self.q_smat = scale * self.q_cov
+        self.r_smat = scale * self.r_cov
+
         self.x_smat_pr, self.y_smat_pr, self.xy_smat = None, None, None
         super(StudentianInference, self).reset()
 
@@ -754,22 +754,20 @@ class StudentianInference(StateSpaceInference):
 
         # update scale matrix
         delta = la.solve(la.cholesky(self.y_smat_pr), y - self.y_mean_pr)
-        scale = (self.dof_fi + delta.T.dot(delta)) / (self.dof_fi + self.mod_obs.dim_out)
+        scale = (self.dof + delta.T.dot(delta)) / (self.dof + self.mod_obs.dim_out)
         self.x_smat_fi = scale * (self.x_smat_pr - gain.dot(self.y_smat_pr).dot(gain.T))
 
         # update degrees of freedom
-        self.dof_fi += self.mod_obs.dim_out
+        self.dof_fi = self.dof + self.mod_obs.dim_out
 
         # filtered covariance
         self.x_cov_fi = (self.dof_fi/(self.dof_fi-2))*self.x_smat_fi
 
         # approximation with user-defined dof
-        if self.fixed_dof:  # fixed-DOF version
-            # moment matching approximation of the filtered density (mean_fi, smat_fi, dof_fi)
-            # the re-scaled x_smat_fi belongs to a filtered density (mean_fi, new_smat_fi, dof), aim: dof < dof_fi
-            self.x_smat_fi = ((self.dof-2)/self.dof) * self.x_cov_fi
-            # self.dof_fi = self.dof
-            # TODO: non-add case: x_smat_fi, q_smat, r_smat must tie to the same dof -> must be scaled the same way
+        # moment matching approximation of the filtered density (mean_fi, smat_fi, dof_fi)
+        # the re-scaled x_smat_fi belongs to a filtered density (mean_fi, new_smat_fi, dof), aim: dof < dof_fi
+        self.x_smat_fi = ((self.dof-2)/self.dof) * self.x_cov_fi
+        # TODO: non-add case: x_smat_fi, q_smat, r_smat must tie to the same dof -> must be scaled the same way
 
     def _smoothing_update(self):
         # Student smoother has not been developed yet.
@@ -803,12 +801,12 @@ class FullySymmetricStudent(StudentianInference):
            Heavy-tailed Noise, 19th International Conference on Information Fusion, 2016, 1859-1866
     """
 
-    def __init__(self, dyn, obs, degree=3, kappa=None, dof=4.0, fixed_dof=True):
+    def __init__(self, dyn, obs, degree=3, kappa=None, dof=4.0):
         dyn_dof = np.min((dyn.init_rv.dof, dyn.noise_rv.dof))  # FIXME: if fixed_dof, need to pass in dof, no heuristics
         obs_dof = np.min((dyn_dof, obs.noise_rv.dof))
         t_dyn = FullySymmetricStudentTransform(dyn.dim_in, degree, kappa, dof)
         t_obs = FullySymmetricStudentTransform(obs.dim_in, degree, kappa, dof)
-        super(FullySymmetricStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
+        super(FullySymmetricStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof)
 
 
 class StudentProcessStudent(StudentianInference):
@@ -850,7 +848,7 @@ class StudentProcessStudent(StudentianInference):
            Numerische Mathematik, vol. 10, pp. 327–344, 1967
     """
 
-    def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, point_par=None, dof=4.0, fixed_dof=True, dof_tp=4.0):
+    def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, point_par=None, dof=4.0, dof_tp=4.0):
         # degrees of freedom for SSM noises
         assert isinstance(dyn.init_rv, StudentRV) and isinstance(dyn.noise_rv, StudentRV)
         q_dof, r_dof = dyn.noise_rv.dof, obs.noise_rv.dof
@@ -873,7 +871,7 @@ class StudentProcessStudent(StudentianInference):
         points_obs = {'name': 'fs', 'params': point_par_obs}
         t_obs = StudentTProcessTransform(obs.dim_in, 1, kernel_obs, points_obs, nu=dof_tp)
 
-        super(StudentProcessStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
+        super(StudentProcessStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof)
 
 
 """
@@ -1076,7 +1074,7 @@ class MultiOutputStudentProcessStudent(StudentianInference):
         points_obs = {'name': 'fs', 'params': point_par_obs}
         t_obs = MultiOutputStudentTProcessTransform(obs.dim_in, obs.dim_out, kernel_obs, points_obs, nu=dof_tp)
 
-        super(MultiOutputStudentProcessStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
+        super(MultiOutputStudentProcessStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof)
 
 
 """
