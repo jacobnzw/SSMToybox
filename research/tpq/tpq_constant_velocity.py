@@ -1,3 +1,5 @@
+import numpy as np
+
 from tpq_base import *
 from scipy.io import savemat, loadmat
 from ssmtoybox.ssmod import ConstantVelocity, Radar2DMeasurement
@@ -256,5 +258,8 @@ def constant_velocity_radar_plots_tables(datafile):
 
 
 if __name__ == '__main__':
+    np.set_printoptions(precision=4)
+    np.random.seed(42)  # for reproducibility
+
     constant_velocity_radar_demo(mc_sims=50)
     # constant_velocity_radar_plots_tables('cv_radar_simdata_100k_100mc')
