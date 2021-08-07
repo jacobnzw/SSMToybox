@@ -70,36 +70,34 @@ def constant_velocity_radar_demo(steps=100, mc_sims=100):
     print()
     print(partable)
 
-    # TODO: less TPQSFs, max boxplot y-range = 2000, try to get convergent RMSE semilogy
     # init filters
     filters = (
         # ExtendedStudent(dyn, obs),
-        # FIXME: can't use models w/ StudentRV in GaussianInference (UKF). I could if StudentRV returned covariance.
-        UnscentedKalman(dyn, obs, kappa=kappa),
-        FullySymmetricStudent(dyn, obs, kappa=kappa, dof=4.0, fixed_dof=True),
-        StudentProcessStudent(dyn, obs, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=4.0, point_par=par_pt),
+        # UnscentedKalman(dyn, obs, kappa=kappa),
+        FullySymmetricStudent(dyn, obs, kappa=kappa, dof=4.0),
+        # StudentProcessStudent(dyn, obs, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=4.0, point_par=par_pt),
         # StudentProcessStudent(dyn, obs, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=10.0, point_par=par_pt),
-        StudentProcessStudent(dyn, obs, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=20.0, point_par=par_pt),
+        # StudentProcessStudent(dyn, obs, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=20.0, point_par=par_pt),
         # GaussianProcessKalman(dyn, obs, par_dyn_tp, par_obs_tp, point_hyp=par_pt),
     )
-    itpq = np.argwhere([isinstance(filters[i], StudentProcessStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
-
-    # assign weights approximated by MC with lots of samples
-    # very dirty code
-    pts = filters[itpq].tf_dyn.model.points
-    kern = filters[itpq].tf_dyn.model.kernel
-    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(2e6), 1000)
-    for f in filters:
-        if isinstance(f.tf_dyn, BQTransform):
-            f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
-            f.tf_dyn.Q = Q
-    pts = filters[itpq].tf_obs.model.points
-    kern = filters[itpq].tf_obs.model.kernel
-    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(2e6), 1000)
-    for f in filters:
-        if isinstance(f.tf_obs, BQTransform):
-            f.tf_obs.wm, f.tf_obs.Wc, f.tf_obs.Wcc = wm, wc, wcc
-            f.tf_obs.Q = Q
+    # itpq = np.argwhere([isinstance(filters[i], StudentProcessStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
+    #
+    # # assign weights approximated by MC with lots of samples
+    # # very dirty code
+    # pts = filters[itpq].tf_dyn.model.points
+    # kern = filters[itpq].tf_dyn.model.kernel
+    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(2e6), 1000)
+    # for f in filters:
+    #     if isinstance(f.tf_dyn, BQTransform):
+    #         f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
+    #         f.tf_dyn.Q = Q
+    # pts = filters[itpq].tf_obs.model.points
+    # kern = filters[itpq].tf_obs.model.kernel
+    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(2e6), 1000)
+    # for f in filters:
+    #     if isinstance(f.tf_obs, BQTransform):
+    #         f.tf_obs.wm, f.tf_obs.Wc, f.tf_obs.Wcc = wm, wc, wcc
+    #         f.tf_obs.Q = Q
 
     # run all filters
     mf, Pf = run_filters(filters, z)
