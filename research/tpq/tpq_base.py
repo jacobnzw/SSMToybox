@@ -44,7 +44,7 @@ class ExtendedStudent(StudentianInference):
 
 class GPQStudent(StudentianInference):
 
-    def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, point_hyp=None, dof=4.0, fixed_dof=True):
+    def __init__(self, dyn, obs, kern_par_dyn, kern_par_obs, point_par=None, dof=4.0):
         """
         Student filter with Gaussian Process quadrature moment transforms using fully-symmetric sigma-point set.
 
@@ -60,7 +60,7 @@ class GPQStudent(StudentianInference):
         kern_par_obs : numpy.ndarray
             Kernel parameters for the GPQ moment transform of the measurement function.
 
-        point_hyp : dict
+        point_par : dict
             Point set parameters with keys:
               * `'degree'`: Degree (order) of the quadrature rule.
               * `'kappa'`: Tuning parameter of controlling spread of sigma-points around the center.
@@ -68,10 +68,6 @@ class GPQStudent(StudentianInference):
         dof : float
             Desired degree of freedom for the filtered density.
 
-        fixed_dof : bool
-            If `True`, DOF will be fixed for all time steps, which preserves the heavy-tailed behaviour of the filter.
-            If `False`, DOF will be increasing after each measurement update, which means the heavy-tailed behaviour is
-            not preserved and therefore converges to a Gaussian filter.
         """
 
         # degrees of freedom for SSM noises
@@ -79,23 +75,30 @@ class GPQStudent(StudentianInference):
         _, _, r_dof = obs.noise_rv.get_stats()
 
         # add DOF of the noises to the sigma-point parameters
-        if point_hyp is None:
-                point_hyp = dict()
-        point_hyp_dyn = point_hyp
-        point_hyp_obs = point_hyp
+        if point_par is None:
+                point_par = dict()
+        point_hyp_dyn = point_par.copy()
+        point_hyp_obs = point_par.copy()
         point_hyp_dyn.update({'dof': q_dof})
         point_hyp_obs.update({'dof': r_dof})
 
         # init moment transforms
-        t_dyn = GaussianProcessTransform(dyn.dim_in, kern_par_dyn, 'rbf-student', 'fs', point_hyp_dyn)
-        t_obs = GaussianProcessTransform(obs.dim_in, kern_par_obs, 'rbf-student', 'fs', point_hyp_obs)
-        super(GPQStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
+        # specification of the moment transform for the transition model
+        kernel_dyn = {'name': 'rbf-student', 'params': kern_par_dyn}
+        points_dyn = {'name': 'fs', 'params': point_hyp_dyn}
+        t_dyn = GaussianProcessTransform(dyn.dim_in, dyn.dim_state, kernel_dyn, points_dyn)
+        # specification of the moment transform for the measurement model
+        kernel_obs = {'name': 'rbf-student', 'params': kern_par_obs}
+        points_obs = {'name': 'fs', 'params': point_hyp_obs}
+        t_obs = GaussianProcessTransform(obs.dim_in, obs.dim_out, kernel_obs, points_obs)
+
+        super(GPQStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof)
 
 
 class FSQStudent(StudentianInference):
     """Filter based on fully symmetric quadrature rules."""
 
-    def __init__(self, dyn, obs, degree=3, kappa=None, dof=4.0, fixed_dof=True):
+    def __init__(self, dyn, obs, degree=3, kappa=None, dof=4.0):
 
         # degrees of freedom for SSM noises
         _, _, q_dof = dyn.noise_rv.get_stats()
@@ -104,7 +107,8 @@ class FSQStudent(StudentianInference):
         # init moment transforms
         t_dyn = FullySymmetricStudentTransform(dyn.dim_in, degree, kappa, q_dof)
         t_obs = FullySymmetricStudentTransform(obs.dim_in, degree, kappa, r_dof)
-        super(FSQStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof, fixed_dof)
+
+        super(FSQStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof)
 
 
 def rbf_student_mc_weights(x, kern, num_samples, num_batch):
