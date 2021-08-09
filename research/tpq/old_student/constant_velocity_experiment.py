@@ -1435,7 +1435,8 @@ class StudentTProcess(Model):
         """
 
         fcn_obs = np.squeeze(fcn_obs)
-        scale = (self.nu - 2 + fcn_obs.dot(self.iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
+        quad_form = np.einsum('ij,jk,ik->i', fcn_obs, self.iK, fcn_obs)
+        scale = (self.nu - 2 + quad_form) / (self.nu - 2 + self.num_pts)
         return scale * self.kernel.scale.squeeze() ** 2 * (1 - np.trace(self.Q.dot(self.iK)))
 
     def integral_variance(self, fcn_obs, par=None):
@@ -1838,6 +1839,7 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
         # BQ transform weights for the mean, covariance and cross-covariance
         self.wm, self.Wc, self.Wcc = self._weights()
+        self.I_out = np.eye(dim_out)
 
     def apply(self, f, mean, cov, fcn_par, kern_par=None):
         """
@@ -2046,8 +2048,8 @@ class BQTransform(MomentTransform, metaclass=ABCMeta):
 
 
 class GPQ(BQTransform):  # consider renaming to GPQTransform
-    def __init__(self, dim_in, kern_par, kernel='rbf', points='ut', point_par=None):
-        super(GPQ, self).__init__(dim_in, 1, kern_par, 'gp', kernel, points, point_par)
+    def __init__(self, dim_in, dim_out, kern_par, kernel='rbf', points='ut', point_par=None):
+        super(GPQ, self).__init__(dim_in, dim_out, kern_par, 'gp', kernel, points, point_par)
 
     def _fcn_eval(self, fcn, x, fcn_par):
         return np.apply_along_axis(fcn, 0, x, fcn_par)
@@ -2067,7 +2069,7 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
         : numpy.ndarray
 
         """
-        expected_model_var = self.model.exp_model_variance(fcn_evals)
+        expected_model_var = self.model.exp_model_variance(fcn_evals) * self.I_out
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + expected_model_var
 
     def _integral_variance(self, points, kern_par):
@@ -2075,14 +2077,14 @@ class GPQ(BQTransform):  # consider renaming to GPQTransform
 
 
 class TPQ(BQTransform):
-    def __init__(self, dim_in, kern_par, kernel='rbf', points='ut', point_par=None, nu=3.0):
-        super(TPQ, self).__init__(dim_in, 1, kern_par, 'tp', kernel, points, point_par, nu=nu)
+    def __init__(self, dim_in, dim_out, kern_par, kernel='rbf', points='ut', point_par=None, nu=3.0):
+        super(TPQ, self).__init__(dim_in, dim_out, kern_par, 'tp', kernel, points, point_par, nu=nu)
 
     def _fcn_eval(self, fcn, x, fcn_par):
         return np.apply_along_axis(fcn, 0, x, fcn_par)
 
     def _covariance(self, weights, fcn_evals, mean_out):
-        expected_model_var = self.model.exp_model_variance(fcn_evals)
+        expected_model_var = np.diag(self.model.exp_model_variance(fcn_evals))
         return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + expected_model_var
 
     def _integral_variance(self, points, kern_par):
@@ -2177,8 +2179,8 @@ class GPQStudent(StudentInference):
         point_hyp_obs.update({'dof': r_dof})
 
         # init moment transforms
-        t_dyn = GPQ(nq, kern_par_dyn, 'rbf-student', 'fs', point_hyp_dyn)
-        t_obs = GPQ(nr, kern_par_obs, 'rbf-student', 'fs', point_hyp_obs)
+        t_dyn = GPQ(nq, ssm.xD, kern_par_dyn, 'rbf-student', 'fs', point_hyp_dyn)
+        t_obs = GPQ(nr, ssm.zD, kern_par_obs, 'rbf-student', 'fs', point_hyp_obs)
         super(GPQStudent, self).__init__(ssm, t_dyn, t_obs, dof, fixed_dof)
 
 
@@ -2206,8 +2208,8 @@ class TPQStudent(StudentInference):
         point_par_obs.update({'dof': r_dof})
         # TODO: finish fixing DOFs, DOF for TPQ and DOF for the filtered state.
 
-        t_dyn = TPQ(nq, kern_par_dyn, 'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
-        t_obs = TPQ(nr, kern_par_obs, 'rbf-student', 'fs', point_par_obs, nu=dof_tp)
+        t_dyn = TPQ(nq, ssm.xD, kern_par_dyn, 'rbf-student', 'fs', point_par_dyn, nu=dof_tp)
+        t_obs = TPQ(nr, ssm.zD, kern_par_obs, 'rbf-student', 'fs', point_par_obs, nu=dof_tp)
         super(TPQStudent, self).__init__(ssm, t_dyn, t_obs, dof, fixed_dof)
 
 
@@ -3388,7 +3390,7 @@ def constant_velocity_radar_demo(steps=100, mc_sims=1000):
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=4.0, point_par=par_pt),
         GPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, point_hyp=par_pt),
     )
-    itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
+    # itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
 
     # assign weights approximated by MC with lots of samples
     # very dirty code
@@ -3554,7 +3556,7 @@ if __name__ == '__main__':
     np.set_printoptions(precision=4)
     np.random.seed(42)
 
-    steps, mc_sims = 100, 1000
+    steps, mc_sims = 100, 100
     constant_velocity_radar_demo(steps, mc_sims)
     constant_velocity_radar_plots_tables(f'cv_radar_simdata_{steps}k_{mc_sims}mc.dat')
 
