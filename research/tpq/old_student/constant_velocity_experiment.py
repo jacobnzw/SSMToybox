@@ -2173,8 +2173,8 @@ class GPQStudent(StudentInference):
         # add DOF of the noises to the sigma-point parameters
         if point_hyp is None:
                 point_hyp = dict()
-        point_hyp_dyn = point_hyp
-        point_hyp_obs = point_hyp
+        point_hyp_dyn = point_hyp.copy()
+        point_hyp_obs = point_hyp.copy()
         point_hyp_dyn.update({'dof': q_dof})
         point_hyp_obs.update({'dof': r_dof})
 
@@ -2202,8 +2202,8 @@ class TPQStudent(StudentInference):
         # add DOF of the noises to the sigma-point parameters
         if point_par is None:
             point_par = dict()
-        point_par_dyn = point_par
-        point_par_obs = point_par
+        point_par_dyn = point_par.copy()
+        point_par_obs = point_par.copy()
         point_par_dyn.update({'dof': q_dof})
         point_par_obs.update({'dof': r_dof})
         # TODO: finish fixing DOFs, DOF for TPQ and DOF for the filtered state.
@@ -3390,23 +3390,23 @@ def constant_velocity_radar_demo(steps=100, mc_sims=1000):
         TPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=4.0, point_par=par_pt),
         GPQStudent(ssm, par_dyn_tp, par_obs_tp, dof=4.0, point_hyp=par_pt),
     )
-    # itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
 
     # assign weights approximated by MC with lots of samples
     # very dirty code
-    # pts = filters[itpq].tf_dyn.model.points
-    # kern = filters[itpq].tf_dyn.model.kernel
-    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
-    weights_data = joblib.load('tpq_weights.dat')
-    wm, wc, wcc, Q = tuple(weights_data['dyn'].values())
+    itpq = np.argwhere([isinstance(filters[i], TPQStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
+    pts = filters[itpq].tf_dyn.model.points
+    kern = filters[itpq].tf_dyn.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    # weights_data = joblib.load('tpq_weights.dat')
+    # wm, wc, wcc, Q = tuple(weights_data['dyn'].values())
     for f in filters:
         if isinstance(f.tf_dyn, BQTransform):
             f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
             f.tf_dyn.Q = Q
-    # pts = filters[itpq].tf_meas.model.points
-    # kern = filters[itpq].tf_meas.model.kernel
-    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
-    wm, wc, wcc, Q = tuple(weights_data['obs'].values())
+    pts = filters[itpq].tf_meas.model.points
+    kern = filters[itpq].tf_meas.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    # wm, wc, wcc, Q = tuple(weights_data['obs'].values())
     for f in filters:
         if isinstance(f.tf_meas, BQTransform):
             f.tf_meas.wm, f.tf_meas.Wc, f.tf_meas.Wcc = wm, wc, wcc
@@ -3556,7 +3556,7 @@ if __name__ == '__main__':
     np.set_printoptions(precision=4)
     np.random.seed(42)
 
-    steps, mc_sims = 100, 100
+    steps, mc_sims = 100, 1000
     constant_velocity_radar_demo(steps, mc_sims)
     constant_velocity_radar_plots_tables(f'cv_radar_simdata_{steps}k_{mc_sims}mc.dat')
 
