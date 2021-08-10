@@ -413,8 +413,8 @@ class StudentTProcessTransform(BQTransform):
         : ndarray
             Transformed covariance.
         """
-        emv = self.model.exp_model_variance(self.model.kernel.par, fcn_evals) * self.I_out
-        return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + emv
+        emv = self.model.exp_model_variance(self.model.kernel.par, fcn_evals)
+        return fcn_evals.dot(weights).dot(fcn_evals.T) - np.outer(mean_out, mean_out.T) + np.diag(emv)
 
 
 """

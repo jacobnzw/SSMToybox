@@ -564,11 +564,11 @@ class StudentProcessKalman(GaussianInference):
         # specification of the moment transform for the transition model
         kernel_dyn = {'name': kernel, 'params': kern_par_dyn}
         points_dyn = {'name': points, 'params': point_hyp}
-        t_dyn = StudentTProcessTransform(dyn.dim_in, 1, kernel_dyn, points_dyn, nu=nu)
+        t_dyn = StudentTProcessTransform(dyn.dim_in, dyn.dim_state, kernel_dyn, points_dyn, nu=nu)
         # specification of the moment transform for the measurement model
         kernel_obs = {'name': kernel, 'params': kern_par_obs}
         points_obs = {'name': points, 'params': point_hyp}
-        t_obs = StudentTProcessTransform(obs.dim_in, 1, kernel_obs, points_obs, nu=nu)
+        t_obs = StudentTProcessTransform(obs.dim_in, obs.dim_out, kernel_obs, points_obs, nu=nu)
 
         super(StudentProcessKalman, self).__init__(dyn, obs, t_dyn, t_obs)
 
@@ -802,10 +802,10 @@ class FullySymmetricStudent(StudentianInference):
     """
 
     def __init__(self, dyn, obs, degree=3, kappa=None, dof=4.0):
-        dyn_dof = np.min((dyn.init_rv.dof, dyn.noise_rv.dof))  # FIXME: if fixed_dof, need to pass in dof, no heuristics
+        dyn_dof = np.min((dyn.init_rv.dof, dyn.noise_rv.dof))
         obs_dof = np.min((dyn_dof, obs.noise_rv.dof))
-        t_dyn = FullySymmetricStudentTransform(dyn.dim_in, degree, kappa, dof)
-        t_obs = FullySymmetricStudentTransform(obs.dim_in, degree, kappa, dof)
+        t_dyn = FullySymmetricStudentTransform(dyn.dim_in, degree, kappa, dyn_dof)
+        t_obs = FullySymmetricStudentTransform(obs.dim_in, degree, kappa, obs_dof)
         super(FullySymmetricStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof)
 
 
@@ -865,11 +865,11 @@ class StudentProcessStudent(StudentianInference):
         # specification of the moment transform for the transition model
         kernel_dyn = {'name': 'rbf-student', 'params': kern_par_dyn}
         points_dyn = {'name': 'fs', 'params': point_par_dyn}
-        t_dyn = StudentTProcessTransform(dyn.dim_in, 1, kernel_dyn, points_dyn, nu=dof_tp)
+        t_dyn = StudentTProcessTransform(dyn.dim_in, dyn.dim_state, kernel_dyn, points_dyn, nu=dof_tp)
         # specification of the moment transform for the measurement model
         kernel_obs = {'name': 'rbf-student', 'params': kern_par_obs}
         points_obs = {'name': 'fs', 'params': point_par_obs}
-        t_obs = StudentTProcessTransform(obs.dim_in, 1, kernel_obs, points_obs, nu=dof_tp)
+        t_obs = StudentTProcessTransform(obs.dim_in, obs.dim_out, kernel_obs, points_obs, nu=dof_tp)
 
         super(StudentProcessStudent, self).__init__(dyn, obs, t_dyn, t_obs, dof)
 

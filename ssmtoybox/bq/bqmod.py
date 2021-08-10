@@ -1144,15 +1144,17 @@ class StudentTProcessModel(GaussianProcessModel):
             Expected model variance.
         """
 
-        fcn_obs = np.squeeze(args[0])
+        fcn_obs = args[0]
         if self.estimate_par:
             # re-compute EMV if kernel parameters are being estimated
             iK = self.kernel.exp_x_kxkx(par, par, self.points)
-            scale = (self.nu - 2 + fcn_obs.dot(iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
+            quad_form = np.einsum('ij,jk,ik->i', fcn_obs, iK, fcn_obs)
+            scale = (self.nu - 2 + quad_form) / (self.nu - 2 + self.num_pts)
             gp_emv = super(StudentTProcessModel, self).exp_model_variance(par)
         else:
             # otherwise use pre-computed values (based on unit sigma-points and kernel parameters given at init)
-            scale = (self.nu - 2 + fcn_obs.dot(self.iK).dot(fcn_obs.T)) / (self.nu - 2 + self.num_pts)
+            quad_form = np.einsum('ij,jk,ik->i', fcn_obs, self.iK, fcn_obs)
+            scale = (self.nu - 2 + quad_form) / (self.nu - 2 + self.num_pts)
             gp_emv = self.model_var
         return scale * gp_emv
 
