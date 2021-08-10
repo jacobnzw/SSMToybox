@@ -23,10 +23,6 @@ def constant_velocity_radar_demo(steps=100, mc_sims=100):
     dt = 0.5  # discretization period
     # process noise and noise gain
     Q = np.diag([50, 5])
-    G = np.array([[dt ** 2 / 2, 0],
-                  [dt, 0],
-                  [0, dt ** 2 / 2],
-                  [0, dt]])
     q = GaussRV(2, cov=Q)
     dyn = ConstantVelocity(x0, q, dt)
     # measurement noise, where the outliers are modelled by gaussian mixture
@@ -205,8 +201,7 @@ def constant_velocity_radar_plots_tables(datafile):
 
     # filter/metric labels
     # f_label = d['f_label']
-    f_label = ['UKF', 'SF', 'TPQSF\n' + r'$(\nu_g=4)$', 'TPQSF\n' + r'$(\nu_g=10)$',
-               'TPQSF\n' + r'$(\nu_g=20)$', 'GPQSF']
+    f_label = ['UKF', 'SF', 'TPQSF\n' + r'$(\nu_g=2.2)$', 'TPQSF\n' + r'$(\nu_g=4.0)$', 'GPQSF']
     m_label = ['MEAN_RMSE', 'STD(MEAN_RMSE)', 'MEAN_INC', 'STD(MEAN_INC)']
 
     # form data array, put in DataFrame and print
