@@ -1,7 +1,6 @@
 import numpy as np
-
+import joblib
 from tpq_base import *
-from scipy.io import savemat, loadmat
 from ssmtoybox.ssmod import ConstantVelocity, Radar2DMeasurement
 from ssmtoybox.ssinf import StudentProcessKalman, StudentProcessStudent, GaussianProcessKalman, UnscentedKalman, \
     CubatureKalman, FullySymmetricStudent
@@ -55,7 +54,7 @@ def constant_velocity_radar_demo(steps=100, mc_sims=100):
 
     r_dof = 4.0
     r = StudentRV(2, scale=((r_dof-2)/r_dof)*R0, dof=r_dof)
-    obs = Radar2DMeasurement(r, dyn.dim_state)
+    obs = Radar2DMeasurement(r, dyn.dim_state, state_index=[0, 2, 1, 3])
 
     # kernel parameters for TPQ and GPQ filters
     # TPQ Student
@@ -75,31 +74,31 @@ def constant_velocity_radar_demo(steps=100, mc_sims=100):
     # init filters
     filters = (
         # ExtendedStudent(dyn, obs),
-        # UnscentedKalman(dyn, obs, kappa=kappa),
+        UnscentedKalman(dyn, obs, kappa=kappa),
         FullySymmetricStudent(dyn, obs, kappa=kappa, dof=4.0),
-        # StudentProcessStudent(dyn, obs, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=4.0, point_par=par_pt),
-        # StudentProcessStudent(dyn, obs, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=10.0, point_par=par_pt),
-        # StudentProcessStudent(dyn, obs, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=20.0, point_par=par_pt),
+        StudentProcessStudent(dyn, obs, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=2.2, point_par=par_pt),
+        StudentProcessStudent(dyn, obs, par_dyn_tp, par_obs_tp, dof=4.0, dof_tp=4.0, point_par=par_pt),
+        GPQStudent(dyn, obs, par_dyn_tp, par_obs_tp, dof=4.0, point_par=par_pt),
         # GaussianProcessKalman(dyn, obs, par_dyn_tp, par_obs_tp, point_hyp=par_pt),
     )
-    # itpq = np.argwhere([isinstance(filters[i], StudentProcessStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
-    #
-    # # assign weights approximated by MC with lots of samples
-    # # very dirty code
-    # pts = filters[itpq].tf_dyn.model.points
-    # kern = filters[itpq].tf_dyn.model.kernel
-    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(2e6), 1000)
-    # for f in filters:
-    #     if isinstance(f.tf_dyn, BQTransform):
-    #         f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
-    #         f.tf_dyn.Q = Q
-    # pts = filters[itpq].tf_obs.model.points
-    # kern = filters[itpq].tf_obs.model.kernel
-    # wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(2e6), 1000)
-    # for f in filters:
-    #     if isinstance(f.tf_obs, BQTransform):
-    #         f.tf_obs.wm, f.tf_obs.Wc, f.tf_obs.Wcc = wm, wc, wcc
-    #         f.tf_obs.Q = Q
+
+    # assign weights approximated by MC with lots of samples
+    # very dirty code
+    itpq = np.argwhere([isinstance(filters[i], StudentProcessStudent) for i in range(len(filters))]).squeeze(axis=1)[0]
+    pts = filters[itpq].tf_dyn.model.points
+    kern = filters[itpq].tf_dyn.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    for f in filters:
+        if isinstance(f.tf_dyn, BQTransform):
+            f.tf_dyn.wm, f.tf_dyn.Wc, f.tf_dyn.Wcc = wm, wc, wcc
+            f.tf_dyn.Q = Q
+    pts = filters[itpq].tf_obs.model.points
+    kern = filters[itpq].tf_obs.model.kernel
+    wm, wc, wcc, Q = rbf_student_mc_weights(pts, kern, int(1e6), 1000)
+    for f in filters:
+        if isinstance(f.tf_obs, BQTransform):
+            f.tf_obs.wm, f.tf_obs.Wc, f.tf_obs.Wcc = wm, wc, wcc
+            f.tf_obs.Q = Q
 
     # run all filters
     mf, Pf = run_filters(filters, z)
@@ -153,9 +152,9 @@ def constant_velocity_radar_demo(steps=100, mc_sims=100):
         'mc_sims': mc_sims,
         'par_dyn_tp': par_dyn_tp,
         'par_obs_tp': par_obs_tp,
-        'f_label': ['UKF', 'SF', r'TPQSF($\nu$=20)', 'GPQSF']
+        'f_label': [f.__class__.__name__ for f in filters]
     }
-    savemat('cv_radar_simdata_{:d}k_{:d}mc'.format(steps, mc_sims), data_dict)
+    joblib.dump(data_dict, f'cv_radar_simdata_{steps}k_{mc_sims}mc.dat')
 
     # print out table
     # mean overall RMSE and INC with bootstrapped variances
@@ -190,7 +189,7 @@ def constant_velocity_radar_demo(steps=100, mc_sims=100):
 def constant_velocity_radar_plots_tables(datafile):
 
     # extract true/filtered state trajectories, measurements and evaluated metrics from *.mat data file
-    d = loadmat(datafile)
+    d = joblib.load(datafile)
     # x, z, mf, Pf = d['x'], d['z'], d['mf'], d['Pf']
     rmse_avg, lcr_avg = d['rmse_avg'], d['lcr_avg']
     var_rmse_avg, var_lcr_avg = d['var_rmse_avg'].squeeze(), d['var_lcr_avg'].squeeze()
@@ -261,5 +260,6 @@ if __name__ == '__main__':
     np.set_printoptions(precision=4)
     np.random.seed(42)  # for reproducibility
 
-    constant_velocity_radar_demo(mc_sims=50)
-    # constant_velocity_radar_plots_tables('cv_radar_simdata_100k_100mc')
+    steps, mc_sims = 100, 50
+    constant_velocity_radar_demo(steps, mc_sims)
+    # constant_velocity_radar_plots_tables(f'cv_radar_simdata_{steps}k_{mc_sims}mc.dat')
