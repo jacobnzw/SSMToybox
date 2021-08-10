@@ -185,18 +185,18 @@ class TransitionModel(metaclass=ABCMeta):
         """
 
         # allocate space for state and measurement sequences
-        x = np.zeros((self.dim_state, steps, mc_sims))
+        x = np.zeros((self.dim_state, steps+1, mc_sims))
         # generate initial conditions, store initial states at k=0
         x[:, 0, :] = self.init_rv.sample(mc_sims)  # (D, mc_sims)
 
         # generate state and measurement noise
-        q = self.noise_rv.sample((steps, mc_sims))
+        q = self.noise_rv.sample((steps+1, mc_sims))
 
         # simulate SSM `mc_sims` times for `steps` time steps
         for imc in range(mc_sims):
-            for k in range(1, steps):
-                x[:, k, imc] = self.dyn_fcn(x[:, k-1, imc], q[:, k-1, imc], k-1)
-        return x
+            for k in range(1, x.shape[1]):
+                x[:, k, imc] = self.dyn_fcn(x[:, k-1, imc], q[:, k, imc], k)
+        return x[:, 1:]  # chop off the initial condition
 
     def simulate_continuous(self, duration, dt=0.1, mc_sims=1):
         """
