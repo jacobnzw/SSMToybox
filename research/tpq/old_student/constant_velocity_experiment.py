@@ -5,7 +5,6 @@ import numpy.linalg as la
 from numpy import newaxis as na
 from numpy.polynomial.hermite_e import hermegauss, hermeval
 from scipy.linalg import cho_factor, cho_solve, block_diag
-from scipy.io import loadmat, savemat
 from scipy.special import factorial
 from scipy.optimize import minimize
 from sklearn.utils.extmath import cartesian
@@ -2604,24 +2603,26 @@ class StateSpaceModel(metaclass=ABCMeta):
         """
 
         # allocate space for state and measurement sequences
-        x = np.zeros((self.xD, steps, mc_sims))
-        z = np.zeros((self.zD, steps, mc_sims))
+        x = np.zeros((self.xD, steps + 1, mc_sims))
+        z = np.zeros((self.zD, steps + 1, mc_sims))
 
         # generate state and measurement noise
-        q = self.state_noise_sample((mc_sims, steps))
-        r = self.measurement_noise_sample((mc_sims, steps))
+        q = self.state_noise_sample((mc_sims, steps + 1))
+        r = self.measurement_noise_sample((mc_sims, steps + 1))
 
         # generate initial conditions, store initial states at k=0
         x0 = self.initial_condition_sample(mc_sims)  # (D, mc_sims)
         x[:, 0, :] = x0
 
         # simulate SSM `mc_sims` times for `steps` time steps
+        # creates sequence x where x[:, 0] contains the initial condition, and z[:, 0] contains zero 0
         for imc in range(mc_sims):
-            for k in range(1, steps):
-                theta = self.par_fcn(k - 1)
-                x[:, k, imc] = self.dyn_fcn(x[:, k-1, imc], q[:, k-1, imc], theta)
+            for k in range(1, x.shape[1]):  # `steps`-times
+                theta = self.par_fcn(k)
+                x[:, k, imc] = self.dyn_fcn(x[:, k - 1, imc], q[:, k, imc], theta)
                 z[:, k, imc] = self.meas_fcn(x[:, k, imc], r[:, k, imc], theta)
-        return x, z
+
+        return x[:, 1:], z[:, 1:]  # chop off the initial condition and the dummy zero measurement
 
     def set_pars(self, key, value):
         self.pars[key] = value
